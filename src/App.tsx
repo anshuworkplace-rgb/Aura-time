@@ -13,6 +13,8 @@ import {
   CHAMBERS,
   DEFAULT_USER_SETTINGS,
   FOCUS_SCENES,
+  MAX_SCRUB_MINUTES,
+  MIN_SCRUB_MINUTES,
   calculateDailyTotal,
   calculateProgress,
   extendTimer,
@@ -28,16 +30,9 @@ import { InsightsOverlay } from './components/InsightsOverlay';
 import { CalibrationOverlay } from './components/CalibrationOverlay';
 import { FloatingMiniWidget } from './components/FloatingMiniWidget';
 import { QuantumNebulaBackground } from './components/QuantumNebulaBackground';
-import {
-  Volume2,
-  VolumeX,
-  Plus,
-  SkipForward,
-  RotateCcw,
-  Maximize2,
-  PictureInPicture2,
-  SlidersHorizontal,
-} from 'lucide-react';
+import { ControlDock } from './components/ControlDock';
+import { AuraButton } from './components/AuraButton';
+import { SlidersHorizontal } from 'lucide-react';
 
 const STORAGE_KEYS = {
   SETTINGS: 'aura_living_lens_settings_v2',
@@ -219,7 +214,7 @@ export default function App() {
     }
   }, [status, remainingSeconds, sessionLabel]);
 
-  // Auto-hide tiny control rail during active running session until pointer/keyboard activity
+  // Auto-hide control dock during active running session until pointer/keyboard activity
   useEffect(() => {
     if (status !== 'running') {
       setRailVisible(true);
@@ -231,14 +226,14 @@ export default function App() {
       window.clearTimeout(timerId);
       timerId = window.setTimeout(() => {
         setRailVisible(false);
-      }, 3400);
+      }, 4200);
     };
     reveal();
-    window.addEventListener('mousemove', reveal);
+    window.addEventListener('pointermove', reveal);
     window.addEventListener('keydown', reveal);
     return () => {
       window.clearTimeout(timerId);
-      window.removeEventListener('mousemove', reveal);
+      window.removeEventListener('pointermove', reveal);
       window.removeEventListener('keydown', reveal);
     };
   }, [status]);
@@ -386,14 +381,29 @@ export default function App() {
     setIsSoundPlaying(false);
   }, [durationMinutes]);
 
-  const handleExtend5m = useCallback(() => {
-    const next = extendTimer(remainingSeconds, totalSeconds, 5);
-    setRemainingSeconds(next.remainingSeconds);
-    setTotalSeconds(next.totalSeconds);
-    if (status === 'running' && targetEndTimestampRef.current) {
-      targetEndTimestampRef.current += 5 * 60 * 1000;
-    }
-  }, [remainingSeconds, status, totalSeconds]);
+  // Unified Time Extension / Adjustment (+1m, +5m, +10m) in Idle, Running, or Paused states
+  const handleAddMinutes = useCallback(
+    (deltaMins: number) => {
+      if (status === 'idle') {
+        const nextMins = Math.max(
+          MIN_SCRUB_MINUTES,
+          Math.min(MAX_SCRUB_MINUTES, durationMinutes + deltaMins)
+        );
+        setDurationMinutes(nextMins);
+        setTotalSeconds(nextMins * 60);
+        setRemainingSeconds(nextMins * 60);
+      } else {
+        const next = extendTimer(remainingSeconds, totalSeconds, deltaMins);
+        setRemainingSeconds(next.remainingSeconds);
+        setTotalSeconds(next.totalSeconds);
+        setDurationMinutes(Math.round(next.totalSeconds / 60));
+        if (status === 'running' && targetEndTimestampRef.current) {
+          targetEndTimestampRef.current += deltaMins * 60 * 1000;
+        }
+      }
+    },
+    [durationMinutes, remainingSeconds, status, totalSeconds]
+  );
 
   const handleChangeDuration = useCallback((mins: number) => {
     targetEndTimestampRef.current = null;
@@ -423,7 +433,7 @@ export default function App() {
     }
   }, []);
 
-  // Global Keyboard Shortcuts: Space, F, M, R, S, Cmd/Ctrl+K
+  // Safe Global Keyboard Shortcuts: Space, F, M, R, S, Cmd/Ctrl+K
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
@@ -453,6 +463,16 @@ export default function App() {
       }
 
       if (e.code === 'Space') {
+        // Do not hijack Space if an interactive button or control is focused
+        if (
+          target &&
+          (target.tagName === 'BUTTON' ||
+            target.getAttribute('role') === 'button' ||
+            target.getAttribute('role') === 'switch' ||
+            target.closest('button, [role="button"], [role="switch"]'))
+        ) {
+          return;
+        }
         e.preventDefault();
         handlePrimaryAction();
       } else if (e.key.toLowerCase() === 'f') {
@@ -529,7 +549,7 @@ export default function App() {
 
       {/* Minimal Gallery Top Edge: [small AURA TIME mark] ... [2h 20m today] */}
       <header
-        className={`relative z-30 w-full px-7 sm:px-12 pt-6 flex items-center justify-between transition-opacity duration-700 ${
+        className={`relative z-30 w-full px-6 sm:px-12 pt-5 flex items-center justify-between transition-opacity duration-700 ${
           isRunningOrPaused && !railVisible
             ? 'opacity-0 pointer-events-none'
             : 'opacity-100'
@@ -541,20 +561,20 @@ export default function App() {
             type="button"
             onClick={() => setActiveOverlay('calibration')}
             title="AURA TIME · Command & Calibration (⌘K)"
-            className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] transition-colors uppercase px-3 py-1.5 rounded-full bg-[#070812]/65 border border-white/10"
+            className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] transition-colors uppercase px-3.5 py-1.5 rounded-full aura-glass cursor-pointer"
           >
             AURA TIME
           </button>
         </div>
 
         {/* Upper-Right: Minimal "today" signal ("2h 20m today") + subtle calibration trigger */}
-        <div className="flex items-center gap-2.5 bg-[#070812]/65 border border-white/10 px-3.5 py-1.5 rounded-full">
+        <div className="flex items-center gap-2.5 aura-glass px-3.5 py-1.5 rounded-full">
           <button
             type="button"
             data-testid="today-signal-btn"
             onClick={() => setActiveOverlay('insights')}
             title="Open Visual Focus Journal"
-            className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors"
+            className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors cursor-pointer"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
@@ -567,18 +587,18 @@ export default function App() {
             onClick={() => setActiveOverlay('calibration')}
             aria-label="Open Studio Calibration and Commands"
             title="Studio Calibration & Commands (⌘K)"
-            className="p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors"
+            className="p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
       </header>
 
-      {/* Main Digital Gallery Stage (Intentionally Sits Slightly Below Vertical Center) */}
-      <main className="relative z-20 flex-1 flex flex-col items-center justify-center pt-4 pb-6 px-4">
+      {/* Main Digital Gallery Stage */}
+      <main className="relative z-20 flex-1 flex flex-col items-center justify-center pt-2 pb-4 px-4">
         {immersionMode === 'minimal' && isRunningOrPaused ? (
           /* Minimal Focus Option: Only the time and a subtle progress edge */
-          <div className="flex flex-col items-center gap-6 p-12 rounded-3xl bg-[#070812]/88 border border-white/12 relative overflow-hidden shadow-2xl">
+          <div className="flex flex-col items-center gap-6 p-12 rounded-3xl aura-glass-elevated relative overflow-hidden">
             <div
               className="absolute top-0 left-0 h-[3px] transition-all duration-500"
               style={{
@@ -589,17 +609,28 @@ export default function App() {
             <span className="font-display text-7xl sm:text-8xl font-semibold text-[#F5F6FF] tabular-nums tracking-tight">
               {formatRemainingTime(remainingSeconds)}
             </span>
-            <button
-              type="button"
-              onClick={handlePrimaryAction}
-              className="px-6 py-2 rounded-full text-xs font-medium text-[#F5F6FF] bg-white/10 hover:bg-white/18 transition-colors"
-            >
-              {primaryActionText}
-            </button>
+            <div className="flex items-center gap-3">
+              <AuraButton
+                variant="secondary"
+                size="md"
+                reducedMotion={settings.reducedMotion}
+                onClick={handlePrimaryAction}
+              >
+                {primaryActionText}
+              </AuraButton>
+              <AuraButton
+                variant="subtle"
+                size="md"
+                reducedMotion={settings.reducedMotion}
+                onClick={() => setImmersionMode('standard')}
+              >
+                Exit Minimal
+              </AuraButton>
+            </div>
           </div>
         ) : (
-          /* Enormous Central Living Lens */
-          <div className="flex flex-col items-center translate-y-2">
+          /* Central Living Lens + Single Primary Action + Intelligent Four-Group Dock */
+          <div className="flex flex-col items-center">
             <LivingLens
               scene={activeScene}
               chamber={activeChamber}
@@ -623,191 +654,72 @@ export default function App() {
               onStartAgain={handlePrimaryAction}
             />
 
-            {/* Single Dominant Primary Action Per State ("Begin" / "Pause" / "Resume") */}
+            {/* Single Dominant Primary Action + Discreet 4-Group Control Dock */}
             {status !== 'completed' && (
               <div
-                className={`mt-3 flex flex-col items-center gap-4 transition-opacity duration-500 ${
+                className={`mt-2 flex flex-col items-center gap-3.5 transition-opacity duration-500 ${
                   isRunningOrPaused && !railVisible
                     ? 'opacity-0 pointer-events-none'
                     : 'opacity-100'
                 }`}
               >
-                <button
-                  type="button"
+                <AuraButton
                   data-testid="primary-action-btn"
+                  variant={status === 'running' ? 'secondary' : 'primary'}
+                  size="lg"
+                  magnetic={!settings.reducedMotion}
+                  reducedMotion={settings.reducedMotion}
+                  accentColor={activeScene.colors.primary}
+                  secondaryColor={activeScene.colors.secondary}
                   onClick={handlePrimaryAction}
-                  style={{
-                    background:
-                      status === 'running'
-                        ? 'rgba(7, 8, 18, 0.82)'
-                        : `linear-gradient(135deg, ${activeScene.colors.primary}, ${activeScene.colors.secondary})`,
-                    boxShadow:
-                      status === 'running'
-                        ? '0 8px 24px -4px rgba(0, 0, 0, 0.65)'
-                        : `0 10px 32px -6px ${activeScene.colors.primary}66`,
-                  }}
-                  className={`px-9 py-3 rounded-full font-display text-sm font-semibold tracking-wide transition-all duration-300 active:scale-[0.97] ${
-                    status === 'running'
-                      ? 'text-[#F5F6FF] border border-white/22 hover:bg-[#0D1024]'
-                      : 'text-[#070812] hover:brightness-110'
-                  }`}
+                  className="min-w-[144px]"
                 >
                   {primaryActionText}
-                </button>
+                </AuraButton>
 
-                {/* Idle Progressive Disclosure Triggers: "45 min" & "Rain Chamber" (+ subtle Scene name) */}
-                {status === 'idle' ? (
-                  <div className="flex items-center gap-5 px-5 py-2 rounded-full bg-[#070812]/78 border border-white/12 text-xs text-[#F5F6FF]/85 shadow-xl">
-                    <button
-                      type="button"
-                      data-testid="duration-trigger-btn"
-                      onClick={() => setScrubberOpen((prev) => !prev)}
-                      title="Click or drag around the Lens to scrub 15–120 minutes"
-                      className={`font-mono tabular-nums transition-colors hover:text-[#2FE8FF] ${
-                        scrubberOpen ? 'text-[#2FE8FF] font-semibold' : ''
-                      }`}
-                    >
-                      {durationMinutes} min
-                    </button>
-
-                    <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
-
-                    <button
-                      type="button"
-                      data-testid="chamber-trigger-btn"
-                      onClick={() => setActiveOverlay('chambers')}
-                      title="Open Chambers Sound Studio"
-                      className="transition-colors hover:text-[#2FE8FF]"
-                    >
-                      {activeChamber.name}
-                    </button>
-
-                    <span className="w-1 h-1 rounded-full bg-white/20" aria-hidden="true" />
-
-                    <button
-                      type="button"
-                      data-testid="scene-trigger-btn"
-                      onClick={() => setActiveOverlay('scenes')}
-                      title="Switch Focus Scene"
-                      className="transition-colors hover:text-[#2FE8FF] flex items-center gap-1.5"
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full"
-                        style={{ backgroundColor: activeScene.colors.primary }}
-                        aria-hidden="true"
-                      />
-                      <span>{activeScene.name}</span>
-                    </button>
-                  </div>
-                ) : (
-                  /* Tiny Elegant Control Rail when Running or Paused (Revealed on Activity) */
-                  <div
-                    role="toolbar"
-                    aria-label="Session Control Rail"
-                    className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#090C1E]/90 border border-white/12 text-xs text-[#A3A1BA] shadow-xl"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => setIsSoundPlaying((prev) => !prev)}
-                      aria-label={
-                        isSoundPlaying ? 'Mute Ambience' : 'Unmute Ambience'
-                      }
-                      title="Mute / Unmute Chamber (M)"
-                      className="p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8 transition-colors"
-                    >
-                      {isSoundPlaying ? (
-                        <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF]" />
-                      ) : (
-                        <VolumeX className="w-3.5 h-3.5" />
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setActiveOverlay('chambers')}
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors"
-                    >
-                      {activeChamber.name}
-                    </button>
-
-                    <span aria-hidden="true" className="text-white/15">
-                      ·
-                    </span>
-
-                    <button
-                      type="button"
-                      onClick={handleExtend5m}
-                      title="Extend session by 5 minutes"
-                      className="flex items-center gap-0.5 px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors font-mono tabular-nums"
-                    >
-                      <Plus className="w-3 h-3" />
-                      <span>5m</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleCompleteSession}
-                      title="Finish session now (S)"
-                      aria-label="Complete Session"
-                      className="p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8 transition-colors"
-                    >
-                      <SkipForward className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setImmersionMode((prev) =>
-                          prev === 'standard'
-                            ? 'deep'
-                            : prev === 'deep'
-                            ? 'minimal'
-                            : 'standard'
-                        )
-                      }
-                      title="Cycle Immersion Mode: Standard / Deep Focus / Minimal Focus"
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors capitalize"
-                    >
-                      {immersionMode === 'standard'
-                        ? 'Deep Focus'
-                        : immersionMode === 'deep'
-                        ? 'Minimal Focus'
-                        : 'Standard Lens'}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => setIsFloatingOpen((prev) => !prev)}
-                      aria-label="Toggle Floating Liquid Capsule"
-                      title="Toggle Floating Liquid Capsule"
-                      className={`p-1.5 rounded-full hover:bg-white/8 transition-colors ${
-                        isFloatingOpen ? 'text-[#2FE8FF]' : 'hover:text-[#F5F6FF]'
-                      }`}
-                    >
-                      <PictureInPicture2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={toggleBrowserFullScreen}
-                      aria-label="Toggle Fullscreen"
-                      title="Fullscreen (F)"
-                      className="p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8 transition-colors"
-                    >
-                      <Maximize2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handleReset}
-                      aria-label="Reset Session"
-                      title="Reset Session (R)"
-                      className="p-1.5 rounded-full hover:text-[#FF5D88] hover:bg-white/8 transition-colors"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                )}
+                {/* Intelligent Four-Group Control Dock: SOUND | TIME | FOCUS | MORE */}
+                <ControlDock
+                  status={status}
+                  durationMinutes={durationMinutes}
+                  onChangeDuration={handleChangeDuration}
+                  onAddMinutes={handleAddMinutes}
+                  scrubberOpen={scrubberOpen}
+                  onToggleScrubber={() => setScrubberOpen((prev) => !prev)}
+                  primaryChamberId={chamberId}
+                  onSelectPrimaryChamber={(id) => {
+                    setChamberId(id);
+                    if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
+                      setIsSoundPlaying(true);
+                    } else if (id === 'deep-quiet') {
+                      setIsSoundPlaying(false);
+                    }
+                  }}
+                  secondaryChamberId={secondaryChamberId}
+                  onSelectSecondaryChamber={(id) => {
+                    setSecondaryChamberId(id);
+                    if (
+                      id &&
+                      id !== 'deep-quiet' &&
+                      settings.ambienceVolume > 0
+                    ) {
+                      setIsSoundPlaying(true);
+                    }
+                  }}
+                  isSoundPlaying={isSoundPlaying}
+                  onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
+                  activeSceneId={sceneId}
+                  onSelectScene={handleSelectScene}
+                  immersionMode={immersionMode}
+                  onChangeImmersionMode={setImmersionMode}
+                  settings={settings}
+                  onUpdateSettings={updateSettings}
+                  isFloatingOpen={isFloatingOpen}
+                  onToggleFloating={() => setIsFloatingOpen((prev) => !prev)}
+                  onToggleFullScreen={toggleBrowserFullScreen}
+                  onCompleteSession={handleCompleteSession}
+                  onResetSession={handleReset}
+                  onOpenOverlay={(ov) => setActiveOverlay(ov)}
+                />
               </div>
             )}
           </div>
@@ -896,6 +808,14 @@ export default function App() {
         onUpdateSettings={updateSettings}
         onSelectDuration={handleChangeDuration}
         onSelectScene={handleSelectScene}
+        onSelectChamber={(id) => {
+          setChamberId(id);
+          if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
+            setIsSoundPlaying(true);
+          }
+        }}
+        onPrimaryAction={handlePrimaryAction}
+        onResetSession={handleReset}
         onOpenOverlay={(ov) => setActiveOverlay(ov)}
         isFloatingOpen={isFloatingOpen}
         onToggleFloating={() => setIsFloatingOpen((prev) => !prev)}

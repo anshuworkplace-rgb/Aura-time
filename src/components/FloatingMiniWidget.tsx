@@ -1,7 +1,14 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { FocusSceneConfig, TimerStatus } from '../types/aura';
 import { formatRemainingTime } from '../utils/focusEngine';
-import { Pause, Play, SkipForward, Minimize2, Maximize2, X } from 'lucide-react';
+import {
+  Pause,
+  Play,
+  SkipForward,
+  Minimize2,
+  Maximize2,
+  X,
+} from 'lucide-react';
 
 interface FloatingMiniWidgetProps {
   isOpen: boolean;
@@ -25,8 +32,14 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
   onSkipOrComplete,
 }) => {
   const [position, setPosition] = useState(() => ({
-    x: typeof window !== 'undefined' ? Math.max(24, window.innerWidth - 230) : 1180,
-    y: typeof window !== 'undefined' ? Math.max(80, window.innerHeight - 120) : 740,
+    x:
+      typeof window !== 'undefined'
+        ? Math.max(24, window.innerWidth - 230)
+        : 1180,
+    y:
+      typeof window !== 'undefined'
+        ? Math.max(80, window.innerHeight - 120)
+        : 740,
   }));
   const [isDragging, setIsDragging] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -34,9 +47,22 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
   const [opacity, setOpacity] = useState(0.94);
   const dragOffset = useRef({ x: 0, y: 0 });
 
+  // Clamp position within viewport on window resize
+  useEffect(() => {
+    const onResize = () => {
+      setPosition((prev) => ({
+        x: Math.max(12, Math.min(window.innerWidth - 190, prev.x)),
+        y: Math.max(12, Math.min(window.innerHeight - 76, prev.y)),
+      }));
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Unified Pointer Events dragging (supports mouse, touch, stylus)
   useEffect(() => {
     if (!isDragging) return;
-    const onMove = (e: MouseEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
       const nextX = Math.max(
         12,
         Math.min(window.innerWidth - 180, e.clientX - dragOffset.current.x)
@@ -47,21 +73,24 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
       );
       setPosition({ x: nextX, y: nextY });
     };
-    const onUp = () => {
+    const onPointerUp = () => {
       setIsDragging(false);
       // Dock magnetically to left or right screen edges when dragged near them
       setPosition((prev) => {
         const rightDock = window.innerWidth - (ultraMinimal ? 132 : 216) - 18;
         if (prev.x < 68) return { ...prev, x: 18 };
-        if (prev.x > rightDock - 54) return { ...prev, x: Math.max(18, rightDock) };
+        if (prev.x > rightDock - 54)
+          return { ...prev, x: Math.max(18, rightDock) };
         return prev;
       });
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
     };
   }, [isDragging, ultraMinimal]);
 
@@ -71,15 +100,15 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
     <aside
       aria-label="Floating Liquid Capsule Timer"
       data-testid="floating-mini-widget"
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onPointerEnter={() => setIsHovered(true)}
+      onPointerLeave={() => setIsHovered(false)}
       style={{
         transform: `translate3d(${position.x}px, ${position.y}px, 0)`,
         opacity,
         background: `radial-gradient(circle at 22% 25%, ${scene.colors.primary}2E, ${scene.colors.secondary}18 55%, rgba(11, 15, 32, 0.92))`,
         boxShadow: `0 14px 40px -8px rgba(7, 8, 18, 0.8), 0 0 24px -6px ${scene.colors.primary}40`,
       }}
-      className="fixed top-0 left-0 z-40 rounded-full border border-white/18 overflow-hidden transition-all duration-300 select-none"
+      className="fixed top-0 left-0 z-40 rounded-full border border-white/18 overflow-hidden transition-all duration-300 select-none touch-none"
     >
       {/* Colorful Refracted Progress Edge along the Top Rim */}
       <div className="w-full h-[3px] bg-white/8 overflow-hidden">
@@ -93,7 +122,7 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
       </div>
 
       <div
-        onMouseDown={(e) => {
+        onPointerDown={(e) => {
           if ((e.target as HTMLElement).closest('button, input')) return;
           setIsDragging(true);
           dragOffset.current = {
@@ -137,7 +166,7 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
                     ? 'Pause Mini Timer'
                     : 'Resume Mini Timer'
                 }
-                className="p-1.5 rounded-full bg-white/12 hover:bg-white/22 text-[#F5F6FF] transition-colors"
+                className="p-1.5 rounded-full bg-white/12 hover:bg-white/22 text-[#F5F6FF] transition-colors cursor-pointer"
               >
                 {status === 'running' ? (
                   <Pause className="w-3 h-3" />
@@ -150,7 +179,7 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
                 type="button"
                 onClick={onSkipOrComplete}
                 aria-label="Skip or Complete Session"
-                className="p-1.5 rounded-full bg-white/8 hover:bg-white/18 text-[#F5F6FF] transition-colors"
+                className="p-1.5 rounded-full bg-white/8 hover:bg-white/18 text-[#F5F6FF] transition-colors cursor-pointer"
               >
                 <SkipForward className="w-3 h-3" />
               </button>
@@ -168,7 +197,7 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
                     ? 'Standard Capsule Mode'
                     : 'Ultra-Minimal Numerals Mode'
                 }
-                className="p-1.5 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF]"
+                className="p-1.5 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] cursor-pointer"
               >
                 {ultraMinimal ? (
                   <Maximize2 className="w-3 h-3" />
@@ -181,7 +210,7 @@ export const FloatingMiniWidget: React.FC<FloatingMiniWidgetProps> = ({
                 type="button"
                 onClick={onClose}
                 aria-label="Close Floating Droplet"
-                className="p-1.5 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF]"
+                className="p-1.5 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] cursor-pointer"
               >
                 <X className="w-3 h-3" />
               </button>

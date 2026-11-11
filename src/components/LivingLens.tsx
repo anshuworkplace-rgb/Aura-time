@@ -13,6 +13,7 @@ import {
   radialFractionToMinutes,
 } from '../utils/focusEngine';
 import { soundEngine } from '../utils/soundSynthesizer';
+import { AuraButton } from './AuraButton';
 
 interface LivingLensProps {
   scene: FocusSceneConfig;
@@ -80,6 +81,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     scene,
     chamber,
     status,
+    phase,
     progress,
     audioReactive,
     reducedMotion,
@@ -90,11 +92,12 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       scene,
       chamber,
       status,
+      phase,
       progress,
       audioReactive,
       reducedMotion,
     };
-  }, [scene, chamber, status, progress, audioReactive, reducedMotion]);
+  }, [scene, chamber, status, phase, progress, audioReactive, reducedMotion]);
 
   useEffect(() => {
     if (isEditingLabel) {
@@ -118,8 +121,8 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
     // Internal liquid particles / droplets
     const droplets: CausticDroplet[] = Array.from({ length: 24 }, (_, idx) => ({
-      x: (Math.sin(idx * 2.1) * 0.55) * 180,
-      y: (Math.cos(idx * 1.7) * 0.55) * 180,
+      x: Math.sin(idx * 2.1) * 0.55 * 180,
+      y: Math.cos(idx * 1.7) * 0.55 * 180,
       r: 3 + (idx % 5) * 2.2,
       vx: (idx % 2 === 0 ? 1 : -1) * (0.14 + (idx % 3) * 0.08),
       vy: (idx % 3 === 0 ? 1 : -1) * (0.12 + (idx % 4) * 0.07),
@@ -138,6 +141,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       t: number,
       elasticity: number,
       amp: number,
+      trebleAmp: number,
       phaseOffset = 0
     ) => {
       ctx.beginPath();
@@ -146,12 +150,11 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         const theta = (i / steps) * Math.PI * 2;
         const n1 =
           Math.sin(theta * 3 + t * 1.3 + phaseOffset) *
-          (9 * elasticity + amp * 14);
+          (9 * elasticity + amp * 13);
         const n2 =
           Math.cos(theta * 4 - t * 0.95 + phaseOffset) *
-          (6 * elasticity + amp * 8);
-        const n3 =
-          Math.sin(theta * 2 + t * 0.6) * (5 * elasticity);
+          (6 * elasticity + trebleAmp * 9);
+        const n3 = Math.sin(theta * 2 + t * 0.6) * (5 * elasticity);
         const r = baseR + n1 + n2 + n3;
         const x = cx + Math.cos(theta) * r;
         const y = cy + Math.sin(theta) * r;
@@ -162,6 +165,11 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     };
 
     const render = (ts: number) => {
+      if (document.hidden) {
+        animId = requestAnimationFrame(render);
+        return;
+      }
+
       const p = liveRef.current;
       const minDelta = p.reducedMotion ? 500 : 28;
       if (ts - lastDraw < minDelta) {
@@ -174,20 +182,26 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       const isPaused = p.status === 'paused';
       const isCompleted = p.status === 'completed';
       const isRunning = p.status === 'running';
+      const isBreak = p.phase === 'break';
 
       const speedMult =
         p.reducedMotion || isPaused
           ? 0.04
           : isCompleted
           ? 1.25
+          : isBreak
+          ? p.scene.motion.flowSpeed * 0.55
           : isRunning
           ? p.scene.motion.flowSpeed
           : p.scene.motion.flowSpeed * 0.65;
 
       time += dt * speedMult;
 
-      const audioAmp =
-        p.audioReactive && isRunning ? soundEngine.getAudioAmplitude() : 0;
+      const bands =
+        p.audioReactive && isRunning
+          ? soundEngine.getAudioBands()
+          : { bass: 0, mid: 0, treble: 0, overall: 0 };
+      const audioAmp = bands.overall;
 
       ctx.clearRect(0, 0, size, size);
       const cx = size / 2;
@@ -195,29 +209,33 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       const lensRadius =
         204 +
         Math.sin(time * 1.4) * 5 +
-        audioAmp * 16 +
+        bands.bass * 18 +
         (isCompleted ? 14 : 0);
+
+      const primaryHex = isBreak ? '#FFB08A' : p.scene.colors.primary;
+      const secondaryHex = isBreak ? '#22E5A8' : p.scene.colors.secondary;
 
       ctx.save();
       if (isPaused) {
         ctx.filter = 'saturate(0.38) brightness(0.82)';
       }
 
-      // 1. Subsurface Ambient Refraction Aura behind the Lens
+      // 1. Wide Correlated Subsurface Aura (seamlessly bridges Orb and Background Fluid)
       const ambientGlow = ctx.createRadialGradient(
         cx,
         cy,
-        lensRadius * 0.25,
+        lensRadius * 0.15,
         cx,
         cy,
-        lensRadius * 1.42
+        lensRadius * 1.46
       );
-      ambientGlow.addColorStop(0, `${p.scene.colors.primary}44`);
-      ambientGlow.addColorStop(0.5, `${p.scene.colors.secondary}22`);
+      ambientGlow.addColorStop(0, `${primaryHex}55`);
+      ambientGlow.addColorStop(0.52, `${secondaryHex}33`);
+      ambientGlow.addColorStop(0.82, `${p.scene.colors.tertiary}18`);
       ambientGlow.addColorStop(1, 'rgba(7, 8, 18, 0)');
       ctx.fillStyle = ambientGlow;
       ctx.beginPath();
-      ctx.arc(cx, cy, lensRadius * 1.42, 0, Math.PI * 2);
+      ctx.arc(cx, cy, lensRadius * 1.46, 0, Math.PI * 2);
       ctx.fill();
 
       // 2. Clip to the Organic Liquid Lens Contour
@@ -229,26 +247,27 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         time,
         p.scene.motion.elasticity,
         audioAmp,
+        bands.treble,
         0
       );
       ctx.clip();
 
-      // Deep Internal Glass Base
+      // Translucent Optical Glass Base (allows the 3D Quantum Fluid background to refract through)
       const baseGrad = ctx.createRadialGradient(
-        cx - 40,
-        cy - 50,
-        20,
+        cx - 36,
+        cy - 44,
+        18,
         cx,
         cy,
-        lensRadius * 1.1
+        lensRadius * 1.08
       );
-      baseGrad.addColorStop(0, '#191530');
-      baseGrad.addColorStop(0.65, '#0B0D1C');
-      baseGrad.addColorStop(1, '#070812');
+      baseGrad.addColorStop(0, 'rgba(26, 22, 52, 0.38)');
+      baseGrad.addColorStop(0.65, 'rgba(13, 16, 34, 0.32)');
+      baseGrad.addColorStop(1, 'rgba(9, 11, 24, 0.24)');
       ctx.fillStyle = baseGrad;
       ctx.fillRect(0, 0, size, size);
 
-      // 3. Internal Iridescent Liquid Color Blobs (Screen Blending for Refracted Physics)
+      // 3. Correlated Internal Liquid Color Caustics (Screen Blending for Refracted Physics)
       ctx.globalCompositeOperation = 'screen';
 
       const drawInternalCaustic = (
@@ -260,9 +279,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       ) => {
         const bx = cx + offsetX;
         const by = cy + offsetY;
-        const g = ctx.createRadialGradient(bx, by, 8, bx, by, blobR);
+        const g = ctx.createRadialGradient(bx, by, 6, bx, by, blobR);
         g.addColorStop(0, `${hexColor}${alphaHex}`);
-        g.addColorStop(0.55, `${hexColor}44`);
+        g.addColorStop(0.58, `${hexColor}66`);
         g.addColorStop(1, 'rgba(0,0,0,0)');
         ctx.fillStyle = g;
         ctx.beginPath();
@@ -270,60 +289,60 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         ctx.fill();
       };
 
-      const orbitA = time * 0.9;
+      const orbitA = time * 0.75;
       drawInternalCaustic(
-        Math.cos(orbitA) * 68,
-        Math.sin(orbitA * 0.8) * 58,
-        165 + audioAmp * 32,
-        p.scene.colors.primary,
+        Math.cos(orbitA) * 58,
+        Math.sin(orbitA * 0.8) * 50,
+        195 + bands.bass * 34,
+        primaryHex,
+        'D8'
+      );
+      drawInternalCaustic(
+        Math.sin(-orbitA * 0.75) * 64,
+        Math.cos(orbitA * 0.9) * 56,
+        188 + bands.mid * 28,
+        secondaryHex,
         'CC'
       );
       drawInternalCaustic(
-        Math.sin(-orbitA * 0.75) * 76,
-        Math.cos(orbitA * 0.9) * 64,
-        155 + audioAmp * 25,
-        p.scene.colors.secondary,
-        'BB'
-      );
-      drawInternalCaustic(
-        Math.cos(orbitA * 0.5 + 2.1) * 54,
-        Math.sin(orbitA * 1.1 + 1.4) * 70,
-        140,
+        Math.cos(orbitA * 0.5 + 2.1) * 48,
+        Math.sin(orbitA * 1.1 + 1.4) * 60,
+        175,
         p.scene.colors.tertiary,
-        'AA'
+        'BB'
       );
       // Chamber-coupled chromatic accent
       drawInternalCaustic(
-        Math.sin(orbitA * 0.6 - 1.2) * 82,
-        Math.cos(orbitA * 0.5 + 0.8) * 48,
-        130,
+        Math.sin(orbitA * 0.6 - 1.2) * 68,
+        Math.cos(orbitA * 0.5 + 0.8) * 44,
+        165,
         p.chamber.primaryHex,
-        '88'
+        '99'
       );
 
       // 4. Chamber-Specific Material Physics inside the Lens
       const effect = p.chamber.materialEffect;
       if (effect === 'harmonic-rings' || effect === 'droplets') {
-        const ringCount = effect === 'droplets' ? 4 : 3;
+        const ringCount = effect === 'droplets' ? 3 : 2;
         for (let rIdx = 0; rIdx < ringCount; rIdx++) {
-          const ripplePhase = ((time * 0.35 + rIdx / ringCount) % 1);
-          const rr = 30 + ripplePhase * (lensRadius * 0.85);
+          const ripplePhase = (time * 0.28 + rIdx / ringCount) % 1;
+          const rr = 34 + ripplePhase * (lensRadius * 0.82);
           ctx.strokeStyle =
             effect === 'droplets'
-              ? `rgba(47, 232, 255, ${(1 - ripplePhase) * 0.28})`
-              : `rgba(216, 255, 82, ${(1 - ripplePhase) * 0.24})`;
-          ctx.lineWidth = 1.5;
+              ? `rgba(47, 232, 255, ${(1 - ripplePhase) * 0.18})`
+              : `rgba(216, 255, 82, ${(1 - ripplePhase) * 0.16})`;
+          ctx.lineWidth = 1.2;
           ctx.beginPath();
           ctx.arc(cx, cy, rr, 0, Math.PI * 2);
           ctx.stroke();
         }
       }
 
-      // Liquid particles / droplets / orbital dust
+      // Soft internal liquid motes
       droplets.forEach((d) => {
         if (!p.reducedMotion && !isPaused) {
-          d.x += d.vx * (isCompleted ? 2.4 : 1);
-          d.y += d.vy * (isCompleted ? 2.4 : 1);
+          d.x += d.vx * (isCompleted ? 2.0 : 0.85);
+          d.y += d.vy * (isCompleted ? 2.0 : 0.85);
           if (Math.hypot(d.x, d.y) > lensRadius * 0.82) {
             d.x *= -0.85;
             d.y *= -0.85;
@@ -334,16 +353,16 @@ export const LivingLens: React.FC<LivingLensProps> = ({
             ? p.scene.colors.iridescent
             : d.hueShift === 1
             ? p.chamber.primaryHex
-            : p.scene.colors.secondary;
+            : secondaryHex;
         ctx.fillStyle = dotColor;
         ctx.globalAlpha = isCompleted
-          ? Math.min(0.95, d.alpha * 2)
-          : d.alpha * 0.7;
+          ? Math.min(0.85, d.alpha * 1.8)
+          : d.alpha * 0.45;
         ctx.beginPath();
         ctx.arc(
           cx + d.x,
           cy + d.y,
-          isCompleted ? d.r * 1.35 : d.r,
+          isCompleted ? d.r * 1.25 : d.r * 0.9,
           0,
           Math.PI * 2
         );
@@ -351,38 +370,38 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       });
       ctx.globalAlpha = 1;
 
-      // 5. Central Optical Depth Scrim so Typography is Always Razor-Sharp (WCAG AAA)
+      // 5. Gentle Optical Depth Scrim (keeps numerals crisp while preserving orb-background correlation)
       ctx.globalCompositeOperation = 'source-over';
       const centerScrim = ctx.createRadialGradient(
         cx,
         cy,
-        15,
+        12,
         cx,
         cy,
-        lensRadius * 0.82
+        lensRadius * 0.78
       );
-      centerScrim.addColorStop(0, 'rgba(7, 8, 18, 0.72)');
-      centerScrim.addColorStop(0.65, 'rgba(7, 8, 18, 0.42)');
-      centerScrim.addColorStop(1, 'rgba(7, 8, 18, 0.0)');
+      centerScrim.addColorStop(0, 'rgba(10, 12, 26, 0.34)');
+      centerScrim.addColorStop(0.6, 'rgba(10, 12, 26, 0.16)');
+      centerScrim.addColorStop(1, 'rgba(10, 12, 26, 0.0)');
       ctx.fillStyle = centerScrim;
       ctx.fillRect(0, 0, size, size);
 
-      // 6. Specular 3D Glass Rim Highlights (Top-Left Fresnel & Bottom-Right Caustic)
+      // 6. Soft Specular 3D Glass Sheen (Top-Left Fresnel)
       const topSpecular = ctx.createLinearGradient(
         cx - lensRadius,
         cy - lensRadius,
-        cx + lensRadius * 0.4,
-        cy + lensRadius * 0.4
+        cx + lensRadius * 0.45,
+        cy + lensRadius * 0.45
       );
-      topSpecular.addColorStop(0, 'rgba(245, 246, 255, 0.34)');
-      topSpecular.addColorStop(0.28, 'rgba(47, 232, 255, 0.08)');
+      topSpecular.addColorStop(0, 'rgba(245, 246, 255, 0.24)');
+      topSpecular.addColorStop(0.32, 'rgba(47, 232, 255, 0.06)');
       topSpecular.addColorStop(1, 'rgba(255, 255, 255, 0)');
       ctx.fillStyle = topSpecular;
       ctx.fillRect(0, 0, size, size);
 
       ctx.restore(); // End Lens Clip
 
-      // 7. Refracted Outer Glass Rim Contour
+      // 7. Calm, Feathered Glass Rim Contour
       traceLensContour(
         cx,
         cy,
@@ -390,6 +409,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         time,
         p.scene.motion.elasticity,
         audioAmp,
+        bands.treble,
         0
       );
       const rimStroke = ctx.createLinearGradient(
@@ -398,11 +418,11 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         cx + lensRadius,
         cy + lensRadius
       );
-      rimStroke.addColorStop(0, 'rgba(245, 246, 255, 0.65)');
-      rimStroke.addColorStop(0.5, `${p.scene.colors.primary}88`);
-      rimStroke.addColorStop(1, `${p.scene.colors.secondary}99`);
+      rimStroke.addColorStop(0, 'rgba(245, 246, 255, 0.38)');
+      rimStroke.addColorStop(0.5, `${primaryHex}66`);
+      rimStroke.addColorStop(1, `${secondaryHex}66`);
       ctx.strokeStyle = rimStroke;
-      ctx.lineWidth = 2.2;
+      ctx.lineWidth = 1.6;
       ctx.stroke();
 
       // 8. Progress Refraction Arc around the Lens Perimeter when Running / Paused
@@ -418,7 +438,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         ctx.arc(cx, cy, progressArcRadius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = p.scene.colors.secondary;
+        ctx.strokeStyle = secondaryHex;
         ctx.lineWidth = 2.8;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -442,7 +462,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     return () => cancelAnimationFrame(animId);
   }, []);
 
-  // Radial Time Scrubber Pointer Math
+  // Unified Pointer-Event Radial Time Scrubber (supports mouse, touch, stylus)
   const updateDurationFromPointer = (clientX: number, clientY: number) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
@@ -460,17 +480,19 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   useEffect(() => {
     if (!isDraggingScrubber) return;
-    const onMove = (e: MouseEvent) => {
+    const onPointerMove = (e: PointerEvent) => {
       updateDurationFromPointer(e.clientX, e.clientY);
     };
-    const onUp = () => {
+    const onPointerUp = () => {
       setIsDraggingScrubber(false);
     };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
     return () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
     };
   });
 
@@ -487,8 +509,8 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   const scaleClass =
     isRunningOrPaused && immersionMode !== 'minimal'
-      ? 'w-[380px] h-[380px] sm:w-[500px] sm:h-[500px] md:w-[560px] md:h-[560px]'
-      : 'w-[340px] h-[340px] sm:w-[460px] sm:h-[460px] md:w-[520px] md:h-[520px]';
+      ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
+      : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
 
   const numeralSizeClass =
     timerTextScale === 'monumental'
@@ -500,8 +522,8 @@ export const LivingLens: React.FC<LivingLensProps> = ({
   return (
     <div
       ref={containerRef}
-      onMouseEnter={() => setIsLensHovered(true)}
-      onMouseLeave={() => setIsLensHovered(false)}
+      onPointerEnter={() => setIsLensHovered(true)}
+      onPointerLeave={() => setIsLensHovered(false)}
       data-testid="living-lens-container"
       data-timer-status={status}
       className={`relative flex items-center justify-center select-none transition-all duration-700 ease-out ${scaleClass}`}
@@ -517,7 +539,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       {showRadialRing && (
         <svg
           viewBox="0 0 620 620"
-          className="absolute inset-0 w-full h-full overflow-visible z-20"
+          className="absolute inset-0 w-full h-full overflow-visible z-20 touch-none"
           aria-label="Radial Duration Scrubber (15 to 120 minutes)"
         >
           {/* Interactive Ring Track */}
@@ -527,9 +549,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
             r={scrubRadius}
             fill="none"
             stroke="rgba(245, 246, 255, 0.14)"
-            strokeWidth={14}
+            strokeWidth={16}
             className="cursor-pointer"
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               onToggleScrubber(true);
               setIsDraggingScrubber(true);
@@ -604,7 +626,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
           {/* Draggable Scrubber Handle */}
           <g
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               e.stopPropagation();
               setIsDraggingScrubber(true);
             }}
@@ -613,7 +635,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
             <circle
               cx={handleX}
               cy={handleY}
-              r={11}
+              r={12}
               fill="#070812"
               stroke="#2FE8FF"
               strokeWidth={3}
@@ -638,21 +660,24 @@ export const LivingLens: React.FC<LivingLensProps> = ({
               {durationMinutes} minutes · {sessionLabel || 'Deep work'}
             </p>
             <div className="mt-2 flex items-center gap-3">
-              <button
-                type="button"
+              <AuraButton
+                variant="secondary"
+                size="md"
+                reducedMotion={reducedMotion}
                 onClick={onStartBreak}
-                className="px-5 py-2.5 rounded-full text-xs font-medium text-[#F5F6FF] bg-white/10 hover:bg-white/18 border border-white/15 transition-all whitespace-nowrap"
               >
                 Take a break
-              </button>
-              <button
-                type="button"
+              </AuraButton>
+              <AuraButton
+                variant="primary"
+                size="md"
+                accentColor={scene.colors.primary}
+                secondaryColor={scene.colors.secondary}
+                reducedMotion={reducedMotion}
                 onClick={onStartAgain}
-                style={{ backgroundColor: scene.colors.primary }}
-                className="px-5 py-2.5 rounded-full text-xs font-semibold text-[#070812] hover:brightness-110 transition-all shadow-lg whitespace-nowrap"
               >
                 Start again
-              </button>
+              </AuraButton>
             </div>
           </div>
         ) : (
@@ -677,7 +702,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                   ? 'resume'
                   : 'begin'
               }`}
-              className={`font-display font-semibold tracking-tight text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.65)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl ${numeralSizeClass}`}
+              className={`font-display font-semibold tracking-tight text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.65)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
             >
               {formatRemainingTime(remainingSeconds)}
             </button>
@@ -706,7 +731,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                     type="button"
                     onClick={() => setIsEditingLabel(true)}
                     title="Click to rename session"
-                    className="text-sm font-medium text-[#F5F6FF]/85 hover:text-[#F5F6FF] transition-colors px-3 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF]"
+                    className="text-sm font-medium text-[#F5F6FF]/85 hover:text-[#F5F6FF] transition-colors px-3 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
                   >
                     {sessionLabel.trim() || 'What are you making?'}
                   </button>

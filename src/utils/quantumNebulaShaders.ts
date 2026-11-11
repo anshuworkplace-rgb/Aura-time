@@ -20,12 +20,13 @@ export function hexToNormalizedRgb(hex: string): [number, number, number] {
 }
 
 /**
- * Blends the signature Quantum Nebula palette (Ion Violet #8A5CFF,
- * Electric Cyan #2FE8FF, Signal Magenta #FF4FA3) with the active Focus Scene.
+ * Strongly correlates the Quantum Nebula background palette with the central
+ * Living Lens Focus Scene (82% scene correlation + 18% cosmic violet-cyan-magenta harmonics)
+ * so the central orb and surrounding fluid field feel like one unified system.
  */
 export function interpolateNebulaSpectrum(
   scene: FocusSceneConfig,
-  sceneBlend = 0.42
+  sceneBlend = 0.82
 ): NebulaSpectrum {
   const baseViolet: [number, number, number] = [0.541, 0.361, 1.0]; // #8A5CFF
   const baseCyan: [number, number, number] = [0.184, 0.91, 1.0]; // #2FE8FF
@@ -51,13 +52,13 @@ export function interpolateNebulaSpectrum(
     violet: mix(baseViolet, sceneP, sceneBlend),
     cyan: mix(baseCyan, sceneS, sceneBlend),
     magenta: mix(baseMagenta, sceneT, sceneBlend),
-    deepSpace: mix(baseDeep, sceneBg, 0.5),
+    deepSpace: mix(baseDeep, sceneBg, 0.75),
   };
 }
 
 /**
- * Calculates the fluid turbulence velocity & gravitational distortion gain
- * based on timer status, completion proximity, and live audio amplitude.
+ * Calculates calm, correlated fluid velocity & harmonic coupling parameters
+ * synchronized with the central Living Lens state.
  */
 export function computeFluidTurbulenceGain(
   status: TimerStatus,
@@ -72,10 +73,10 @@ export function computeFluidTurbulenceGain(
 } {
   if (reducedMotion) {
     return {
-      flowSpeed: 0.05,
-      turbulence: 0.25,
-      gravitationalStrength: 0.18,
-      centralSanctuaryAlpha: 0.88,
+      flowSpeed: 0.04,
+      turbulence: 0.22,
+      gravitationalStrength: 0.16,
+      centralSanctuaryAlpha: 0.76,
     };
   }
 
@@ -84,43 +85,42 @@ export function computeFluidTurbulenceGain(
 
   if (status === 'paused') {
     return {
-      flowSpeed: 0.12,
-      turbulence: 0.32,
-      gravitationalStrength: 0.22,
-      centralSanctuaryAlpha: 0.86,
+      flowSpeed: 0.08,
+      turbulence: 0.26,
+      gravitationalStrength: 0.18,
+      centralSanctuaryAlpha: 0.78,
     };
   }
 
   if (status === 'completed') {
     return {
-      flowSpeed: 1.45,
-      turbulence: 0.92,
-      gravitationalStrength: 0.52,
+      flowSpeed: 0.95,
+      turbulence: 0.62,
+      gravitationalStrength: 0.36,
       centralSanctuaryAlpha: 0.72,
     };
   }
 
   if (status === 'running') {
     return {
-      flowSpeed: 0.88 + clampedProgress * 0.28 + clampedAudio * 0.35,
-      turbulence: 0.64 + clampedProgress * 0.18 + clampedAudio * 0.25,
-      gravitationalStrength: 0.36 + clampedAudio * 0.18,
-      centralSanctuaryAlpha: 0.84,
+      flowSpeed: 0.56 + clampedProgress * 0.18 + clampedAudio * 0.22,
+      turbulence: 0.44 + clampedProgress * 0.12 + clampedAudio * 0.16,
+      gravitationalStrength: 0.28 + clampedAudio * 0.12,
+      centralSanctuaryAlpha: 0.76,
     };
   }
 
-  // Idle state: serene, mesmerizing cosmic drift
+  // Idle state: serene, calm, breathing liquid field correlated with the central orb
   return {
-    flowSpeed: 0.58,
-    turbulence: 0.52,
-    gravitationalStrength: 0.3,
-    centralSanctuaryAlpha: 0.82,
+    flowSpeed: 0.38,
+    turbulence: 0.36,
+    gravitationalStrength: 0.24,
+    centralSanctuaryAlpha: 0.75,
   };
 }
 
 /**
- * Custom WGSL Shader Module for WebGPU Quantum Nebula × Fluid Dynamics
- * (Used when WebGPU/TSL pipeline is active and exported for shader inspection)
+ * Custom WGSL Shader Module for WebGPU Quantum Nebula × Calm Fluid Dynamics
  */
 export const QUANTUM_NEBULA_WGSL = /* wgsl */ `
 struct NebulaUniforms {
@@ -137,66 +137,45 @@ struct NebulaUniforms {
   colorDeep: vec3<f32>,
 };
 
-fn hash21(p: vec2<f32>) -> f32 {
-  let h = dot(p, vec2<f32>(127.1, 311.7));
-  return fract(sin(h) * 43758.5453123);
-}
-
-fn valueNoise(p: vec2<f32>) -> f32 {
+fn smoothNoise(p: vec2<f32>) -> f32 {
   let i = floor(p);
   let f = fract(p);
-  let u = f * f * (3.0 - 2.0 * f);
-  let a = hash21(i);
-  let b = hash21(i + vec2<f32>(1.0, 0.0));
-  let c = hash21(i + vec2<f32>(0.0, 1.0));
-  let d = hash21(i + vec2<f32>(1.0, 1.0));
+  // Quintic C2-continuous interpolation for zero sharp edges
+  let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  let a = fract(sin(dot(i, vec2<f32>(127.1, 311.7))) * 43758.5453);
+  let b = fract(sin(dot(i + vec2<f32>(1.0, 0.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
+  let c = fract(sin(dot(i + vec2<f32>(0.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
+  let d = fract(sin(dot(i + vec2<f32>(1.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-fn fbmFluid(p_in: vec2<f32>) -> f32 {
+fn silkFluidFbm(p_in: vec2<f32>) -> f32 {
   var v = 0.0;
-  var a = 0.5;
+  var a = 0.55;
   var p = p_in;
   let rot = mat2x2<f32>(0.8, 0.6, -0.6, 0.8);
-  for (var i = 0; i < 5; i = i + 1) {
-    v = v + a * valueNoise(p);
-    p = rot * p * 2.03 + vec2<f32>(1.7, 9.2);
-    a = a * 0.5;
+  for (var i = 0; i < 3; i = i + 1) {
+    v = v + a * smoothNoise(p);
+    p = rot * p * 1.65 + vec2<f32>(1.7, 9.2);
+    a = a * 0.48;
   }
   return v;
 }
 
 fn evaluateQuantumNebula(uv: vec2<f32>, u: NebulaUniforms) -> vec3<f32> {
-  var p = (uv - 0.5) * vec2<f32>(u.aspect, 1.0);
+  var p = (uv - vec2<f32>(0.5, 0.48)) * vec2<f32>(u.aspect, 1.0);
   let r = length(p);
-
-  // Relativistic Frame-Dragging & Gravitational Lensing around the Living Lens
-  let lensTwist = u.gravityStrength / (r * r + 0.18);
-  let s = sin(lensTwist * 0.35);
-  let c = cos(lensTwist * 0.35);
-  let warped = vec2<f32>(p.x * c - p.y * s, p.x * s + p.y * c);
-
-  // Domain-Warped Navier-Stokes / FBM Fluid Cascade
-  let t = u.time * 0.18;
+  let t = u.time * 0.12;
   let q = vec2<f32>(
-    fbmFluid(warped * 2.2 + vec2<f32>(0.0, t)),
-    fbmFluid(warped * 2.2 + vec2<f32>(5.2, 1.3 - t * 0.8))
+    silkFluidFbm(p * 1.15 + vec2<f32>(0.0, t)),
+    silkFluidFbm(p * 1.15 + vec2<f32>(3.4, -t * 0.8))
   );
-  let rField = vec2<f32>(
-    fbmFluid(warped * 2.6 + 2.8 * q + vec2<f32>(1.7 + t * 0.6, 9.2)),
-    fbmFluid(warped * 2.6 + 2.8 * q + vec2<f32>(8.3, 2.8 - t * 0.5))
-  );
-  let density = fbmFluid(warped * 2.4 + 3.2 * rField * u.turbulence);
-
-  // Violet - Cyan - Magenta Volumetric Light Diffusion
-  var col = u.colorDeep;
-  col = mix(col, u.colorViolet, smoothstep(0.15, 0.78, density));
-  col = mix(col, u.colorCyan, smoothstep(0.32, 0.88, length(q)) * 0.75);
-  col = mix(col, u.colorMagenta, smoothstep(0.45, 0.95, rField.y * density) * 0.82);
-
-  // Central Sanctuary Vignette so the Living Lens timer remains razor-sharp
-  let sanctuary = smoothstep(0.14, 0.48, r);
-  return mix(u.colorDeep, col, mix(1.0 - u.sanctuaryAlpha, 1.0, sanctuary));
+  let density = silkFluidFbm(p * 1.2 + q * (1.2 + u.turbulence));
+  let radialAura = exp(-r * r * 1.65);
+  var col = mix(u.colorDeep, u.colorViolet * 0.55, density * radialAura);
+  col = mix(col, u.colorCyan * 0.5, q.x * radialAura * 0.65);
+  col = mix(col, u.colorMagenta * 0.45, q.y * radialAura * 0.55);
+  return col;
 }
 `;
 
@@ -213,11 +192,11 @@ void main() {
 `;
 
 /**
- * Fragment Shader for Volumetric Quantum Nebula × GPU Fluid Dynamics
- * Combines 5-octave domain-warped FBM fluid advection, turbulent energy filaments,
- * gravitational lensing around the central Living Lens, pointer vortex interaction,
- * and smooth violet-cyan-magenta light diffusion with a protective dark sanctuary
- * behind the central timer numerals.
+ * Fragment Shader for Calm, Edgeless, Correlated Quantum Nebula × GPU Fluid Dynamics
+ * Uses C2-continuous quintic interpolation and low-frequency harmonic fluid advection
+ * so there are zero harsh contour lines or jagged edges. The fluid field radiates
+ * outward from the central Living Lens orb and shares its exact color physics and
+ * breathing rhythm.
  */
 export const NEBULA_FLUID_FRAGMENT_SHADER = /* glsl */ `
 precision highp float;
@@ -242,10 +221,11 @@ float hash21(vec2 p) {
   return fract(p.x * p.y);
 }
 
-float noise(vec2 p) {
+// Quintic C2-continuous smooth noise (zero sharp grid or contour edges)
+float smoothNoise(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
+  vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
 
   float a = hash21(i);
   float b = hash21(i + vec2(1.0, 0.0));
@@ -261,88 +241,88 @@ mat2 rot2(float a) {
   return mat2(c, -s, s, c);
 }
 
-float fbm(vec2 p) {
+// Low-frequency 3-octave velvety fluid FBM (eliminates crinkles and sharp edges)
+float calmFluidFbm(vec2 p) {
   float v = 0.0;
-  float amp = 0.52;
-  mat2 m = rot2(0.64);
-  for (int i = 0; i < 5; i++) {
-    v += amp * noise(p);
-    p = m * p * 2.04 + vec2(1.7, 9.2);
-    amp *= 0.5;
+  float amp = 0.54;
+  mat2 m = rot2(0.58);
+  for (int i = 0; i < 3; i++) {
+    v += amp * smoothNoise(p);
+    p = m * p * 1.58 + vec2(1.7, 9.2);
+    amp *= 0.46;
   }
   return v;
 }
 
 void main() {
-  // Normalized aspect-corrected coordinates centered on the Living Lens (0, -0.02)
+  // Aspect-corrected coordinates centered on the Living Lens orb (0.5, 0.48)
   vec2 centered = (vUv - vec2(0.5, 0.48)) * vec2(uAspect, 1.0);
   float dist = length(centered);
 
-  // Subtle Pointer Vortex Perturbation
+  // Gentle pointer flow perturbation (wide, soft Gaussian radius)
   vec2 ptr = (uPointer - vec2(0.5, 0.48)) * vec2(uAspect, 1.0);
   vec2 toPtr = centered - ptr;
-  float ptrDist = length(toPtr);
-  float ptrInfluence = exp(-ptrDist * ptrDist * 5.5) * 0.14;
-  vec2 ptrSwirl = vec2(-toPtr.y, toPtr.x) * ptrInfluence;
+  float ptrInfluence = exp(-dot(toPtr, toPtr) * 2.4) * 0.09;
+  vec2 ptrFlow = vec2(-toPtr.y, toPtr.x) * ptrInfluence;
 
-  // Relativistic Gravitational Lensing & Frame-Dragging around the Living Lens
-  float einsteinRingRadius = 0.27;
-  float lensDeflection = uGravityStrength * exp(-pow((dist - einsteinRingRadius) * 4.2, 2.0));
-  vec2 warped = rot2(lensDeflection * 0.85) * (centered + ptrSwirl);
-  // Radial gravitational pull near the event horizon rim
-  warped *= 1.0 - lensDeflection * 0.18;
+  // Gentle, edgeless gravitational frame-dragging coupled to the central orb
+  float softTwist = uGravityStrength * 0.45 * exp(-dist * dist * 2.2);
+  vec2 warped = rot2(softTwist) * (centered + ptrFlow);
 
-  float t = uTime * 0.14;
+  float t = uTime * 0.16;
 
-  // Dual-Cascade Domain-Warped Fluid Simulation (q -> r -> f)
+  // Smooth Domain-Warped Silk Fluid Advection (low frequency, calm, velvety)
   vec2 q = vec2(
-    fbm(warped * 2.15 + vec2(0.0, t * 0.9)),
-    fbm(warped * 2.15 + vec2(5.2, 1.3 - t * 0.75))
+    calmFluidFbm(warped * 1.12 + vec2(0.0, t * 0.85)),
+    calmFluidFbm(warped * 1.12 + vec2(4.2, 1.7 - t * 0.7))
   );
 
   vec2 r = vec2(
-    fbm(warped * 2.55 + 2.9 * q + vec2(1.7 + t * 0.55, 9.2)),
-    fbm(warped * 2.55 + 2.9 * q + vec2(8.3 - t * 0.45, 2.8))
+    calmFluidFbm(warped * 1.28 + 1.45 * q + vec2(1.7 + t * 0.45, 6.2)),
+    calmFluidFbm(warped * 1.28 + 1.45 * q + vec2(5.8 - t * 0.4, 2.4))
   );
 
-  float fluidDensity = fbm(warped * 2.3 + (2.6 + uTurbulence * 1.4) * r);
+  float fluidField = calmFluidFbm(warped * 1.18 + (1.2 + uTurbulence * 0.65) * r);
 
-  // High-frequency turbulent energy currents & plasma ridges
-  float ridgeA = 1.0 - abs(sin((fluidDensity + r.x * 0.65) * 6.28318));
-  float energyFilament = pow(clamp(ridgeA, 0.0, 1.0), 3.6) * (0.65 + uAudioAmp * 0.6);
+  // Soft harmonic wave coupling that mirrors the central Living Lens internal caustics
+  float orbHarmonicA = 0.5 + 0.5 * sin(warped.x * 2.4 + warped.y * 1.8 + t * 1.4);
+  float orbHarmonicB = 0.5 + 0.5 * cos(warped.x * 1.9 - warped.y * 2.2 - t * 1.1);
 
-  // Einstein-ring gravitational horizon glow around the Living Lens perimeter
-  float horizonHalo = exp(-pow((dist - 0.255) * 7.5, 2.0)) * (0.48 + uAudioAmp * 0.35);
+  // Radial correlation envelope:
+  // The fluid field emanates from the central orb and diffuses smoothly into the calm night sky
+  float coreCoupling = exp(-dist * dist * 1.55) * (0.78 + uAudioAmp * 0.22);
+  float ambientReach = exp(-dist * dist * 0.52);
+  float radialEnvelope = mix(ambientReach * 0.48, 1.0, coreCoupling);
 
-  // Smooth Violet - Cyan - Magenta Volumetric Light Diffusion with Deep Cosmic Valleys
-  float cloudMask = pow(smoothstep(0.16, 0.82, fluidDensity), 1.35);
-  vec3 nebulaColor = uColorDeep;
-  nebulaColor = mix(
-    nebulaColor,
-    uColorViolet * 0.88,
-    cloudMask
+  // Velvety Violet - Cyan - Magenta Diffusion correlated with the orb's internal palette
+  vec3 fluidColor = uColorDeep;
+  fluidColor = mix(
+    fluidColor,
+    uColorViolet * 0.62,
+    smoothstep(0.18, 0.85, fluidField) * radialEnvelope
   );
-  nebulaColor = mix(
-    nebulaColor,
-    uColorCyan * 0.9,
-    pow(smoothstep(0.28, 0.86, length(q) * 0.86), 1.25) * 0.64
+  fluidColor = mix(
+    fluidColor,
+    uColorCyan * 0.58,
+    smoothstep(0.22, 0.88, q.x * 0.65 + orbHarmonicA * 0.35) * radialEnvelope * 0.72
   );
-  nebulaColor = mix(
-    nebulaColor,
-    uColorMagenta * 0.88,
-    pow(smoothstep(0.34, 0.92, r.y * fluidDensity * 1.4), 1.2) * 0.72
+  fluidColor = mix(
+    fluidColor,
+    uColorMagenta * 0.52,
+    smoothstep(0.26, 0.9, r.y * 0.65 + orbHarmonicB * 0.35) * radialEnvelope * 0.62
   );
 
-  // Add luminous plasma filaments and gravitational halo
-  nebulaColor += (uColorCyan * 0.52 + uColorMagenta * 0.48) * energyFilament * 0.48;
-  nebulaColor += mix(uColorViolet, uColorCyan, 0.55) * horizonHalo * 0.52;
+  // Soft, edgeless subsurface bloom directly around and behind the Living Lens orb
+  // so the orb and background feel continuously connected without a stark gap
+  float sharedOrbBloom = exp(-dist * dist * 4.2) * (0.28 + uAudioAmp * 0.14);
+  fluidColor += mix(uColorViolet, uColorCyan, orbHarmonicA) * sharedOrbBloom;
 
-  // Deep-space outer vignette & Central Focus Sanctuary so timer numerals remain 100% legible
-  float centralSanctuary = smoothstep(0.13, 0.36, dist);
-  float sanctuaryFactor = mix(1.0 - uSanctuaryAlpha, 1.0, centralSanctuary);
-  float outerVignette = 1.0 - smoothstep(0.48, 1.08, dist) * 0.58;
+  // Gentle, feathered optical calm directly behind the timer numerals (subtle, not a harsh black hole)
+  float textCalm = mix(0.68, 1.0, smoothstep(0.0, 0.38, dist));
+  // Soft outer screen edge vignette
+  float outerCalm = 1.0 - smoothstep(0.55, 1.25, dist) * 0.45;
 
-  vec3 finalColor = mix(uColorDeep, nebulaColor, sanctuaryFactor * outerVignette);
+  vec3 finalColor = mix(uColorDeep, fluidColor, textCalm * outerCalm);
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
@@ -350,8 +330,7 @@ void main() {
 
 /**
  * GPU-Accelerated Quantum Particle System Vertex Shader
- * Computes 3D orbital stream advection, curl-wave turbulence, and depth-based size attenuation
- * entirely on the GPU.
+ * Soft, calm, bokeh-like quantum motes that drift in harmony with the central orb.
  */
 export const QUANTUM_PARTICLES_VERTEX_SHADER = /* glsl */ `
 attribute float aPhase;
@@ -370,21 +349,18 @@ uniform float uPixelRatio;
 void main() {
   vColorMix = aColorMix;
 
-  // Spherical / toroidal quantum stream coordinates
   float radius = length(position.xy);
   float baseAngle = atan(position.y, position.x);
 
-  // Differential Keplerian + fluid vortex angular velocity
-  float angularVel = aSpeed * (0.18 + 0.14 / (radius + 0.35));
+  // Calm, laminar orbital drift synchronized with the central orb's flow
+  float angularVel = aSpeed * (0.09 + 0.07 / (radius + 0.45));
   float angle = baseAngle + uTime * angularVel;
 
-  // 3D turbulent curl wave displacement
-  float waveX = sin(uTime * 0.65 + aPhase * 6.2831) * 0.14 * uTurbulence;
-  float waveY = cos(uTime * 0.55 + aPhase * 4.7123) * 0.14 * uTurbulence;
-  float waveZ = sin(uTime * 0.45 + radius * 2.2 + aPhase * 3.1415) * 0.28;
+  float waveX = sin(uTime * 0.42 + aPhase * 6.2831) * 0.1 * uTurbulence;
+  float waveY = cos(uTime * 0.38 + aPhase * 4.7123) * 0.1 * uTurbulence;
+  float waveZ = sin(uTime * 0.3 + radius * 1.8 + aPhase * 3.1415) * 0.22;
 
-  // Breathing radial expansion coupled to audio & fluid turbulence
-  float radialPulse = radius * (1.0 + sin(uTime * 0.4 + aPhase * 6.28) * 0.06 + uAudioAmp * 0.08);
+  float radialPulse = radius * (1.0 + sin(uTime * 0.32 + aPhase * 6.28) * 0.04 + uAudioAmp * 0.05);
 
   vec3 advectedPos = vec3(
     cos(angle) * radialPulse + waveX,
@@ -395,25 +371,25 @@ void main() {
   vec4 mvPosition = modelViewMatrix * vec4(advectedPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
 
-  // Keep central focus timer unobstructed by softly attenuating particles crossing the center
+  // Softly attenuate particles directly behind the timer text while keeping orb & halo connected
   float screenDist = length(advectedPos.xy);
-  float centerClearance = smoothstep(0.45, 1.15, screenDist);
+  float centerClearance = smoothstep(0.28, 0.85, screenDist);
+  float outerFade = 1.0 - smoothstep(1.8, 3.1, screenDist);
 
-  // Twinkle & depth fade
-  float twinkle = 0.55 + 0.45 * sin(uTime * (1.4 + aSpeed * 1.5) + aPhase * 12.566);
-  vAlpha = twinkle * centerClearance * smoothstep(-5.5, -0.8, mvPosition.z);
+  float twinkle = 0.5 + 0.5 * sin(uTime * (0.9 + aSpeed * 0.8) + aPhase * 12.566);
+  vAlpha = twinkle * centerClearance * outerFade * smoothstep(-5.2, -0.9, mvPosition.z);
 
   gl_PointSize = clamp(
-    (aScale * (14.0 + uAudioAmp * 8.0) * uPixelRatio) / max(0.8, -mvPosition.z),
+    (aScale * (11.0 + uAudioAmp * 5.0) * uPixelRatio) / max(0.9, -mvPosition.z),
     1.5,
-    18.0
+    14.0
   );
 }
 `;
 
 /**
  * GPU-Accelerated Quantum Particle System Fragment Shader
- * Renders soft optical Airy-disk glow points in violet, cyan, magenta, and starlight white.
+ * Feather-soft radial Gaussian glow with zero hard edges.
  */
 export const QUANTUM_PARTICLES_FRAGMENT_SHADER = /* glsl */ `
 precision highp float;
@@ -430,14 +406,12 @@ void main() {
   float r = length(coord) * 2.0;
   if (r > 1.0) discard;
 
-  // Soft optical Airy-disk radial falloff with bright core
-  float glow = pow(1.0 - r, 2.4);
-  float core = smoothstep(0.45, 0.0, r) * 0.65;
+  // Ultra-soft Gaussian bokeh falloff (no sharp point edges)
+  float glow = exp(-r * r * 4.2) * (1.0 - r);
 
   vec3 particleColor = mix(uColorViolet, uColorCyan, smoothstep(0.0, 0.5, vColorMix));
   particleColor = mix(particleColor, uColorMagenta, smoothstep(0.5, 1.0, vColorMix));
-  particleColor = mix(particleColor, vec3(0.96, 0.97, 1.0), core);
 
-  gl_FragColor = vec4(particleColor, (glow + core) * vAlpha * 0.82);
+  gl_FragColor = vec4(particleColor, glow * vAlpha * 0.48);
 }
 `;

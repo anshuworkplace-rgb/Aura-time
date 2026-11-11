@@ -123,3 +123,23 @@ test('Quantum Nebula fluid dynamics & spectrum helpers compute valid shader para
   assert.equal(QUANTUM_NEBULA_WGSL.includes('evaluateQuantumNebula'), true);
 });
 
+test('multi-duration extensions (+1m, +5m, +10m) and acoustic presets work', async () => {
+  const { CHAMBER_PRESETS, soundEngine } = await import('./soundSynthesizer');
+
+  const ext1 = extendTimer(1200, 1500, 1);
+  assert.equal(ext1.remainingSeconds, 1260);
+  assert.equal(ext1.totalSeconds, 1560);
+
+  const ext10 = extendTimer(1200, 1500, 10);
+  assert.equal(ext10.remainingSeconds, 1800);
+  assert.equal(ext10.totalSeconds, 2100);
+
+  assert.equal(CHAMBER_PRESETS.length >= 4, true);
+  const bands = soundEngine.getAudioBands();
+  assert.equal(typeof bands.bass, 'number');
+  assert.equal(typeof bands.treble, 'number');
+  const spec = soundEngine.getFrequencySpectrum(8);
+  assert.equal(spec.length, 8);
+});
+
+

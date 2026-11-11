@@ -1,5 +1,49 @@
 import { ChamberId } from '../types/aura';
 
+export interface ChamberPreset {
+  id: string;
+  name: string;
+  primaryChamberId: ChamberId;
+  secondaryChamberId: ChamberId | null;
+  ambienceVolume: number;
+  secondaryVolume: number;
+}
+
+export const CHAMBER_PRESETS: ChamberPreset[] = [
+  {
+    id: 'deep-rain-study',
+    name: 'Rain + Vinyl Study',
+    primaryChamberId: 'rain-chamber',
+    secondaryChamberId: 'vinyl-library',
+    ambienceVolume: 0.78,
+    secondaryVolume: 0.35,
+  },
+  {
+    id: 'orbital-drone',
+    name: 'Low Orbit + Soft Drone',
+    primaryChamberId: 'low-orbit',
+    secondaryChamberId: 'soft-drone',
+    ambienceVolume: 0.72,
+    secondaryVolume: 0.4,
+  },
+  {
+    id: 'midnight-coast',
+    name: 'Coastal + Afterhours',
+    primaryChamberId: 'coastal-static',
+    secondaryChamberId: 'afterhours-cafe',
+    ambienceVolume: 0.75,
+    secondaryVolume: 0.32,
+  },
+  {
+    id: 'forest-shield',
+    name: 'Forest + Brown Noise',
+    primaryChamberId: 'forest-2am',
+    secondaryChamberId: 'brown-noise',
+    ambienceVolume: 0.74,
+    secondaryVolume: 0.3,
+  },
+];
+
 interface ActiveLayer {
   chamberId: ChamberId;
   gainNode: GainNode;
@@ -27,7 +71,7 @@ class LivingLensSoundEngine {
       this.masterGain = this.ctx.createGain();
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 128;
-      this.analyser.smoothingTimeConstant = 0.86;
+      this.analyser.smoothingTimeConstant = 0.85;
       this.freqData = new Uint8Array(this.analyser.frequencyBinCount);
 
       this.masterGain.gain.value = 0.0001;
@@ -65,7 +109,8 @@ class LivingLensSoundEngine {
         b3 = 0.86650 * b3 + white * 0.3104856;
         b4 = 0.55000 * b4 + white * 0.5329522;
         b5 = -0.7616 * b5 - white * 0.0168980;
-        output[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.045;
+        output[i] =
+          (b0 + b1 + b2 + b3 + b4 + b5 + b6 + white * 0.5362) * 0.045;
         b6 = white * 0.115926;
       }
     } else {
@@ -90,7 +135,7 @@ class LivingLensSoundEngine {
     layerGain.gain.setValueAtTime(0.0001, ctx.currentTime);
     layerGain.gain.exponentialRampToValueAtTime(
       Math.max(0.001, initialVolume),
-      ctx.currentTime + 0.75
+      ctx.currentTime + 0.65
     );
     layerGain.connect(destination);
 
@@ -167,6 +212,7 @@ class LivingLensSoundEngine {
         addDrones([55.0, 82.41, 110.0], 'sine', 0.18);
         break;
       case 'vinyl-library':
+        // Procedural analog room tone & warm surface dust ambience
         addNoise('pink', 'bandpass', 1550, 1.4, 0.22);
         addNoise('brown', 'lowpass', 230, 0.6, 0.36);
         break;
@@ -197,7 +243,6 @@ class LivingLensSoundEngine {
         addDrones([130.81, 196.0, 246.94, 293.66], 'sine', 0.28);
         break;
       case 'deep-quiet':
-        // Intentional silence
         break;
     }
 
@@ -262,7 +307,7 @@ class LivingLensSoundEngine {
     this.masterGain.gain.setTargetAtTime(
       Math.max(0.0001, params.ambienceVolume),
       ctx.currentTime,
-      0.35
+      0.28
     );
 
     if (params.primaryChamberId !== 'deep-quiet') {
@@ -275,7 +320,7 @@ class LivingLensSoundEngine {
           ctx,
           this.masterGain,
           params.primaryChamberId,
-          0.8
+          0.82
         );
       }
     } else if (this.primaryLayer) {
@@ -302,7 +347,7 @@ class LivingLensSoundEngine {
         this.secondaryLayer.gainNode.gain.setTargetAtTime(
           Math.max(0.0001, params.secondaryVolume),
           ctx.currentTime,
-          0.2
+          0.18
         );
       }
     } else if (this.secondaryLayer) {
@@ -323,7 +368,11 @@ class LivingLensSoundEngine {
     }
     if (this.ctx && this.masterGain) {
       try {
-        this.masterGain.gain.setTargetAtTime(0.0001, this.ctx.currentTime, 0.25);
+        this.masterGain.gain.setTargetAtTime(
+          0.0001,
+          this.ctx.currentTime,
+          0.22
+        );
       } catch {
         // ignore
       }
@@ -341,6 +390,52 @@ class LivingLensSoundEngine {
       sum += this.freqData[i];
     }
     return Math.min(1, sum / (bins * 175));
+  }
+
+  public getAudioBands(): {
+    bass: number;
+    mid: number;
+    treble: number;
+    overall: number;
+  } {
+    if (!this.isPlaying || !this.analyser || !this.freqData) {
+      return { bass: 0, mid: 0, treble: 0, overall: 0 };
+    }
+    this.analyser.getByteFrequencyData(this.freqData);
+    let bassSum = 0;
+    let midSum = 0;
+    let trebleSum = 0;
+
+    for (let i = 0; i < 8; i++) bassSum += this.freqData[i] || 0;
+    for (let i = 8; i < 20; i++) midSum += this.freqData[i] || 0;
+    for (let i = 20; i < 36; i++) trebleSum += this.freqData[i] || 0;
+
+    const bass = Math.min(1, bassSum / (8 * 190));
+    const mid = Math.min(1, midSum / (12 * 165));
+    const treble = Math.min(1, trebleSum / (16 * 140));
+    const overall = Math.min(1, bass * 0.45 + mid * 0.35 + treble * 0.2);
+
+    return { bass, mid, treble, overall };
+  }
+
+  public getFrequencySpectrum(bandCount = 8): number[] {
+    if (!this.isPlaying || !this.analyser || !this.freqData) {
+      return Array.from({ length: bandCount }, () => 0.12);
+    }
+    this.analyser.getByteFrequencyData(this.freqData);
+    const usableBins = Math.min(32, this.freqData.length);
+    const step = Math.max(1, Math.floor(usableBins / bandCount));
+    const result: number[] = [];
+
+    for (let b = 0; b < bandCount; b++) {
+      let sum = 0;
+      for (let j = 0; j < step; j++) {
+        sum += this.freqData[b * step + j] || 0;
+      }
+      const norm = sum / (step * 210);
+      result.push(Math.max(0.14, Math.min(1, norm)));
+    }
+    return result;
   }
 
   public playCompletionChime(alertVolume = 0.7): void {
