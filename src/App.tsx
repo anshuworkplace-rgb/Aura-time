@@ -541,7 +541,7 @@ export default function App() {
             type="button"
             onClick={() => setActiveOverlay('calibration')}
             title="AURA TIME · Command & Calibration (⌘K)"
-            className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] transition-colors uppercase px-3 py-1.5 rounded-full bg-[#070812]/65 border border-white/10"
+            className="aura-control aura-magnetic font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] uppercase px-3 py-1.5 rounded-full bg-[#070812]/65 border border-white/10"
           >
             AURA TIME
           </button>
@@ -554,7 +554,7 @@ export default function App() {
             data-testid="today-signal-btn"
             onClick={() => setActiveOverlay('insights')}
             title="Open Visual Focus Journal"
-            className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors"
+            className="aura-control font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF]"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
@@ -567,7 +567,7 @@ export default function App() {
             onClick={() => setActiveOverlay('calibration')}
             aria-label="Open Studio Calibration and Commands"
             title="Studio Calibration & Commands (⌘K)"
-            className="p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors"
+            className="aura-control aura-icon-control p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF]"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -713,7 +713,7 @@ export default function App() {
                         isSoundPlaying ? 'Mute Ambience' : 'Unmute Ambience'
                       }
                       title="Mute / Unmute Chamber (M)"
-                      className="p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8 transition-colors"
+                      className="aura-control aura-icon-control p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8"
                     >
                       {isSoundPlaying ? (
                         <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF]" />
@@ -725,7 +725,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setActiveOverlay('chambers')}
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors"
+                      className="aura-control px-2 py-1 rounded-full hover:text-[#F5F6FF]"
                     >
                       {activeChamber.name}
                     </button>
@@ -738,7 +738,7 @@ export default function App() {
                       type="button"
                       onClick={handleExtend5m}
                       title="Extend session by 5 minutes"
-                      className="flex items-center gap-0.5 px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors font-mono tabular-nums"
+                      className="aura-control flex items-center gap-0.5 px-2 py-1 rounded-full hover:text-[#F5F6FF] font-mono tabular-nums"
                     >
                       <Plus className="w-3 h-3" />
                       <span>5m</span>
@@ -766,7 +766,7 @@ export default function App() {
                         )
                       }
                       title="Cycle Immersion Mode: Standard / Deep Focus / Minimal Focus"
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors capitalize"
+                      className="aura-control px-2 py-1 rounded-full hover:text-[#F5F6FF] capitalize"
                     >
                       {immersionMode === 'standard'
                         ? 'Deep Focus'
@@ -802,7 +802,7 @@ export default function App() {
                       onClick={handleReset}
                       aria-label="Reset Session"
                       title="Reset Session (R)"
-                      className="p-1.5 rounded-full hover:text-[#FF5D88] hover:bg-white/8 transition-colors"
+                      className="aura-control aura-icon-control p-1.5 rounded-full hover:text-[#FF5D88] hover:bg-white/8"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
