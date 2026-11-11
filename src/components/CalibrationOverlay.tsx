@@ -107,6 +107,60 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
         onClose();
       },
     })),
+    {
+      id: 'orb-design-original',
+      label: 'Select ORB Design: Original (Refractive Living Lens)',
+      tag: 'ORB Design',
+      run: () => {
+        onUpdateSettings({ orbDesign: 'original' });
+        onClose();
+      },
+    },
+    {
+      id: 'orb-design-celestial-jelly',
+      label: 'Select ORB Design: Celestial Jelly (Bioluminescent Organism)',
+      tag: 'ORB Design',
+      run: () => {
+        onUpdateSettings({ orbDesign: 'celestial-jelly' });
+        onClose();
+      },
+    },
+    {
+      id: 'orb-design-living-bloom',
+      label: 'Select ORB Design: Living Bloom (Botanical Life Form)',
+      tag: 'ORB Design',
+      run: () => {
+        onUpdateSettings({ orbDesign: 'living-bloom' });
+        onClose();
+      },
+    },
+    {
+      id: 'bg-mix-fluid',
+      label: 'Background Mix: GPU Fluid Dynamics Dominant (82% Fluid · 18% Nebula)',
+      tag: 'Atmosphere',
+      run: () => {
+        onUpdateSettings({ backgroundMix: 0.18 });
+        onClose();
+      },
+    },
+    {
+      id: 'bg-mix-balanced',
+      label: 'Background Mix: Balanced Synthesis (48% Fluid · 52% Nebula)',
+      tag: 'Atmosphere',
+      run: () => {
+        onUpdateSettings({ backgroundMix: 0.52 });
+        onClose();
+      },
+    },
+    {
+      id: 'bg-mix-nebula',
+      label: 'Background Mix: Quantum Nebula Dominant (15% Fluid · 85% Nebula)',
+      tag: 'Atmosphere',
+      run: () => {
+        onUpdateSettings({ backgroundMix: 0.85 });
+        onClose();
+      },
+    },
     ...(onSelectChamber
       ? CHAMBERS.slice(0, 5).map((ch) => ({
           id: `chamber-${ch.id}`,

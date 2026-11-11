@@ -1,23 +1,27 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { FocusSceneConfig, TimerStatus } from '../types/aura';
+import { FocusSceneConfig, OrbDesignId, TimerStatus } from '../types/aura';
 import { soundEngine } from '../utils/soundSynthesizer';
 import {
   NEBULA_FLUID_FRAGMENT_SHADER,
   NEBULA_FLUID_VERTEX_SHADER,
   QUANTUM_PARTICLES_FRAGMENT_SHADER,
   QUANTUM_PARTICLES_VERTEX_SHADER,
+  computeBackgroundMixWeights,
   computeFluidTurbulenceGain,
   interpolateNebulaSpectrum,
+  orbDesignToShaderMode,
 } from '../utils/quantumNebulaShaders';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
+  orbDesign?: OrbDesignId;
   status: TimerStatus;
   progress: number;
   audioReactive: boolean;
   reducedMotion: boolean;
+  backgroundMix?: number;
 }
 
 // Pre-allocated module-scope helpers for zero GC in the animation loop
@@ -28,31 +32,45 @@ const _targetDeep = new THREE.Color();
 
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
+  orbDesign = 'original',
   status,
   progress,
   audioReactive,
   reducedMotion,
+  backgroundMix = 0.52,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
 
   const liveStateRef = useRef({
     scene,
+    orbDesign,
     status,
     progress,
     audioReactive,
     reducedMotion,
+    backgroundMix,
   });
 
   useEffect(() => {
     liveStateRef.current = {
       scene,
+      orbDesign,
       status,
       progress,
       audioReactive,
       reducedMotion,
+      backgroundMix,
     };
-  }, [scene, status, progress, audioReactive, reducedMotion]);
+  }, [
+    scene,
+    orbDesign,
+    status,
+    progress,
+    audioReactive,
+    reducedMotion,
+    backgroundMix,
+  ]);
 
   useEffect(() => {
     const container = mountRef.current;
@@ -114,22 +132,30 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       keyLight.position.set(3.5, 4.2, 3.0);
       threeScene.add(keyLight);
 
-      // Initial spectrum correlated with active Focus Scene
+      // Initial spectrum correlated with active Focus Scene & initial Fluid × Nebula mix
       const initialSpec = interpolateNebulaSpectrum(liveStateRef.current.scene);
+      const initialMix = computeBackgroundMixWeights(
+        liveStateRef.current.backgroundMix
+      );
       const currentViolet = new THREE.Color(...initialSpec.violet);
       const currentCyan = new THREE.Color(...initialSpec.cyan);
       const currentMagenta = new THREE.Color(...initialSpec.magenta);
       const currentDeep = new THREE.Color(...initialSpec.deepSpace);
 
-      // 4. Layer 1: Full-Viewport Calm Volumetric Quantum Nebula × GPU Fluid Dynamics Plane
+      // 4. Layer 1: Full-Viewport Dual-Layer Quantum Nebula × GPU Fluid Dynamics Plane
       const fluidGeo = new THREE.PlaneGeometry(2, 2);
       const fluidUniforms = {
         uTime: { value: 0 },
         uAspect: { value: width / Math.max(1, height) },
-        uTurbulence: { value: 0.36 },
-        uGravityStrength: { value: 0.24 },
+        uTurbulence: { value: 0.38 },
+        uGravityStrength: { value: 0.25 },
         uSanctuaryAlpha: { value: 0.75 },
         uAudioAmp: { value: 0 },
+        uFluidWeight: { value: initialMix.fluidWeight },
+        uNebulaWeight: { value: initialMix.nebulaWeight },
+        uOrbMode: {
+          value: orbDesignToShaderMode(liveStateRef.current.orbDesign),
+        },
         uPointer: { value: new THREE.Vector2(0.5, 0.5) },
         uColorViolet: { value: currentViolet.clone() },
         uColorCyan: { value: currentCyan.clone() },
@@ -189,9 +215,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       const particlesUniforms = {
         uTime: { value: 0 },
-        uTurbulence: { value: 0.36 },
+        uTurbulence: { value: 0.38 },
         uAudioAmp: { value: 0 },
         uPixelRatio: { value: pixelRatio },
+        uParticleGain: { value: initialMix.particleGain },
         uColorViolet: { value: currentViolet.clone() },
         uColorCyan: { value: currentCyan.clone() },
         uColorMagenta: { value: currentMagenta.clone() },
@@ -300,7 +327,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           state.reducedMotion
         );
 
-        simTime += dt * dynamics.flowSpeed;
+        const mixWeights = computeBackgroundMixWeights(state.backgroundMix);
+
+        simTime += dt * dynamics.flowSpeed * mixWeights.flowVelocityMultiplier;
 
         // Smoothly damp spectrum colors toward active Focus Scene
         const targetSpec = interpolateNebulaSpectrum(state.scene);
@@ -343,6 +372,24 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           8.0,
           dt
         );
+        fluidUniforms.uFluidWeight.value = THREE.MathUtils.damp(
+          fluidUniforms.uFluidWeight.value,
+          mixWeights.fluidWeight,
+          5.0,
+          dt
+        );
+        fluidUniforms.uNebulaWeight.value = THREE.MathUtils.damp(
+          fluidUniforms.uNebulaWeight.value,
+          mixWeights.nebulaWeight,
+          5.0,
+          dt
+        );
+        fluidUniforms.uOrbMode.value = THREE.MathUtils.damp(
+          fluidUniforms.uOrbMode.value,
+          orbDesignToShaderMode(state.orbDesign),
+          4.5,
+          dt
+        );
         fluidUniforms.uPointer.value.set(currentPtrX, currentPtrY);
         fluidUniforms.uColorViolet.value.copy(currentViolet);
         fluidUniforms.uColorCyan.value.copy(currentCyan);
@@ -352,6 +399,12 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         particlesUniforms.uTime.value = simTime;
         particlesUniforms.uTurbulence.value = fluidUniforms.uTurbulence.value;
         particlesUniforms.uAudioAmp.value = fluidUniforms.uAudioAmp.value;
+        particlesUniforms.uParticleGain.value = THREE.MathUtils.damp(
+          particlesUniforms.uParticleGain.value,
+          mixWeights.particleGain,
+          5.0,
+          dt
+        );
         particlesUniforms.uColorViolet.value.copy(currentViolet);
         particlesUniforms.uColorCyan.value.copy(currentCyan);
         particlesUniforms.uColorMagenta.value.copy(currentMagenta);
@@ -399,6 +452,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     <div
       ref={mountRef}
       data-testid="quantum-nebula-bg"
+      data-background-mix={backgroundMix}
       style={
         webglFailed
           ? {

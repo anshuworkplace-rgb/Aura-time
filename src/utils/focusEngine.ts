@@ -246,6 +246,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   highContrast: false,
   timerTextScale: 'large',
   desktopNotifications: false,
+  backgroundMix: 0.52,
+  orbDesign: 'original',
 };
 
 /**

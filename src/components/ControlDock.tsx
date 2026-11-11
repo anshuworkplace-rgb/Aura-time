@@ -196,8 +196,16 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               <FocusControlPanel
                 immersionMode={immersionMode}
                 onChangeImmersionMode={onChangeImmersionMode}
+                orbDesign={settings.orbDesign ?? 'original'}
+                onChangeOrbDesign={(design) =>
+                  onUpdateSettings({ orbDesign: design })
+                }
                 activeSceneId={activeSceneId}
                 onSelectScene={onSelectScene}
+                backgroundMix={settings.backgroundMix ?? 0.52}
+                onChangeBackgroundMix={(mix) =>
+                  onUpdateSettings({ backgroundMix: mix })
+                }
                 onOpenScenesGallery={() => {
                   setOpenGroup(null);
                   onOpenOverlay('scenes');

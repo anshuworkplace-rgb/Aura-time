@@ -32,6 +32,11 @@ import { FloatingMiniWidget } from './components/FloatingMiniWidget';
 import { QuantumNebulaBackground } from './components/QuantumNebulaBackground';
 import { ControlDock } from './components/ControlDock';
 import { AuraButton } from './components/AuraButton';
+import {
+  HomeStageLayout,
+  HomeStageOrbitalFrame,
+  HomeStageSwitcherPill,
+} from './components/HomeStageAtelier';
 import { SlidersHorizontal } from 'lucide-react';
 
 const STORAGE_KEYS = {
@@ -148,6 +153,21 @@ export default function App() {
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay>('none');
   const [immersionMode, setImmersionMode] =
     useState<FocusImmersionMode>('standard');
+  const [stageLayout, setStageLayout] = useState<HomeStageLayout>(() => {
+    try {
+      const saved = localStorage.getItem('aura_home_stage_layout_v1');
+      if (
+        saved === 'atelier' ||
+        saved === 'horizon' ||
+        saved === 'sculpture'
+      ) {
+        return saved;
+      }
+    } catch {
+      // ignore
+    }
+    return 'atelier';
+  });
   const [isFloatingOpen, setIsFloatingOpen] = useState<boolean>(false);
   const [railVisible, setRailVisible] = useState<boolean>(true);
 
@@ -185,6 +205,14 @@ export default function App() {
       // ignore
     }
   }, [sceneId, chamberId, durationMinutes, sessionLabel]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('aura_home_stage_layout_v1', stageLayout);
+    } catch {
+      // ignore
+    }
+  }, [stageLayout]);
 
   // Sync Web Audio API Chambers
   useEffect(() => {
@@ -538,16 +566,18 @@ export default function App() {
         settings.highContrast ? 'high-contrast' : ''
       }`}
     >
-      {/* Real-Time 3D Quantum Nebula × GPU Fluid Dynamics Background */}
+      {/* Real-Time 3D Quantum Nebula × GPU Fluid Dynamics Background Coupled to ORB */}
       <QuantumNebulaBackground
         scene={activeScene}
+        orbDesign={settings.orbDesign ?? 'original'}
         status={status}
         progress={progress}
         audioReactive={settings.audioReactive}
         reducedMotion={settings.reducedMotion || activeOverlay !== 'none'}
+        backgroundMix={settings.backgroundMix ?? 0.52}
       />
 
-      {/* Minimal Gallery Top Edge: [small AURA TIME mark] ... [2h 20m today] */}
+      {/* Minimal Gallery Top Edge: [AURA TIME] ... [Atelier | Horizon | Sculpture] ... [2h 20m today] */}
       <header
         className={`relative z-30 w-full px-6 sm:px-12 pt-5 flex items-center justify-between transition-opacity duration-700 ${
           isRunningOrPaused && !railVisible
@@ -566,6 +596,13 @@ export default function App() {
             AURA TIME
           </button>
         </div>
+
+        {/* Center-Top: Creative Home Stage Designer Switcher (Atelier | Horizon | Sculpture) */}
+        <HomeStageSwitcherPill
+          stageLayout={stageLayout}
+          onChangeStageLayout={setStageLayout}
+          activeScene={activeScene}
+        />
 
         {/* Upper-Right: Minimal "today" signal ("2h 20m today") + subtle calibration trigger */}
         <div className="flex items-center gap-2.5 aura-glass px-3.5 py-1.5 rounded-full">
@@ -629,11 +666,37 @@ export default function App() {
             </div>
           </div>
         ) : (
-          /* Central Living Lens + Single Primary Action + Intelligent Four-Group Dock */
+          /* Central Living Lens + Home Stage Orbital Frame + Single Primary Action + 4-Group Dock */
           <div className="flex flex-col items-center">
+            <HomeStageOrbitalFrame
+              stageLayout={stageLayout}
+              orbDesign={settings.orbDesign ?? 'original'}
+              onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+              activeSceneId={sceneId}
+              activeScene={activeScene}
+              onSelectScene={handleSelectScene}
+              activeChamber={activeChamber}
+              onCycleChamber={() => {
+                const idx = CHAMBERS.findIndex((c) => c.id === chamberId);
+                const next = CHAMBERS[(idx + 1) % CHAMBERS.length];
+                setChamberId(next.id);
+                if (next.id !== 'deep-quiet' && settings.ambienceVolume > 0) {
+                  setIsSoundPlaying(true);
+                } else if (next.id === 'deep-quiet') {
+                  setIsSoundPlaying(false);
+                }
+              }}
+              durationMinutes={durationMinutes}
+              onChangeDuration={handleChangeDuration}
+              status={status}
+              railVisible={railVisible}
+            />
+
             <LivingLens
               scene={activeScene}
               chamber={activeChamber}
+              orbDesign={settings.orbDesign ?? 'original'}
+              completedSessionsCount={sessions.length}
               status={status}
               phase={phase}
               remainingSeconds={remainingSeconds}
@@ -759,6 +822,10 @@ export default function App() {
         onClose={() => setActiveOverlay('none')}
         activeSceneId={sceneId}
         onSelectScene={handleSelectScene}
+        orbDesign={settings.orbDesign ?? 'original'}
+        onChangeOrbDesign={(design) => updateSettings({ orbDesign: design })}
+        backgroundMix={settings.backgroundMix ?? 0.52}
+        onChangeBackgroundMix={(mix) => updateSettings({ backgroundMix: mix })}
       />
 
       <ChambersOverlay

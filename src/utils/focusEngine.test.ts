@@ -108,6 +108,7 @@ test('Quantum Nebula fluid dynamics & spectrum helpers compute valid shader para
   const {
     interpolateNebulaSpectrum,
     computeFluidTurbulenceGain,
+    orbDesignToShaderMode,
     QUANTUM_NEBULA_WGSL,
   } = await import('./quantumNebulaShaders');
 
@@ -115,6 +116,10 @@ test('Quantum Nebula fluid dynamics & spectrum helpers compute valid shader para
   assert.equal(spec.violet.length, 3);
   assert.equal(spec.cyan.length, 3);
   assert.equal(spec.magenta.length, 3);
+
+  assert.equal(orbDesignToShaderMode('original'), 0);
+  assert.equal(orbDesignToShaderMode('celestial-jelly'), 1);
+  assert.equal(orbDesignToShaderMode('living-bloom'), 2);
 
   const idleGain = computeFluidTurbulenceGain('idle', 0, 0, false);
   const runGain = computeFluidTurbulenceGain('running', 0.5, 0.4, false);
@@ -140,6 +145,65 @@ test('multi-duration extensions (+1m, +5m, +10m) and acoustic presets work', asy
   assert.equal(typeof bands.treble, 'number');
   const spec = soundEngine.getFrequencySpectrum(8);
   assert.equal(spec.length, 8);
+
+  const { computeBackgroundMixWeights, BACKGROUND_MIX_PRESETS } = await import(
+    './quantumNebulaShaders'
+  );
+  assert.equal(BACKGROUND_MIX_PRESETS.length, 3);
+  const fluidMix = computeBackgroundMixWeights(0.18);
+  const nebulaMix = computeBackgroundMixWeights(0.85);
+  assert.equal(fluidMix.fluidWeight > nebulaMix.fluidWeight, true);
+  assert.equal(nebulaMix.nebulaWeight > fluidMix.nebulaWeight, true);
+  assert.equal(nebulaMix.particleGain > fluidMix.particleGain, true);
+  assert.equal(fluidMix.fluidPercentage + fluidMix.nebulaPercentage, 100);
 });
+
+test('strictly 3 ORB designs (Original, Celestial Jelly, Living Bloom) and organic simulation engines work across all 5 colour themes', async () => {
+  const {
+    ORB_DESIGNS,
+    computeThemeOrganismPalette,
+    computeJellyBellContraction,
+    createJellyTentacles,
+    stepJellyTentacles,
+    computeBloomCycleState,
+    computeBloomGrowthStage,
+    generateBloomPetals,
+  } = await import('./organicOrbEngine');
+
+  // Strictly 3 ORB designs and 5 colour themes
+  assert.equal(ORB_DESIGNS.length, 3);
+  assert.deepEqual(
+    ORB_DESIGNS.map((d) => d.id),
+    ['original', 'celestial-jelly', 'living-bloom']
+  );
+  assert.equal(Object.keys(FOCUS_SCENES).length, 5);
+
+  // Every colour theme produces valid RGB palettes
+  for (const scene of Object.values(FOCUS_SCENES)) {
+    const pal = computeThemeOrganismPalette(scene, 'focus');
+    assert.equal(pal.primaryRgb.length, 3);
+    assert.equal(pal.secondaryRgb.length, 3);
+  }
+
+  // Celestial Jelly bell propulsion & 18 spring-spline tentacles
+  const bell = computeJellyBellContraction(1.2);
+  assert.equal(bell.contraction >= 0 && bell.contraction <= 1, true);
+  const tentacles = createJellyTentacles(310, 304);
+  assert.equal(tentacles.length, 18);
+  stepJellyTentacles(tentacles, 310, 304, 175, bell, 1.5, 0.016, 260, 290, 0.8);
+  assert.equal(Number.isFinite(tentacles[0].nodes[5].x), true);
+
+  // Living Bloom 7-stage biological cycle & session-driven cosmetic growth
+  const bloomIdle = computeBloomCycleState(2.4, 'idle', 0);
+  const bloomComplete = computeBloomCycleState(2.4, 'completed', 1);
+  assert.equal(bloomComplete.outerOpenness >= bloomIdle.outerOpenness, true);
+
+  const stage1 = computeBloomGrowthStage(1);
+  const stage4 = computeBloomGrowthStage(14);
+  assert.equal(stage4.stageLevel > stage1.stageLevel, true);
+  const petals = generateBloomPetals(stage4);
+  assert.equal(petals.length > 30, true);
+});
+
 
 

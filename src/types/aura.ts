@@ -85,6 +85,8 @@ export interface SessionRecord {
   chamberId: ChamberId;
 }
 
+export type OrbDesignId = 'original' | 'celestial-jelly' | 'living-bloom';
+
 export interface UserSettings {
   dailyGoalMinutes: number;
   breakMinutes: number;
@@ -96,4 +98,8 @@ export interface UserSettings {
   highContrast: boolean;
   timerTextScale: 'default' | 'large' | 'monumental';
   desktopNotifications: boolean;
+  /** 0 = Pure GPU Fluid Dynamics, 0.52 = Balanced Fluid × Nebula, 1 = Pure Quantum Nebula Atmosphere */
+  backgroundMix: number;
+  /** Selected central ORB design: 'original' | 'celestial-jelly' | 'living-bloom' */
+  orbDesign: OrbDesignId;
 }
