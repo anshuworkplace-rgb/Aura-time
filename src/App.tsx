@@ -158,6 +158,50 @@ export default function App() {
 
   const targetEndTimestampRef = useRef<number | null>(null);
 
+  // Subtle pointer-aware response for primary controls. Touch input is left untouched.
+  useEffect(() => {
+    const supportsFinePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!supportsFinePointer) return;
+
+    let active: HTMLElement | null = null;
+    const reset = () => {
+      if (!active) return;
+      active.style.setProperty('--aura-mx', '0px');
+      active.style.setProperty('--aura-my', '0px');
+      active.style.setProperty('--aura-x', '50%');
+      active.style.setProperty('--aura-y', '50%');
+      active = null;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>('.aura-magnetic');
+      if (!target) {
+        reset();
+        return;
+      }
+      if (active !== target) reset();
+      active = target;
+      const rect = target.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const dx = (x / Math.max(1, rect.width) - 0.5) * 6;
+      const dy = (y / Math.max(1, rect.height) - 0.5) * 6;
+      target.style.setProperty('--aura-mx', dx.toFixed(2) + 'px');
+      target.style.setProperty('--aura-my', dy.toFixed(2) + 'px');
+      target.style.setProperty('--aura-x', (x / Math.max(1, rect.width) * 100).toFixed(1) + '%');
+      target.style.setProperty('--aura-y', (y / Math.max(1, rect.height) * 100).toFixed(1) + '%');
+    };
+
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerout', (event) => {
+      if (!event.relatedTarget) reset();
+    });
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      reset();
+    };
+  }, []);
+
   // Persist user settings, sessions, and remembered defaults
   useEffect(() => {
     try {
@@ -713,7 +757,7 @@ export default function App() {
                         isSoundPlaying ? 'Mute Ambience' : 'Unmute Ambience'
                       }
                       title="Mute / Unmute Chamber (M)"
-                      className="aura-control aura-icon-control p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8"
+                      className="aura-control aura-magnetic aura-icon-control p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8"
                     >
                       {isSoundPlaying ? (
                         <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF]" />
