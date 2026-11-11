@@ -692,7 +692,7 @@ export default function App() {
                         ? '0 8px 24px -4px rgba(0, 0, 0, 0.65)'
                         : `0 10px 32px -6px ${activeScene.colors.primary}66`,
                   }}
-                  className={`px-9 py-3 rounded-full font-display text-sm font-semibold tracking-wide transition-all duration-300 active:scale-[0.97] ${
+                  className={`aura-control aura-magnetic aura-primary-action px-9 py-3 rounded-full font-display text-sm font-semibold tracking-wide transition-all duration-300 active:scale-[0.97] ${
                     status === 'running'
                       ? 'text-[#F5F6FF] border border-white/22 hover:bg-[#0D1024]'
                       : 'text-[#070812] hover:brightness-110'
@@ -709,7 +709,7 @@ export default function App() {
                       data-testid="duration-trigger-btn"
                       onClick={() => setScrubberOpen((prev) => !prev)}
                       title="Click or drag around the Lens to scrub 15–120 minutes"
-                      className={`font-mono tabular-nums transition-colors hover:text-[#2FE8FF] ${
+                      className={`aura-control font-mono tabular-nums transition-colors hover:text-[#2FE8FF] ${
                         scrubberOpen ? 'text-[#2FE8FF] font-semibold' : ''
                       }`}
                     >
@@ -723,7 +723,7 @@ export default function App() {
                       data-testid="chamber-trigger-btn"
                       onClick={() => setActiveOverlay('chambers')}
                       title="Open Chambers Sound Studio"
-                      className="transition-colors hover:text-[#2FE8FF]"
+                      className="aura-control transition-colors hover:text-[#2FE8FF]"
                     >
                       {activeChamber.name}
                     </button>
@@ -735,7 +735,7 @@ export default function App() {
                       data-testid="scene-trigger-btn"
                       onClick={() => setActiveOverlay('scenes')}
                       title="Switch Focus Scene"
-                      className="transition-colors hover:text-[#2FE8FF] flex items-center gap-1.5"
+                      className="aura-control transition-colors hover:text-[#2FE8FF] flex items-center gap-1.5"
                     >
                       <span
                         className="w-2 h-2 rounded-full"
@@ -755,6 +755,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsSoundPlaying((prev) => !prev)}
+                      aria-pressed={isSoundPlaying}
                       aria-label={
                         isSoundPlaying ? 'Mute Ambience' : 'Unmute Ambience'
                       }
@@ -824,6 +825,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsFloatingOpen((prev) => !prev)}
+                      aria-pressed={isFloatingOpen}
                       aria-label="Toggle Floating Liquid Capsule"
                       title="Toggle Floating Liquid Capsule"
                       className={`p-1.5 rounded-full hover:bg-white/8 transition-colors ${
