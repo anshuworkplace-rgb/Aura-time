@@ -75,3 +75,35 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Refined controls: quiet glass, precise press feedback and accessible focus. */
+.aura-control {
+  position: relative;
+  isolation: isolate;
+  transform: translate3d(var(--aura-mx, 0), var(--aura-my, 0), 0);
+  transition: transform 220ms cubic-bezier(.2,.8,.2,1), background-color 180ms ease,
+    border-color 180ms ease, box-shadow 220ms ease, color 180ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.aura-control::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  background: radial-gradient(120px circle at var(--aura-x, 50%) var(--aura-y, 50%), rgba(255,255,255,.16), transparent 68%);
+  transition: opacity 180ms ease;
+  z-index: -1;
+}
+.aura-control:hover::after, .aura-control:focus-visible::after { opacity: 1; }
+.aura-control:active {
+  transform: translate3d(var(--aura-mx, 0), var(--aura-my, 0), 0) scale(.965);
+  transition-duration: 90ms;
+}
+.aura-control:focus-visible { outline: 2px solid rgba(47,232,255,.88); outline-offset: 3px; }
+.aura-icon-control { display: inline-flex; align-items: center; justify-content: center; min-width: 34px; min-height: 34px; }
+.aura-primary-action { min-height: 44px; }
+@media (prefers-reduced-motion: reduce) {
+  .aura-control, .aura-control::after { transition: none !important; transform: none !important; }
+}

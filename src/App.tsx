@@ -158,6 +158,52 @@ export default function App() {
 
   const targetEndTimestampRef = useRef<number | null>(null);
 
+  // Subtle pointer-aware response for primary controls. Touch input is left untouched.
+  useEffect(() => {
+    const supportsFinePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (!supportsFinePointer) return;
+
+    let active: HTMLElement | null = null;
+    const reset = () => {
+      if (!active) return;
+      active.style.setProperty('--aura-mx', '0px');
+      active.style.setProperty('--aura-my', '0px');
+      active.style.setProperty('--aura-x', '50%');
+      active.style.setProperty('--aura-y', '50%');
+      active = null;
+    };
+
+    const onPointerMove = (event: PointerEvent) => {
+      const target = (event.target as HTMLElement | null)?.closest<HTMLElement>('.aura-magnetic');
+      if (!target) {
+        reset();
+        return;
+      }
+      if (active !== target) reset();
+      active = target;
+      const rect = target.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+      const dx = (x / Math.max(1, rect.width) - 0.5) * 6;
+      const dy = (y / Math.max(1, rect.height) - 0.5) * 6;
+      target.style.setProperty('--aura-mx', dx.toFixed(2) + 'px');
+      target.style.setProperty('--aura-my', dy.toFixed(2) + 'px');
+      target.style.setProperty('--aura-x', (x / Math.max(1, rect.width) * 100).toFixed(1) + '%');
+      target.style.setProperty('--aura-y', (y / Math.max(1, rect.height) * 100).toFixed(1) + '%');
+    };
+
+    const onPointerOut = (event: PointerEvent) => {
+      if (!event.relatedTarget) reset();
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerout', onPointerOut);
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerout', onPointerOut);
+      reset();
+    };
+  }, []);
+
   // Persist user settings, sessions, and remembered defaults
   useEffect(() => {
     try {
@@ -541,7 +587,7 @@ export default function App() {
             type="button"
             onClick={() => setActiveOverlay('calibration')}
             title="AURA TIME · Command & Calibration (⌘K)"
-            className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] transition-colors uppercase px-3 py-1.5 rounded-full bg-[#070812]/65 border border-white/10"
+            className="aura-control aura-magnetic font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] uppercase px-3 py-1.5 rounded-full bg-[#070812]/65 border border-white/10"
           >
             AURA TIME
           </button>
@@ -554,7 +600,7 @@ export default function App() {
             data-testid="today-signal-btn"
             onClick={() => setActiveOverlay('insights')}
             title="Open Visual Focus Journal"
-            className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors"
+            className="aura-control font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF]"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
@@ -567,7 +613,7 @@ export default function App() {
             onClick={() => setActiveOverlay('calibration')}
             aria-label="Open Studio Calibration and Commands"
             title="Studio Calibration & Commands (⌘K)"
-            className="p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors"
+            className="aura-control aura-icon-control p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF]"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
@@ -646,7 +692,7 @@ export default function App() {
                         ? '0 8px 24px -4px rgba(0, 0, 0, 0.65)'
                         : `0 10px 32px -6px ${activeScene.colors.primary}66`,
                   }}
-                  className={`px-9 py-3 rounded-full font-display text-sm font-semibold tracking-wide transition-all duration-300 active:scale-[0.97] ${
+                  className={`aura-control aura-magnetic aura-primary-action px-9 py-3 rounded-full font-display text-sm font-semibold tracking-wide transition-all duration-300 active:scale-[0.97] ${
                     status === 'running'
                       ? 'text-[#F5F6FF] border border-white/22 hover:bg-[#0D1024]'
                       : 'text-[#070812] hover:brightness-110'
@@ -663,7 +709,7 @@ export default function App() {
                       data-testid="duration-trigger-btn"
                       onClick={() => setScrubberOpen((prev) => !prev)}
                       title="Click or drag around the Lens to scrub 15–120 minutes"
-                      className={`font-mono tabular-nums transition-colors hover:text-[#2FE8FF] ${
+                      className={`aura-control font-mono tabular-nums transition-colors hover:text-[#2FE8FF] ${
                         scrubberOpen ? 'text-[#2FE8FF] font-semibold' : ''
                       }`}
                     >
@@ -677,7 +723,7 @@ export default function App() {
                       data-testid="chamber-trigger-btn"
                       onClick={() => setActiveOverlay('chambers')}
                       title="Open Chambers Sound Studio"
-                      className="transition-colors hover:text-[#2FE8FF]"
+                      className="aura-control transition-colors hover:text-[#2FE8FF]"
                     >
                       {activeChamber.name}
                     </button>
@@ -689,7 +735,7 @@ export default function App() {
                       data-testid="scene-trigger-btn"
                       onClick={() => setActiveOverlay('scenes')}
                       title="Switch Focus Scene"
-                      className="transition-colors hover:text-[#2FE8FF] flex items-center gap-1.5"
+                      className="aura-control transition-colors hover:text-[#2FE8FF] flex items-center gap-1.5"
                     >
                       <span
                         className="w-2 h-2 rounded-full"
@@ -709,11 +755,12 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsSoundPlaying((prev) => !prev)}
+                      aria-pressed={isSoundPlaying}
                       aria-label={
                         isSoundPlaying ? 'Mute Ambience' : 'Unmute Ambience'
                       }
                       title="Mute / Unmute Chamber (M)"
-                      className="p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8 transition-colors"
+                      className="aura-control aura-magnetic aura-icon-control p-1.5 rounded-full hover:text-[#F5F6FF] hover:bg-white/8"
                     >
                       {isSoundPlaying ? (
                         <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF]" />
@@ -725,7 +772,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setActiveOverlay('chambers')}
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors"
+                      className="aura-control px-2 py-1 rounded-full hover:text-[#F5F6FF]"
                     >
                       {activeChamber.name}
                     </button>
@@ -738,7 +785,7 @@ export default function App() {
                       type="button"
                       onClick={handleExtend5m}
                       title="Extend session by 5 minutes"
-                      className="flex items-center gap-0.5 px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors font-mono tabular-nums"
+                      className="aura-control flex items-center gap-0.5 px-2 py-1 rounded-full hover:text-[#F5F6FF] font-mono tabular-nums"
                     >
                       <Plus className="w-3 h-3" />
                       <span>5m</span>
@@ -766,7 +813,8 @@ export default function App() {
                         )
                       }
                       title="Cycle Immersion Mode: Standard / Deep Focus / Minimal Focus"
-                      className="px-2 py-1 rounded-full hover:text-[#F5F6FF] transition-colors capitalize"
+                      aria-pressed={immersionMode !== "standard"}
+                      className="aura-control px-2 py-1 rounded-full hover:text-[#F5F6FF] capitalize"
                     >
                       {immersionMode === 'standard'
                         ? 'Deep Focus'
@@ -778,9 +826,10 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setIsFloatingOpen((prev) => !prev)}
+                      aria-pressed={isFloatingOpen}
                       aria-label="Toggle Floating Liquid Capsule"
                       title="Toggle Floating Liquid Capsule"
-                      className={`p-1.5 rounded-full hover:bg-white/8 transition-colors ${
+                      className={`aura-control aura-magnetic aura-icon-control p-1.5 rounded-full hover:bg-white/8 transition-colors ${
                         isFloatingOpen ? 'text-[#2FE8FF]' : 'hover:text-[#F5F6FF]'
                       }`}
                     >
@@ -802,7 +851,7 @@ export default function App() {
                       onClick={handleReset}
                       aria-label="Reset Session"
                       title="Reset Session (R)"
-                      className="p-1.5 rounded-full hover:text-[#FF5D88] hover:bg-white/8 transition-colors"
+                      className="aura-control aura-icon-control p-1.5 rounded-full hover:text-[#FF5D88] hover:bg-white/8"
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
