@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   ActiveOverlay,
   FocusSceneId,
@@ -33,6 +33,8 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
   onToggleFullScreen,
 }) => {
   const [query, setQuery] = useState('');
+  const commandInputRef = useRef<HTMLInputElement>(null);
+  const actionListRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
 
@@ -89,12 +91,24 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
     },
   ];
 
-  const filteredActions = quickActions.filter(
-    (a) =>
-      !query.trim() ||
-      a.label.toLowerCase().includes(query.trim().toLowerCase()) ||
-      a.tag.toLowerCase().includes(query.trim().toLowerCase())
-  );
+  const queryTerms = query.toLowerCase().trim().split(/\\s+/).filter(Boolean);
+  const filteredActions = quickActions.filter((action) => {
+    const searchable = (action.label + ' ' + action.tag).toLowerCase();
+    return queryTerms.every((term) => searchable.includes(term));
+  });
+
+  const moveCommandFocus = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp' && event.key !== 'Home' && event.key !== 'End') return;
+    const buttons = Array.from(actionListRef.current?.querySelectorAll<HTMLButtonElement>('button') ?? []);
+    if (!buttons.length) return;
+    event.preventDefault();
+    const currentIndex = buttons.indexOf(event.currentTarget);
+    if (event.key === 'Home') buttons[0].focus();
+    else if (event.key === 'End') buttons[buttons.length - 1].focus();
+    else if (event.key === 'ArrowDown') buttons[(currentIndex + 1) % buttons.length].focus();
+    else if (currentIndex <= 0) commandInputRef.current?.focus();
+    else buttons[currentIndex - 1].focus();
+  };
 
   return (
     <div
@@ -116,11 +130,21 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
               Search commands or settings
             </label>
             <input
+              ref={commandInputRef}
               id="calibration-command-input"
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search commands, Focus Scenes, or durations..."
+              onKeyDown={(event) => {
+                if (event.key === 'ArrowDown') {
+                  event.preventDefault();
+                  actionListRef.current?.querySelector<HTMLButtonElement>('button')?.focus();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  onClose();
+                }
+              }}
+              placeholder="Search commands, scenes, durations..."
               className="w-full bg-transparent text-sm text-[#F5F6FF] placeholder:text-[#A3A1BA]/70 focus:outline-none"
             />
           </div>
@@ -136,13 +160,14 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
         </div>
 
         {/* Quick Command Actions */}
-        <div className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
+        <div ref={actionListRef} aria-label="Matching commands" className="flex flex-col gap-1.5 max-h-44 overflow-y-auto pr-1">
           {filteredActions.map((act) => (
             <button
               key={act.id}
               type="button"
               onClick={act.run}
-              className="flex items-center justify-between px-3.5 py-2 rounded-xl bg-white/[0.03] hover:bg-white/10 text-left text-xs text-[#F5F6FF] transition-colors"
+              onKeyDown={moveCommandFocus}
+              className="aura-control flex items-center justify-between px-3.5 py-2.5 rounded-xl bg-white/[0.03] hover:bg-white/10 text-left text-xs text-[#F5F6FF]"
             >
               <span>{act.label}</span>
               <span className="text-[11px] font-mono text-[#2FE8FF]">
@@ -150,7 +175,13 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
               </span>
             </button>
           ))}
+          {filteredActions.length === 0 && (
+            <p className="px-3.5 py-4 text-xs text-[#A3A1BA]" role="status">
+              No matching commands. Try “audio”, “scene” or “duration”.
+            </p>
+          )}
         </div>
+        <p className="-mt-4 text-[10px] font-mono text-[#77758E]">↑ ↓ navigate · Home / End jump · Enter run · Esc close</p>
 
         {/* Studio Calibration & Accessibility Section */}
         <div className="pt-4 border-t border-white/10 flex flex-col gap-4">
@@ -270,7 +301,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
                 onClick={() =>
                   onUpdateSettings({ [item.key]: !settings[item.key] })
                 }
-                className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-black/30 border border-white/8 text-xs text-[#F5F6FF]"
+                className="aura-control flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-black/30 border border-white/8 text-xs text-[#F5F6FF]"
               >
                 <span>{item.label}</span>
                 <span
