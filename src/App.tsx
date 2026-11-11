@@ -192,12 +192,14 @@ export default function App() {
       target.style.setProperty('--aura-y', (y / Math.max(1, rect.height) * 100).toFixed(1) + '%');
     };
 
-    window.addEventListener('pointermove', onPointerMove, { passive: true });
-    window.addEventListener('pointerout', (event) => {
+    const onPointerOut = (event: PointerEvent) => {
       if (!event.relatedTarget) reset();
-    });
+    };
+    window.addEventListener('pointermove', onPointerMove, { passive: true });
+    window.addEventListener('pointerout', onPointerOut);
     return () => {
       window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerout', onPointerOut);
       reset();
     };
   }, []);
