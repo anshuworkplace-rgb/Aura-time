@@ -91,7 +91,7 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
     },
   ];
 
-  const queryTerms = query.toLowerCase().trim().split(/\\s+/).filter(Boolean);
+  const queryTerms = query.toLowerCase().trim().split(/\s+/).filter(Boolean);
   const filteredActions = quickActions.filter((action) => {
     const searchable = (action.label + ' ' + action.tag).toLowerCase();
     return queryTerms.every((term) => searchable.includes(term));
