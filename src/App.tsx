@@ -813,6 +813,7 @@ export default function App() {
                         )
                       }
                       title="Cycle Immersion Mode: Standard / Deep Focus / Minimal Focus"
+                      aria-pressed={immersionMode !== "standard"}
                       className="aura-control px-2 py-1 rounded-full hover:text-[#F5F6FF] capitalize"
                     >
                       {immersionMode === 'standard'
@@ -828,7 +829,7 @@ export default function App() {
                       aria-pressed={isFloatingOpen}
                       aria-label="Toggle Floating Liquid Capsule"
                       title="Toggle Floating Liquid Capsule"
-                      className={`p-1.5 rounded-full hover:bg-white/8 transition-colors ${
+                      className={`aura-control aura-magnetic aura-icon-control p-1.5 rounded-full hover:bg-white/8 transition-colors ${
                         isFloatingOpen ? 'text-[#2FE8FF]' : 'hover:text-[#F5F6FF]'
                       }`}
                     >
