@@ -1,0 +1,8 @@
+{
+  "name": "AURA TIME — Digital Focus Environment",
+  "description": "An emotional, immersive desktop focus environment with reactive light auras, mood-adaptive personalization, a dual-layer Web Audio sound studio, and artistic focus insights.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
