@@ -38,11 +38,11 @@ export const SceneSelectorOverlay: React.FC<SceneSelectorOverlayProps> = ({
       role="dialog"
       aria-modal="true"
       aria-label="ORB Designs and Focus Scenes"
-      className="fixed inset-0 z-50 bg-[#070812]/94 flex items-center justify-center p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[#070812]/94 flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-4xl rounded-3xl aura-glass-elevated p-6 sm:p-8 flex flex-col gap-6 my-auto"
+        className="w-full max-w-4xl rounded-3xl aura-glass-elevated p-5 sm:p-6 flex flex-col gap-4 my-auto"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -51,10 +51,10 @@ export const SceneSelectorOverlay: React.FC<SceneSelectorOverlayProps> = ({
             <span className="text-xs font-medium tracking-wider text-[#2FE8FF]">
               Living ORB Organisms × 5 Atmospheric Colour Themes
             </span>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] mt-0.5">
+            <h2 className="font-display text-xl sm:text-2xl font-semibold text-[#F5F6FF] mt-0.5">
               ORB Design & Focus Scenes
             </h2>
-            <p className="text-xs sm:text-sm text-[#A3A1BA] mt-1">
+            <p className="text-xs text-[#A3A1BA] mt-0.5">
               Combine any of the 3 living ORB organisms with any of the 5
               atmospheric colour themes.
             </p>

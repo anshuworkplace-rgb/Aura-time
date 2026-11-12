@@ -45,7 +45,7 @@ export const MoreControlPanel: React.FC<MoreControlPanelProps> = ({
       role="dialog"
       aria-label="Session Actions and Studio Preferences"
       data-testid="more-control-panel"
-      className="w-80 sm:w-92 rounded-3xl aura-glass-elevated p-5 flex flex-col gap-4 text-xs text-[#F5F6FF]"
+      className="w-[calc(100vw-2rem)] sm:w-92 max-h-[72vh] overflow-y-auto rounded-3xl aura-glass-elevated p-4 sm:p-5 flex flex-col gap-3.5 text-xs text-[#F5F6FF]"
     >
       {/* Session Actions: Complete, Reset, Floating Capsule, Fullscreen */}
       <div className="flex flex-col gap-2">

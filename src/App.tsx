@@ -560,7 +560,7 @@ export default function App() {
           ? '#05060E'
           : activeScene.colors.baseBg,
       }}
-      className={`min-h-screen w-full text-[#F5F6FF] relative overflow-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
+      className={`h-screen max-h-screen w-full text-[#F5F6FF] relative overflow-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
         settings.highContrast ? 'high-contrast' : ''
       }`}
     >
@@ -580,32 +580,30 @@ export default function App() {
 
       {/* Minimal Gallery Top Edge: [AURA TIME] ... [2h 20m today] */}
       <header
-        className={`relative z-30 w-full px-6 sm:px-12 pt-5 flex items-center justify-between transition-opacity duration-700 ${
+        className={`relative z-30 w-full px-6 sm:px-10 pt-3 sm:pt-4 flex items-center justify-between gap-8 shrink-0 transition-opacity duration-700 ${
           isRunningOrPaused && !railVisible
             ? 'opacity-0 pointer-events-none'
             : 'opacity-100'
         }`}
       >
-        {/* Upper-Left: Small AURA TIME brand mark */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveOverlay('calibration')}
-            title="AURA TIME · Command & Calibration (⌘K)"
-            className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF] hover:text-[#2FE8FF] transition-colors uppercase px-3.5 py-1.5 rounded-full aura-glass cursor-pointer"
-          >
-            AURA TIME
-          </button>
-        </div>
+        {/* Zone 1: Clean single-line brand wordmark */}
+        <button
+          type="button"
+          onClick={() => setActiveOverlay('calibration')}
+          title="AURA TIME · Command & Calibration (⌘K)"
+          className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF]/90 hover:text-[#F5F6FF] transition-colors uppercase py-1 cursor-pointer whitespace-nowrap shrink-0"
+        >
+          AURA TIME
+        </button>
 
-        {/* Upper-Right: Minimal "today" signal ("2h 20m today") */}
-        <div className="flex items-center gap-2.5 aura-glass px-3.5 py-1.5 rounded-full">
+        {/* Zone 3: Minimal "today" focus journal action */}
+        <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
             data-testid="today-signal-btn"
             onClick={() => setActiveOverlay('insights')}
             title="Open Visual Focus Journal"
-            className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors cursor-pointer"
+            className="font-mono tabular-nums text-xs text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors py-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
@@ -613,7 +611,7 @@ export default function App() {
       </header>
 
       {/* Main Digital Gallery Stage */}
-      <main className="relative z-20 flex-1 flex flex-col items-center justify-center pt-2 pb-4 px-4">
+      <main className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-center py-1 px-4">
         {immersionMode === 'minimal' && isRunningOrPaused ? (
           /* Minimal Focus Option: Only the time and a subtle progress edge */
           <div className="flex flex-col items-center gap-6 p-12 rounded-3xl aura-glass-elevated relative overflow-hidden">
@@ -657,6 +655,16 @@ export default function App() {
               activeScene={activeScene}
               onSelectScene={handleSelectScene}
               activeChamber={activeChamber}
+              onSelectChamber={(id) => {
+                setChamberId(id);
+                if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
+                  setIsSoundPlaying(true);
+                } else if (id === 'deep-quiet') {
+                  setIsSoundPlaying(false);
+                }
+              }}
+              isSoundPlaying={isSoundPlaying}
+              onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
               onCycleChamber={() => {
                 const idx = CHAMBERS.findIndex((c) => c.id === chamberId);
                 const next = CHAMBERS[(idx + 1) % CHAMBERS.length];
@@ -698,32 +706,19 @@ export default function App() {
               onStartAgain={handlePrimaryAction}
             />
 
-            {/* Single Dominant Primary Action + Discreet 4-Group Control Dock */}
+            {/* Unified Compact Control Dock */}
             {status !== 'completed' && (
               <div
-                className={`mt-2 flex flex-col items-center gap-3.5 transition-opacity duration-500 ${
+                className={`mt-4 sm:mt-5 flex flex-col items-center transition-opacity duration-500 ${
                   isRunningOrPaused && !railVisible
                     ? 'opacity-0 pointer-events-none'
                     : 'opacity-100'
                 }`}
               >
-                <AuraButton
-                  data-testid="primary-action-btn"
-                  variant={status === 'running' ? 'secondary' : 'primary'}
-                  size="lg"
-                  magnetic={!settings.reducedMotion}
-                  reducedMotion={settings.reducedMotion}
-                  accentColor={activeScene.colors.primary}
-                  secondaryColor={activeScene.colors.secondary}
-                  onClick={handlePrimaryAction}
-                  className="min-w-[144px]"
-                >
-                  {primaryActionText}
-                </AuraButton>
-
-                {/* Intelligent Four-Group Control Dock: SOUND | TIME | FOCUS | MORE */}
                 <ControlDock
                   status={status}
+                  primaryActionText={primaryActionText}
+                  onPrimaryAction={handlePrimaryAction}
                   durationMinutes={durationMinutes}
                   onChangeDuration={handleChangeDuration}
                   onAddMinutes={handleAddMinutes}

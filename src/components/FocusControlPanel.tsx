@@ -83,10 +83,10 @@ export const FocusControlPanel: React.FC<FocusControlPanelProps> = ({
       role="dialog"
       aria-label="Focus Mode, ORB Design, and Colour Theme Controls"
       data-testid="focus-control-panel"
-      className="w-80 sm:w-96 rounded-3xl aura-glass-elevated p-5 flex flex-col gap-3.5 text-xs text-[#F5F6FF] max-h-[82vh] overflow-y-auto"
+      className="w-[calc(100vw-2rem)] sm:w-96 rounded-3xl aura-glass-elevated p-4 flex flex-col gap-2.5 text-xs text-[#F5F6FF]"
     >
       {/* Top Header: Active ORB & Colour Theme + Gallery Trigger */}
-      <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3">
+      <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-2.5">
         <div className="flex items-center gap-2.5 min-w-0">
           <span
             className="w-3.5 h-3.5 rounded-full shrink-0"
@@ -117,7 +117,7 @@ export const FocusControlPanel: React.FC<FocusControlPanelProps> = ({
       </div>
 
       {/* Strictly 3 Selectable ORB Designs: Original | Celestial Jelly | Living Bloom */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <span className="text-[11px] text-[#A3A1BA] inline-flex items-center gap-1.5">
           <Orbit className="w-3.5 h-3.5 text-[#2FE8FF]" />
           <span>ORB Design (3 Organisms)</span>
@@ -138,7 +138,7 @@ export const FocusControlPanel: React.FC<FocusControlPanelProps> = ({
                 data-testid={`orb-design-${design.id}`}
                 onClick={() => onChangeOrbDesign(design.id)}
                 title={design.description}
-                className={`p-2.5 rounded-2xl flex flex-col items-start gap-1 text-left transition-all border cursor-pointer ${
+                className={`p-2 rounded-xl flex flex-col items-start gap-0.5 text-left transition-all border cursor-pointer ${
                   isSelected
                     ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border-[#2FE8FF]/60 shadow-sm'
                     : 'bg-white/[0.03] hover:bg-white/[0.08] text-[#A3A1BA] hover:text-[#F5F6FF] border-white/8'
@@ -157,7 +157,7 @@ export const FocusControlPanel: React.FC<FocusControlPanelProps> = ({
       </div>
 
       {/* Strictly 5 Existing Colour Themes (Focus Scenes) */}
-      <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1">
         <span className="text-[11px] text-[#A3A1BA] inline-flex items-center gap-1.5">
           <Sparkles className="w-3 h-3 text-[#2FE8FF]" />
           <span>Colour Theme (5 Atmospheric Palettes)</span>

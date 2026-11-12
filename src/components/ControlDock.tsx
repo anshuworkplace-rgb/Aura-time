@@ -17,14 +17,18 @@ import {
   Volume2,
   VolumeX,
   Clock,
-  Sparkles,
-  MoreHorizontal,
+  Play,
+  Pause,
+  RotateCcw,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export type DockGroupId = 'sound' | 'time' | 'focus' | 'more' | null;
 
 interface ControlDockProps {
   status: TimerStatus;
+  primaryActionText?: string;
+  onPrimaryAction?: () => void;
   durationMinutes: number;
   onChangeDuration: (mins: number) => void;
   onAddMinutes: (deltaMins: number) => void;
@@ -52,6 +56,8 @@ interface ControlDockProps {
 
 export const ControlDock: React.FC<ControlDockProps> = ({
   status,
+  primaryActionText = 'Begin',
+  onPrimaryAction,
   durationMinutes,
   onChangeDuration,
   onAddMinutes,
@@ -113,15 +119,19 @@ export const ControlDock: React.FC<ControlDockProps> = ({
     setOpenGroup((prev) => (prev === group ? null : group));
   };
 
+  const isRunning = status === 'running';
+
+  const isLeftDrawer = openGroup === 'sound' || openGroup === 'time';
+
   return (
     <div
       ref={dockRef}
       role="toolbar"
-      aria-label="AURA TIME Intelligent Control Dock"
+      aria-label="Session and Environment Controls"
       data-testid="aura-control-dock"
-      className="relative flex flex-col items-center"
+      className="relative flex flex-col items-center max-w-full"
     >
-      {/* Floating Popover Panel Above the Dock */}
+      {/* Non-Overlapping Side Drawer on Desktop / Compact Sheet on Mobile */}
       <AnimatePresence mode="wait">
         {openGroup && (
           <motion.div
@@ -129,24 +139,27 @@ export const ControlDock: React.FC<ControlDockProps> = ({
             initial={
               settings.reducedMotion
                 ? { opacity: 0 }
-                : { opacity: 0, y: 12, scale: 0.97 }
+                : { opacity: 0, x: isLeftDrawer ? -14 : 14, scale: 0.98 }
             }
             animate={
               settings.reducedMotion
                 ? { opacity: 1 }
-                : { opacity: 1, y: 0, scale: 1 }
+                : { opacity: 1, x: 0, scale: 1 }
             }
             exit={
               settings.reducedMotion
                 ? { opacity: 0 }
-                : { opacity: 0, y: 8, scale: 0.98 }
+                : { opacity: 0, x: isLeftDrawer ? -10 : 10, scale: 0.98 }
             }
             transition={{
-              type: 'spring',
-              stiffness: 420,
-              damping: 30,
+              duration: 0.18,
+              ease: [0.16, 1, 0.3, 1],
             }}
-            className="absolute bottom-full mb-3 z-40"
+            className={`fixed z-50 bottom-20 left-1/2 -translate-x-1/2 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:translate-x-0 max-w-[calc(100vw-1.5rem)] ${
+              isLeftDrawer
+                ? 'lg:left-6 lg:right-auto'
+                : 'lg:right-6 lg:left-auto'
+            }`}
           >
             {openGroup === 'sound' && (
               <SoundControlPanel
@@ -244,96 +257,159 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Four-Group Compact Control Bar: SOUND | TIME | FOCUS | MORE */}
-      <div className="flex items-center gap-1 p-1.5 rounded-full aura-glass shadow-2xl">
-        {/* Group A: SOUND */}
+      {/* Unified Compact Control Bar: [Play/Pause] [Reset] | [Time] | [Sound] | [Atmosphere] | [Settings] */}
+      <div className="flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]">
+        {/* Primary Session Action: Play / Pause / Resume */}
+        {onPrimaryAction && (
+          <button
+            type="button"
+            data-testid="primary-action-btn"
+            onClick={() => {
+              setOpenGroup(null);
+              onPrimaryAction();
+            }}
+            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+              isRunning
+                ? 'bg-white/14 text-[#F5F6FF] hover:bg-white/20'
+                : 'text-[#070812] hover:brightness-110 shadow-sm'
+            }`}
+            style={
+              isRunning
+                ? {
+                    boxShadow: `inset 0 0 0 1px ${activeScene.colors.secondary}55`,
+                  }
+                : {
+                    background: `linear-gradient(135deg, #F5F6FF 0%, ${activeScene.colors.secondary} 100%)`,
+                  }
+            }
+          >
+            {isRunning ? (
+              <Pause className="w-3.5 h-3.5 fill-current shrink-0" />
+            ) : (
+              <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+            )}
+            <span>{primaryActionText}</span>
+          </button>
+        )}
+
+        {/* Quick Reset Button */}
+        <button
+          type="button"
+          data-testid="dock-quick-reset-btn"
+          aria-label="Reset session"
+          title="Reset session (R)"
+          onClick={() => {
+            setOpenGroup(null);
+            onResetSession();
+          }}
+          className="p-1.5 sm:p-2 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/8 transition-colors cursor-pointer shrink-0"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+        </button>
+
+        <span
+          className="hidden sm:block w-[1px] h-4 bg-white/10 mx-0.5 shrink-0"
+          aria-hidden="true"
+        />
+
+        {/* Duration / Time */}
+        <button
+          type="button"
+          data-testid="dock-group-time"
+          aria-label={`Duration ${durationMinutes} minutes`}
+          aria-expanded={openGroup === 'time'}
+          onClick={() => toggleGroup('time')}
+          className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+            openGroup === 'time'
+              ? 'bg-white/14 text-[#F5F6FF]'
+              : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
+          }`}
+        >
+          <Clock className="w-3.5 h-3.5 text-[#8A5CFF] shrink-0" />
+          <span className="font-mono tabular-nums">{durationMinutes}m</span>
+        </button>
+
+        <span
+          className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
+          aria-hidden="true"
+        />
+
+        {/* Sound Selector Trigger */}
         <button
           type="button"
           data-testid="dock-group-sound"
+          aria-label={`Sound: ${activeChamber.name}`}
           aria-expanded={openGroup === 'sound'}
           onClick={() => toggleGroup('sound')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             openGroup === 'sound'
-              ? 'bg-white/14 text-[#F5F6FF] shadow-inner'
+              ? 'bg-white/14 text-[#F5F6FF]'
               : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
           }`}
         >
           {isSoundPlaying ? (
-            <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF]" />
+            <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF] shrink-0" />
           ) : (
-            <VolumeX className="w-3.5 h-3.5 text-[#A3A1BA]" />
+            <VolumeX className="w-3.5 h-3.5 text-[#A3A1BA] shrink-0" />
           )}
-          <span className="hidden sm:inline font-display tracking-wide">
+          <span className="hidden sm:inline tracking-wide max-w-[116px] truncate">
             {activeChamber.name}
           </span>
-          <span className="sm:hidden font-display">Sound</span>
+          <span className="sm:hidden">Sound</span>
         </button>
 
-        <span className="w-[1px] h-4 bg-white/10" aria-hidden="true" />
+        <span
+          className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
+          aria-hidden="true"
+        />
 
-        {/* Group B: TIME */}
-        <button
-          type="button"
-          data-testid="dock-group-time"
-          aria-expanded={openGroup === 'time'}
-          onClick={() => toggleGroup('time')}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-full text-xs font-medium transition-all cursor-pointer ${
-            openGroup === 'time'
-              ? 'bg-white/14 text-[#F5F6FF] shadow-inner'
-              : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5 text-[#8A5CFF]" />
-          <span className="font-mono tabular-nums">{durationMinutes}m</span>
-        </button>
-
-        <span className="w-[1px] h-4 bg-white/10" aria-hidden="true" />
-
-        {/* Group C: FOCUS */}
+        {/* Atmosphere Selector Trigger */}
         <button
           type="button"
           data-testid="dock-group-focus"
+          aria-label={`Atmosphere: ${activeScene.name}`}
           aria-expanded={openGroup === 'focus'}
           onClick={() => toggleGroup('focus')}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-full text-xs font-medium transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             openGroup === 'focus'
-              ? 'bg-white/14 text-[#F5F6FF] shadow-inner'
+              ? 'bg-white/14 text-[#F5F6FF]'
               : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
           }`}
         >
           <span
             className="w-2.5 h-2.5 rounded-full shrink-0"
             style={{
-              backgroundColor: activeScene.colors.primary,
-              boxShadow: `0 0 8px ${activeScene.colors.primary}`,
+              background: `linear-gradient(135deg, ${activeScene.colors.primary}, ${activeScene.colors.secondary})`,
             }}
             aria-hidden="true"
           />
-          <span className="hidden sm:inline font-display tracking-wide">
+          <span className="hidden sm:inline tracking-wide max-w-[116px] truncate">
             {activeScene.name}
           </span>
-          <span className="sm:hidden font-display">Focus</span>
+          <span className="sm:hidden">Scene</span>
         </button>
 
-        <span className="w-[1px] h-4 bg-white/10" aria-hidden="true" />
+        <span
+          className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
+          aria-hidden="true"
+        />
 
-        {/* Group D: MORE */}
+        {/* Settings & Studio Preferences Trigger */}
         <button
           type="button"
           data-testid="dock-group-more"
-          aria-label="More Controls and Studio Preferences"
+          aria-label="Settings and Studio Preferences"
           aria-expanded={openGroup === 'more'}
+          title="Settings & Preferences"
           onClick={() => toggleGroup('more')}
-          className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-all cursor-pointer ${
+          className={`flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             openGroup === 'more'
-              ? 'bg-white/14 text-[#F5F6FF] shadow-inner'
+              ? 'bg-white/14 text-[#F5F6FF]'
               : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
           }`}
         >
-          <MoreHorizontal className="w-4 h-4" />
-          <span className="hidden md:inline font-display tracking-wide">
-            More
-          </span>
+          <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+          <span className="hidden md:inline tracking-wide">Settings</span>
         </button>
       </div>
     </div>

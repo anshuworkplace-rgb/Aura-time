@@ -890,163 +890,167 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   const scaleClass =
     isRunningOrPaused && immersionMode !== 'minimal'
-      ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
-      : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
+      ? 'w-[200px] h-[200px] sm:w-[260px] sm:h-[260px] md:w-[300px] md:h-[300px] lg:w-[325px] lg:h-[325px]'
+      : 'w-[190px] h-[190px] sm:w-[245px] sm:h-[245px] md:w-[285px] md:h-[285px] lg:w-[310px] lg:h-[310px]';
 
   const numeralSizeClass =
     timerTextScale === 'monumental'
-      ? 'text-7xl sm:text-8xl md:text-[6.5rem]'
+      ? 'text-5xl sm:text-6xl md:text-7xl'
       : timerTextScale === 'large'
-      ? 'text-6xl sm:text-7xl md:text-[5.5rem]'
-      : 'text-5xl sm:text-6xl md:text-7xl';
+      ? 'text-4xl sm:text-5xl md:text-6xl'
+      : 'text-3xl sm:text-4xl md:text-5xl';
 
   return (
-    <div
-      ref={containerRef}
-      onPointerEnter={() => setIsLensHovered(true)}
-      onPointerLeave={() => {
-        setIsLensHovered(false);
-        pointerCanvasRef.current = { x: null, y: null };
-      }}
-      onPointerMove={handleContainerPointerMove}
-      onPointerDown={handleContainerPointerDown}
-      data-testid="living-lens-container"
-      data-timer-status={status}
-      data-orb-design={orbDesign}
-      className={`relative flex items-center justify-center select-none transition-all duration-700 ease-out ${scaleClass}`}
-    >
-      {/* Real-Time Procedural ORB Canvas (Original | Celestial Jelly | Living Bloom) */}
-      <canvas
-        ref={canvasRef}
-        className="absolute inset-0 w-full h-full pointer-events-none"
-        aria-hidden="true"
-      />
+    <div className="flex flex-col items-center">
+      {/* Unobstructed Organism Centerpiece Stage */}
+      <div
+        ref={containerRef}
+        onPointerEnter={() => setIsLensHovered(true)}
+        onPointerLeave={() => {
+          setIsLensHovered(false);
+          pointerCanvasRef.current = { x: null, y: null };
+        }}
+        onPointerMove={handleContainerPointerMove}
+        onPointerDown={handleContainerPointerDown}
+        data-testid="living-lens-container"
+        data-timer-status={status}
+        data-orb-design={orbDesign}
+        className={`relative flex items-center justify-center select-none transition-all duration-700 ease-out ${scaleClass}`}
+      >
+        {/* Real-Time Procedural ORB Canvas (Original | Celestial Jelly | Living Bloom) */}
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          aria-hidden="true"
+        />
 
-      {/* Interactive Radial Time Scrubber (Progressive Disclosure when Idle) */}
-      {showRadialRing && (
-        <svg
-          viewBox="0 0 620 620"
-          className="absolute inset-0 w-full h-full overflow-visible z-20 touch-none"
-          aria-label="Radial Duration Scrubber (15 to 120 minutes)"
-        >
-          {/* Interactive Ring Track */}
-          <circle
-            cx={scrubCenter}
-            cy={scrubCenter}
-            r={scrubRadius}
-            fill="none"
-            stroke="rgba(245, 246, 255, 0.14)"
-            strokeWidth={16}
-            className="cursor-pointer"
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              onToggleScrubber(true);
-              setIsDraggingScrubber(true);
-              updateDurationFromPointer(e.clientX, e.clientY);
-            }}
-          />
-
-          {/* Active Radial Arc */}
-          <circle
-            cx={scrubCenter}
-            cy={scrubCenter}
-            r={scrubRadius}
-            fill="none"
-            stroke={scene.colors.secondary}
-            strokeWidth={3.5}
-            strokeDasharray={`${
-              radialFraction * 2 * Math.PI * scrubRadius
-            } 2400`}
-            transform={`rotate(-90 ${scrubCenter} ${scrubCenter})`}
-            className="pointer-events-none"
-          />
-
-          {/* Magnetic Snap Points at 25, 45, 60, and 90 minutes */}
-          {SNAP_PRESET_MINUTES.map((snapMins) => {
-            const snapFrac = minutesToRadialFraction(snapMins);
-            const ang = -Math.PI / 2 + snapFrac * Math.PI * 2;
-            const sx = scrubCenter + Math.cos(ang) * scrubRadius;
-            const sy = scrubCenter + Math.sin(ang) * scrubRadius;
-            const lx = scrubCenter + Math.cos(ang) * (scrubRadius + 26);
-            const ly = scrubCenter + Math.sin(ang) * (scrubRadius + 26);
-            const isCurrentSnap = durationMinutes === snapMins;
-
-            return (
-              <g
-                key={snapMins}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onChangeDurationMinutes(snapMins);
-                }}
-                className="cursor-pointer"
-                role="button"
-                tabIndex={0}
-                aria-label={`Set duration to ${snapMins} minutes`}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onChangeDurationMinutes(snapMins);
-                  }
-                }}
-              >
-                <circle
-                  cx={sx}
-                  cy={sy}
-                  r={isCurrentSnap ? 6 : 4}
-                  fill={isCurrentSnap ? '#2FE8FF' : 'rgba(245, 246, 255, 0.45)'}
-                />
-                <text
-                  x={lx}
-                  y={ly}
-                  textAnchor="middle"
-                  dominantBaseline="middle"
-                  fill={isCurrentSnap ? '#F5F6FF' : '#A3A1BA'}
-                  fontSize="11.5"
-                  fontFamily="JetBrains Mono, monospace"
-                  fontWeight={isCurrentSnap ? '600' : '400'}
-                >
-                  {snapMins}m
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Draggable Scrubber Handle */}
-          <g
-            onPointerDown={(e) => {
-              e.stopPropagation();
-              setIsDraggingScrubber(true);
-            }}
-            className="cursor-grab active:cursor-grabbing"
+        {/* Interactive Radial Time Scrubber (Progressive Disclosure when Idle) */}
+        {showRadialRing && (
+          <svg
+            viewBox="0 0 620 620"
+            className="absolute inset-0 w-full h-full overflow-visible z-20 touch-none"
+            aria-label="Radial Duration Scrubber (15 to 120 minutes)"
           >
+            {/* Interactive Ring Track */}
             <circle
-              cx={handleX}
-              cy={handleY}
-              r={12}
-              fill="#070812"
-              stroke="#2FE8FF"
-              strokeWidth={3}
+              cx={scrubCenter}
+              cy={scrubCenter}
+              r={scrubRadius}
+              fill="none"
+              stroke="rgba(245, 246, 255, 0.14)"
+              strokeWidth={16}
+              className="cursor-pointer"
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                onToggleScrubber(true);
+                setIsDraggingScrubber(true);
+                updateDurationFromPointer(e.clientX, e.clientY);
+              }}
             />
-            <circle cx={handleX} cy={handleY} r={4} fill="#F5F6FF" />
-          </g>
-        </svg>
-      )}
 
-      {/* Interior Layer: Timer Numerals, Session Label, or Completion Bloom */}
-      <div className="relative z-30 flex flex-col items-center justify-center text-center px-8">
+            {/* Active Radial Arc */}
+            <circle
+              cx={scrubCenter}
+              cy={scrubCenter}
+              r={scrubRadius}
+              fill="none"
+              stroke={scene.colors.secondary}
+              strokeWidth={3.5}
+              strokeDasharray={`${
+                radialFraction * 2 * Math.PI * scrubRadius
+              } 2400`}
+              transform={`rotate(-90 ${scrubCenter} ${scrubCenter})`}
+              className="pointer-events-none"
+            />
+
+            {/* Magnetic Snap Points at 25, 45, 60, and 90 minutes */}
+            {SNAP_PRESET_MINUTES.map((snapMins) => {
+              const snapFrac = minutesToRadialFraction(snapMins);
+              const ang = -Math.PI / 2 + snapFrac * Math.PI * 2;
+              const sx = scrubCenter + Math.cos(ang) * scrubRadius;
+              const sy = scrubCenter + Math.sin(ang) * scrubRadius;
+              const lx = scrubCenter + Math.cos(ang) * (scrubRadius + 26);
+              const ly = scrubCenter + Math.sin(ang) * (scrubRadius + 26);
+              const isCurrentSnap = durationMinutes === snapMins;
+
+              return (
+                <g
+                  key={snapMins}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onChangeDurationMinutes(snapMins);
+                  }}
+                  className="cursor-pointer"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Set duration to ${snapMins} minutes`}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onChangeDurationMinutes(snapMins);
+                    }
+                  }}
+                >
+                  <circle
+                    cx={sx}
+                    cy={sy}
+                    r={isCurrentSnap ? 6 : 4}
+                    fill={
+                      isCurrentSnap ? '#2FE8FF' : 'rgba(245, 246, 255, 0.45)'
+                    }
+                  />
+                  <text
+                    x={lx}
+                    y={ly}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fill={isCurrentSnap ? '#F5F6FF' : '#A3A1BA'}
+                    fontSize="11.5"
+                    fontFamily="JetBrains Mono, monospace"
+                    fontWeight={isCurrentSnap ? '600' : '400'}
+                  >
+                    {snapMins}m
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Draggable Scrubber Handle */}
+            <g
+              onPointerDown={(e) => {
+                e.stopPropagation();
+                setIsDraggingScrubber(true);
+              }}
+              className="cursor-grab active:cursor-grabbing"
+            >
+              <circle
+                cx={handleX}
+                cy={handleY}
+                r={12}
+                fill="#070812"
+                stroke="#2FE8FF"
+                strokeWidth={3}
+              />
+              <circle cx={handleX} cy={handleY} r={4} fill="#F5F6FF" />
+            </g>
+          </svg>
+        )}
+      </div>
+
+      {/* Dedicated Balanced Timer & Intention Focal Zone (Cleanly Separated From Organism) */}
+      <div
+        data-testid="timer-display-zone"
+        className="relative z-30 mt-3 sm:mt-4 flex flex-col items-center justify-center text-center px-6"
+      >
         {status === 'completed' ? (
-          /* Restrained, Emotional Completion Experience inside the Lens */
-          <div className="flex flex-col items-center gap-4 animate-fade-in">
-            <span className="text-xs font-medium tracking-widest uppercase text-[#2FE8FF]">
-              {scene.name}
+          <div className="flex flex-col items-center gap-2.5 animate-fade-in">
+            <span className="text-xs font-medium tracking-wide text-[#2FE8FF]">
+              {scene.name} · {durationMinutes}m {sessionLabel || 'Deep work'}
             </span>
-            <h2 className="font-display text-3xl sm:text-4xl font-semibold text-[#F5F6FF] tracking-tight">
+            <h2 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] tracking-tight">
               {scene.completionPhrase}
             </h2>
-            <p className="text-xs text-[#A3A1BA]">
-              {durationMinutes} minutes · {sessionLabel || 'Deep work'}
-            </p>
-            <div className="mt-2 flex items-center gap-3">
+            <div className="mt-1 flex items-center gap-3">
               <AuraButton
                 variant="secondary"
                 size="md"
@@ -1069,14 +1073,12 @@ export const LivingLens: React.FC<LivingLensProps> = ({
           </div>
         ) : (
           <>
-            {/* Subtle non-color state signal when Paused or on Break */}
             {(status === 'paused' || phase === 'break') && (
-              <span className="text-[11px] font-medium tracking-widest uppercase text-[#FFB08A] mb-1.5">
+              <span className="text-xs font-medium tracking-wide text-[#FFB08A] mb-1">
                 {status === 'paused' ? 'Paused' : 'Restorative Break'}
               </span>
             )}
 
-            {/* Striking Timer Numerals */}
             <button
               type="button"
               onClick={onPrimaryAction}
@@ -1089,14 +1091,13 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                   ? 'resume'
                   : 'begin'
               }`}
-              className={`font-display font-semibold tracking-tight text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.75)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
+              className={`font-display font-medium tracking-[-0.03em] text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_6px_28px_rgba(7,8,18,0.85)] transition-transform duration-200 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-6 focus-visible:outline-[#2FE8FF] rounded-xl cursor-pointer ${numeralSizeClass}`}
             >
               {formatRemainingTime(remainingSeconds)}
             </button>
 
-            {/* Simple Session Label ("Deep work") -> Inline 1-line text input when clicked */}
             {immersionMode !== 'deep' && (
-              <div className="mt-3.5 min-h-[28px] flex items-center justify-center">
+              <div className="mt-1.5 min-h-[24px] flex items-center justify-center">
                 {isEditingLabel ? (
                   <input
                     ref={labelInputRef}
@@ -1110,17 +1111,17 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                         setIsEditingLabel(false);
                       }
                     }}
-                    placeholder="What are you making?"
-                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-52"
+                    placeholder="What are you focusing on?"
+                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-xs sm:text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-48"
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={() => setIsEditingLabel(true)}
-                    title="Click to rename session"
-                    className="text-sm font-medium text-[#F5F6FF]/85 hover:text-[#F5F6FF] transition-colors px-3 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
+                    title="Click to edit session focus"
+                    className="text-xs sm:text-sm font-normal text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors px-2.5 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
                   >
-                    {sessionLabel.trim() || 'What are you making?'}
+                    {sessionLabel.trim() || 'Deep work'}
                   </button>
                 )}
               </div>

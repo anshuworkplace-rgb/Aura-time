@@ -69,7 +69,7 @@ export const SoundControlPanel: React.FC<SoundControlPanelProps> = ({
       role="dialog"
       aria-label="Sound Controls"
       data-testid="sound-control-panel"
-      className="w-80 sm:w-96 rounded-3xl aura-glass-elevated p-5 flex flex-col gap-4 text-xs text-[#F5F6FF]"
+      className="w-[calc(100vw-2rem)] sm:w-96 max-h-[72vh] overflow-y-auto rounded-3xl aura-glass-elevated p-4 sm:p-5 flex flex-col gap-3.5 text-xs text-[#F5F6FF]"
     >
       {/* Top Header: Active Chamber + Mute/Unmute + Live Spectrum */}
       <div className="flex items-center justify-between gap-3 border-b border-white/10 pb-3.5">
