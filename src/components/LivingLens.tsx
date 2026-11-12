@@ -922,26 +922,25 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
       // ======================================================================
       // SHARED: PROGRESS REFRACTION ARC AROUND THE PERIMETER WHEN ACTIVE
+      // (Skipped for 3D Celestial Jelly so no decorative ring crosses the organism)
       // ======================================================================
-      if (p.status === 'running' || p.status === 'paused') {
-        const isJelly3D = p.orbDesign === 'celestial-jelly';
-        const progressArcRadius = isJelly3D ? 286 : 224;
+      if (
+        (p.status === 'running' || p.status === 'paused') &&
+        p.orbDesign !== 'celestial-jelly'
+      ) {
+        const progressArcRadius = 224;
         const startAng = -Math.PI / 2;
         const remainingRatio = Math.max(0.01, 1 - p.progress);
         const endAng = startAng + Math.PI * 2 * remainingRatio;
 
-        ctx.strokeStyle = isJelly3D
-          ? 'rgba(245, 246, 255, 0.04)'
-          : 'rgba(245, 246, 255, 0.08)';
-        ctx.lineWidth = isJelly3D ? 1.0 : 1.5;
+        ctx.strokeStyle = 'rgba(245, 246, 255, 0.08)';
+        ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = isJelly3D
-          ? rgbaString(palette.secondaryRgb, 0.28)
-          : palette.secondaryHex;
-        ctx.lineWidth = isJelly3D ? 1.25 : 2.8;
+        ctx.strokeStyle = palette.secondaryHex;
+        ctx.lineWidth = 2.8;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, startAng, endAng);
@@ -950,9 +949,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         // Luminous leading droplet
         const tx = cx + Math.cos(endAng) * progressArcRadius;
         const ty = cy + Math.sin(endAng) * progressArcRadius;
-        ctx.fillStyle = isJelly3D ? 'rgba(245, 246, 255, 0.58)' : '#F5F6FF';
+        ctx.fillStyle = '#F5F6FF';
         ctx.beginPath();
-        ctx.arc(tx, ty, isJelly3D ? 2.4 : 4, 0, Math.PI * 2);
+        ctx.arc(tx, ty, 4, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1021,8 +1020,12 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     });
   };
 
+  const isCelestialJelly = orbDesign === 'celestial-jelly';
   const showRadialRing =
-    status === 'idle' && (scrubberOpen || isLensHovered || isDraggingScrubber);
+    status === 'idle' &&
+    (scrubberOpen ||
+      isDraggingScrubber ||
+      (!isCelestialJelly && isLensHovered));
   const radialFraction = minutesToRadialFraction(durationMinutes);
   const handleAngle = -Math.PI / 2 + radialFraction * Math.PI * 2;
   const scrubCenter = 310;
@@ -1032,17 +1035,23 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   const isRunningOrPaused = status === 'running' || status === 'paused';
 
-  const scaleClass =
-    isRunningOrPaused && immersionMode !== 'minimal'
-      ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
-      : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
+  const scaleClass = isCelestialJelly
+    ? 'w-[320px] h-[320px] sm:w-[440px] sm:h-[440px] md:w-[480px] md:h-[480px]'
+    : isRunningOrPaused && immersionMode !== 'minimal'
+    ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
+    : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
 
-  const numeralSizeClass =
-    timerTextScale === 'monumental'
-      ? 'text-7xl sm:text-8xl md:text-[6.5rem]'
+  const numeralSizeClass = isCelestialJelly
+    ? timerTextScale === 'monumental'
+      ? 'text-3xl sm:text-4xl md:text-[2.6rem]'
       : timerTextScale === 'large'
-      ? 'text-6xl sm:text-7xl md:text-[5.5rem]'
-      : 'text-5xl sm:text-6xl md:text-7xl';
+      ? 'text-2xl sm:text-3xl md:text-[2.25rem]'
+      : 'text-2xl sm:text-3xl md:text-[2.05rem]'
+    : timerTextScale === 'monumental'
+    ? 'text-7xl sm:text-8xl md:text-[6.5rem]'
+    : timerTextScale === 'large'
+    ? 'text-6xl sm:text-7xl md:text-[5.5rem]'
+    : 'text-5xl sm:text-6xl md:text-7xl';
 
   return (
     <div
@@ -1177,7 +1186,13 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       )}
 
       {/* Interior Layer: Timer Numerals, Session Label, or Completion Bloom */}
-      <div className="relative z-30 flex flex-col items-center justify-center text-center px-8">
+      <div
+        className={`relative z-30 flex flex-col items-center justify-center text-center transition-all duration-500 ${
+          isCelestialJelly && status !== 'completed'
+            ? 'translate-y-[112px] sm:translate-y-[152px] md:translate-y-[168px] px-4 py-1.5 rounded-2xl bg-[#060713]/34 backdrop-blur-md border border-white/[0.06] shadow-[0_8px_28px_rgba(3,4,12,0.42)]'
+            : 'px-8'
+        }`}
+      >
         {status === 'completed' ? (
           /* Restrained, Emotional Completion Experience inside the Lens */
           <div className="flex flex-col items-center gap-4 animate-fade-in">
@@ -1215,12 +1230,12 @@ export const LivingLens: React.FC<LivingLensProps> = ({
           <>
             {/* Subtle non-color state signal when Paused or on Break */}
             {(status === 'paused' || phase === 'break') && (
-              <span className="text-[11px] font-medium tracking-widest uppercase text-[#FFB08A] mb-1.5">
+              <span className="text-[10px] font-medium tracking-widest uppercase text-[#FFB08A] mb-1">
                 {status === 'paused' ? 'Paused' : 'Restorative Break'}
               </span>
             )}
 
-            {/* Striking Timer Numerals */}
+            {/* Timer Numerals (Visually quieter in Celestial Jelly mode so central anatomy dominates) */}
             <button
               type="button"
               onClick={onPrimaryAction}
@@ -1233,14 +1248,22 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                   ? 'resume'
                   : 'begin'
               }`}
-              className={`font-display font-semibold tracking-tight text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.75)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
+              className={`font-display ${
+                isCelestialJelly
+                  ? 'font-medium text-[#F5F6FF]/90'
+                  : 'font-semibold text-[#F5F6FF]'
+              } tracking-tight tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.75)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
             >
               {formatRemainingTime(remainingSeconds)}
             </button>
 
             {/* Simple Session Label ("Deep work") -> Inline 1-line text input when clicked */}
             {immersionMode !== 'deep' && (
-              <div className="mt-3.5 min-h-[28px] flex items-center justify-center">
+              <div
+                className={`${
+                  isCelestialJelly ? 'mt-1 min-h-[20px]' : 'mt-3.5 min-h-[28px]'
+                } flex items-center justify-center`}
+              >
                 {isEditingLabel ? (
                   <input
                     ref={labelInputRef}
@@ -1255,18 +1278,38 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                       }
                     }}
                     placeholder="What are you making?"
-                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-52"
+                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-xs sm:text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-44"
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={() => setIsEditingLabel(true)}
                     title="Click to rename session"
-                    className="text-sm font-medium text-[#F5F6FF]/85 hover:text-[#F5F6FF] transition-colors px-3 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
+                    className={`${
+                      isCelestialJelly
+                        ? 'text-xs text-[#F5F6FF]/72'
+                        : 'text-sm text-[#F5F6FF]/85'
+                    } font-medium hover:text-[#F5F6FF] transition-colors px-2.5 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer`}
                   >
                     {sessionLabel.trim() || 'What are you making?'}
                   </button>
                 )}
+              </div>
+            )}
+
+            {/* Subtle Linear Progress Bar inside the Quiet Capsule when Celestial Jelly is Running/Paused */}
+            {isCelestialJelly && isRunningOrPaused && (
+              <div
+                aria-hidden="true"
+                className="w-28 h-[2px] rounded-full bg-white/[0.08] mt-1.5 overflow-hidden"
+              >
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${Math.max(2, (1 - progress) * 100)}%`,
+                    background: `linear-gradient(90deg, ${scene.colors.primary}, ${scene.colors.secondary})`,
+                  }}
+                />
               </div>
             )}
           </>

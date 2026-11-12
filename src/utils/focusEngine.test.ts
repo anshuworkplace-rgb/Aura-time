@@ -389,15 +389,24 @@ test('Phase 1: 3D Celestial Jelly geometry, 16-lobe bell, 8 ruffled oral arms, 1
     assert.equal(colorRig.subumbrellaPeach.length, 3);
     assert.equal(colorRig.biolumeGold.length, 3);
 
-    // Ensure organism retains its intrinsic coral-pink crown and blue-violet bell across all atmospheres
+    // Ensure organism retains >= 96.5% locked intrinsic coral-pink crown and blue-violet bell across all 5 atmospheres
     const crownDiff = Math.abs(
       colorRig.oralArmCrownPink[0] - deepCurrentRig.oralArmCrownPink[0]
     );
     const blueDiff = Math.abs(colorRig.domeBlue[2] - deepCurrentRig.domeBlue[2]);
-    assert.equal(crownDiff < 0.1, true);
-    assert.equal(blueDiff < 0.1, true);
+    assert.equal(crownDiff < 0.04, true);
+    assert.equal(blueDiff < 0.04, true);
   }
+
+  // 6. Phase 3: Verify distinct 3D spatial separation and staggered lengths across all 8 oral arms
+  const uniqueSegmentLengths = new Set(
+    rig.oralArms.map((a) => a.segmentLength.toFixed(4))
+  );
+  assert.equal(uniqueSegmentLengths.size >= 6, true);
+  const tipXPositions = rig.oralArms.map(
+    (a) => a.nodes[a.nodes.length - 1].x
+  );
+  const minTipX = Math.min(...tipXPositions);
+  const maxTipX = Math.max(...tipXPositions);
+  assert.equal(maxTipX - minTipX > 0.25, true);
 });
-
-
-

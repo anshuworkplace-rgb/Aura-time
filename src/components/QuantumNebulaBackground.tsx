@@ -92,7 +92,11 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     backgroundMix,
   });
 
+  const renderImmediateRef = useRef<(() => void) | null>(null);
+
   useEffect(() => {
+    const prevOrb = liveStateRef.current.orbDesign;
+    const prevSceneId = liveStateRef.current.scene.id;
     liveStateRef.current = {
       scene,
       orbDesign,
@@ -105,6 +109,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       reducedMotion,
       backgroundMix,
     };
+    if (prevOrb !== orbDesign || prevSceneId !== scene.id) {
+      renderImmediateRef.current?.();
+    }
   }, [
     scene,
     orbDesign,
@@ -398,16 +405,15 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       window.addEventListener('pointermove', onPointerMove, { passive: true });
       window.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
+      let needsResize = false;
       const onResize = () => {
         if (!container || !renderer) return;
         const w = container.clientWidth || window.innerWidth;
         const h = container.clientHeight || window.innerHeight;
         currentW = w;
         currentH = h;
-        camera.aspect = w / Math.max(1, h);
-        camera.updateProjectionMatrix();
-        renderer.setSize(w, h);
-        fluidUniforms.uAspect.value = w / Math.max(1, h);
+        needsResize = true;
+        renderImmediateRef.current?.();
       };
       window.addEventListener('resize', onResize);
 
@@ -448,14 +454,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         frameId = window.setTimeout(poll, 5);
       }
 
-      function tick() {
+      function renderFrameStep() {
         if (isDisposed) return;
-
-        // Visibility-aware rendering: pause GPU work when tab is hidden
-        if (document.hidden) {
-          lastTimeMs = performance.now();
-          frameId = window.setTimeout(tick, 250);
-          return;
+        if (needsResize) {
+          needsResize = false;
+          camera.aspect = currentW / Math.max(1, currentH);
+          camera.updateProjectionMatrix();
+          activeRenderer.setSize(currentW, currentH);
+          fluidUniforms.uAspect.value = currentW / Math.max(1, currentH);
         }
 
         const nowMs = performance.now();
@@ -668,6 +674,19 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         });
 
         activeRenderer.render(threeScene, camera);
+      }
+
+      renderImmediateRef.current = renderFrameStep;
+
+      function tick() {
+        if (isDisposed) return;
+        if (document.hidden) {
+          lastTimeMs = performance.now();
+          frameId = window.setTimeout(tick, 250);
+          return;
+        }
+
+        renderFrameStep();
 
         if (isSoftwareGl) {
           afterDraw(tick);
@@ -680,6 +699,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       return () => {
         isDisposed = true;
+        renderImmediateRef.current = null;
         cancelAnimationFrame(frameId);
         clearTimeout(frameId);
         window.removeEventListener('pointermove', onPointerMove);
