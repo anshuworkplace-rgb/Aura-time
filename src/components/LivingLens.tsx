@@ -488,32 +488,32 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       }
 
       // ======================================================================
-      // BRANCH 2: LIVING BLOOM — EVOLVING BOTANICAL LIFE FORM
+      // BRANCH 2: LIVING BLOOM — 3D PROCEDURAL BOTANICAL ORGANISM OVERLAY
+      // (The 44-petal 4-whorl corolla, 3-level branching vascular veins, 28
+      //  central curled carpels, 128 curved stamen filaments, 128 golden pollen
+      //  anthers, curved stem, 7 recurved sepals, and floating golden pollen are
+      //  rendered in real-time 3D by LivingBloom3DSceneController in the shared
+      //  Three.js renderer. Here we render only the subtle optical bridge halo
+      //  and central numeral readability scrim.)
       // ======================================================================
       else if (p.orbDesign === 'living-bloom') {
         const bloomState = computeBloomCycleState(time, p.status, p.progress);
-
-        // 1. Botanical Sanctuary Subsurface Aura bridging the Bloom into the WebGL field
-        const bloomAuraRadius = 298 + bloomState.outerOpenness * 10;
+        const bloomAuraRadius = 294 + bloomState.outerOpenness * 10;
         const bloomAura = ctx.createRadialGradient(
           cx,
           cy,
-          16,
+          36,
           cx,
           cy,
           bloomAuraRadius
         );
         bloomAura.addColorStop(
           0,
-          rgbaString(palette.primaryRgb, 0.44 * stateParams.luminescence)
+          rgbaString(palette.primaryRgb, 0.05 * stateParams.luminescence)
         );
         bloomAura.addColorStop(
-          0.46,
-          rgbaString(palette.secondaryRgb, 0.25 * stateParams.luminescence)
-        );
-        bloomAura.addColorStop(
-          0.76,
-          rgbaString(palette.tertiaryRgb, 0.11 * stateParams.luminescence)
+          0.55,
+          rgbaString(palette.secondaryRgb, 0.035 * stateParams.luminescence)
         );
         bloomAura.addColorStop(1, 'rgba(7, 8, 18, 0)');
         ctx.fillStyle = bloomAura;
@@ -521,159 +521,14 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         ctx.arc(cx, cy, bloomAuraRadius, 0, Math.PI * 2);
         ctx.fill();
 
-        // 2. Render 4 Concentric Tiers of Individually Generated Asymmetric Petals
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-
-        const layersOrder: Array<ProceduralPetal['layer']> = [
-          'outer',
-          'mid',
-          'inner',
-          'crown',
-        ];
-        for (const layerName of layersOrder) {
-          const openness =
-            layerName === 'outer'
-              ? bloomState.outerOpenness
-              : layerName === 'mid'
-              ? bloomState.midOpenness
-              : layerName === 'inner'
-              ? bloomState.innerOpenness
-              : bloomState.innerOpenness * 0.92;
-          const layerRot =
-            layerName === 'outer'
-              ? bloomState.corollaRotation * 0.65
-              : layerName === 'mid'
-              ? -bloomState.corollaRotation * 0.85
-              : layerName === 'inner'
-              ? bloomState.corollaRotation * 1.1
-              : -bloomState.corollaRotation * 1.35;
-
-          for (const petal of p.bloomPetals) {
-            if (petal.layer !== layerName) continue;
-            drawProceduralPetal(
-              cx,
-              cy,
-              petal,
-              openness * stateParams.expansionScale,
-              layerRot,
-              time,
-              palette,
-              ptr.x,
-              ptr.y,
-              stateParams.luminescence
-            );
-          }
-        }
-        ctx.restore();
-
-        // 3. Intricate Botanical Receptacle Core & Glowing Stamen Filaments
-        ctx.save();
-        ctx.globalCompositeOperation = 'screen';
-        const stamenCount = p.bloomGrowth.stamenCount;
-        for (let s = 0; s < stamenCount; s++) {
-          const sAngle =
-            (s / stamenCount) * Math.PI * 2 +
-            bloomState.corollaRotation * 0.5 +
-            Math.sin(time * 0.9 + s) * 0.05;
-          const sLen =
-            (54 + (s % 3) * 14) *
-            (0.75 + bloomState.innerOpenness * 0.28) *
-            (1 + bands.treble * 0.14);
-          const ctrlAngle = sAngle + Math.sin(s * 1.7 + time) * 0.14;
-          const sx = cx + Math.cos(sAngle) * sLen;
-          const sy = cy + Math.sin(sAngle) * sLen;
-          const cpx = cx + Math.cos(ctrlAngle) * (sLen * 0.55);
-          const cpy = cy + Math.sin(ctrlAngle) * (sLen * 0.55);
-
-          ctx.strokeStyle = rgbaString(
-            s % 2 === 0 ? palette.secondaryRgb : palette.primaryRgb,
-            0.34 * stateParams.luminescence
-          );
-          ctx.lineWidth = 1.1;
-          ctx.beginPath();
-          ctx.moveTo(cx + Math.cos(sAngle) * 16, cy + Math.sin(sAngle) * 16);
-          ctx.quadraticCurveTo(cpx, cpy, sx, sy);
-          ctx.stroke();
-
-          // Luminous pollen anther tip
-          ctx.fillStyle = rgbaString(
-            palette.iridescentRgb,
-            (0.65 + 0.35 * Math.sin(time * 1.8 + s)) * stateParams.luminescence
-          );
-          ctx.beginPath();
-          ctx.arc(sx, sy, s % 2 === 0 ? 2.4 : 1.8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-
-        // Nectary Core Glow
-        const nectaryGrad = ctx.createRadialGradient(
-          cx,
-          cy,
-          4,
-          cx,
-          cy,
-          68 * bloomState.nectaryPulse
-        );
-        nectaryGrad.addColorStop(
-          0,
-          rgbaString(palette.iridescentRgb, 0.42 * stateParams.luminescence)
-        );
-        nectaryGrad.addColorStop(
-          0.55,
-          rgbaString(palette.primaryRgb, 0.26 * stateParams.luminescence)
-        );
-        nectaryGrad.addColorStop(1, 'rgba(0,0,0,0)');
-        ctx.fillStyle = nectaryGrad;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 68, 0, Math.PI * 2);
-        ctx.fill();
-
-        // 4. Floating Pollen Spores & Drifting Botanical Dust
-        for (const sp of particles) {
-          if (!p.reducedMotion && p.status !== 'paused') {
-            const angle = Math.atan2(sp.y, sp.x) + 0.004 * stateParams.particleSpeed;
-            const rad =
-              (Math.hypot(sp.x, sp.y) + 0.22 * stateParams.particleSpeed) % 225;
-            sp.x = Math.cos(angle) * Math.max(24, rad);
-            sp.y = Math.sin(angle) * Math.max(24, rad);
-
-            if (ptr.x !== null && ptr.y !== null) {
-              const dx = cx + sp.x - ptr.x;
-              const dy = cy + sp.y - ptr.y;
-              const d = Math.hypot(dx, dy);
-              if (d < 120 && d > 1) {
-                sp.x += (dx / d) * 1.8;
-                sp.y += (dy / d) * 1.8;
-              }
-            }
-          }
-
-          const spRgb =
-            sp.hueShift === 0
-              ? palette.iridescentRgb
-              : sp.hueShift === 1
-              ? palette.secondaryRgb
-              : palette.primaryRgb;
-          const twinkle = 0.5 + 0.5 * Math.sin(time * 1.9 + sp.phase);
-          ctx.fillStyle = rgbaString(
-            spRgb,
-            sp.alpha * twinkle * stateParams.luminescence
-          );
-          ctx.beginPath();
-          ctx.arc(cx + sp.x, cy + sp.y, sp.r * 0.95, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        ctx.restore();
-
-        // 5. Gentle Optical Scrim directly behind the countdown numerals
-        const bloomScrim = ctx.createRadialGradient(cx, cy, 12, cx, cy, 148);
-        bloomScrim.addColorStop(0, 'rgba(8, 10, 24, 0.48)');
-        bloomScrim.addColorStop(0.65, 'rgba(8, 10, 24, 0.2)');
-        bloomScrim.addColorStop(1, 'rgba(8, 10, 24, 0)');
+        // Subtle central readability scrim directly behind the countdown numerals
+        const bloomScrim = ctx.createRadialGradient(cx, cy, 8, cx, cy, 118);
+        bloomScrim.addColorStop(0, 'rgba(7, 8, 18, 0.28)');
+        bloomScrim.addColorStop(0.65, 'rgba(7, 8, 18, 0.12)');
+        bloomScrim.addColorStop(1, 'rgba(7, 8, 18, 0)');
         ctx.fillStyle = bloomScrim;
         ctx.beginPath();
-        ctx.arc(cx, cy, 148, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 118, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -922,25 +777,27 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
       // ======================================================================
       // SHARED: PROGRESS REFRACTION ARC AROUND THE PERIMETER WHEN ACTIVE
-      // (Skipped for 3D Celestial Jelly so no decorative ring crosses the organism)
       // ======================================================================
-      if (
-        (p.status === 'running' || p.status === 'paused') &&
-        p.orbDesign !== 'celestial-jelly'
-      ) {
-        const progressArcRadius = 224;
+      if (p.status === 'running' || p.status === 'paused') {
+        const is3DOrganism =
+          p.orbDesign === 'celestial-jelly' || p.orbDesign === 'living-bloom';
+        const progressArcRadius = is3DOrganism ? 286 : 224;
         const startAng = -Math.PI / 2;
         const remainingRatio = Math.max(0.01, 1 - p.progress);
         const endAng = startAng + Math.PI * 2 * remainingRatio;
 
-        ctx.strokeStyle = 'rgba(245, 246, 255, 0.08)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = is3DOrganism
+          ? 'rgba(245, 246, 255, 0.04)'
+          : 'rgba(245, 246, 255, 0.08)';
+        ctx.lineWidth = is3DOrganism ? 1.0 : 1.5;
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = palette.secondaryHex;
-        ctx.lineWidth = 2.8;
+        ctx.strokeStyle = is3DOrganism
+          ? rgbaString(palette.secondaryRgb, 0.28)
+          : palette.secondaryHex;
+        ctx.lineWidth = is3DOrganism ? 1.25 : 2.8;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, startAng, endAng);
@@ -949,9 +806,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         // Luminous leading droplet
         const tx = cx + Math.cos(endAng) * progressArcRadius;
         const ty = cy + Math.sin(endAng) * progressArcRadius;
-        ctx.fillStyle = '#F5F6FF';
+        ctx.fillStyle = is3DOrganism ? 'rgba(245, 246, 255, 0.58)' : '#F5F6FF';
         ctx.beginPath();
-        ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+        ctx.arc(tx, ty, is3DOrganism ? 2.4 : 4, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1020,12 +877,8 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     });
   };
 
-  const isCelestialJelly = orbDesign === 'celestial-jelly';
   const showRadialRing =
-    status === 'idle' &&
-    (scrubberOpen ||
-      isDraggingScrubber ||
-      (!isCelestialJelly && isLensHovered));
+    status === 'idle' && (scrubberOpen || isLensHovered || isDraggingScrubber);
   const radialFraction = minutesToRadialFraction(durationMinutes);
   const handleAngle = -Math.PI / 2 + radialFraction * Math.PI * 2;
   const scrubCenter = 310;
@@ -1035,23 +888,17 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   const isRunningOrPaused = status === 'running' || status === 'paused';
 
-  const scaleClass = isCelestialJelly
-    ? 'w-[320px] h-[320px] sm:w-[440px] sm:h-[440px] md:w-[480px] md:h-[480px]'
-    : isRunningOrPaused && immersionMode !== 'minimal'
-    ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
-    : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
+  const scaleClass =
+    isRunningOrPaused && immersionMode !== 'minimal'
+      ? 'w-[360px] h-[360px] sm:w-[480px] sm:h-[480px] md:w-[540px] md:h-[540px]'
+      : 'w-[330px] h-[330px] sm:w-[450px] sm:h-[450px] md:w-[500px] md:h-[500px]';
 
-  const numeralSizeClass = isCelestialJelly
-    ? timerTextScale === 'monumental'
-      ? 'text-3xl sm:text-4xl md:text-[2.6rem]'
+  const numeralSizeClass =
+    timerTextScale === 'monumental'
+      ? 'text-7xl sm:text-8xl md:text-[6.5rem]'
       : timerTextScale === 'large'
-      ? 'text-2xl sm:text-3xl md:text-[2.25rem]'
-      : 'text-2xl sm:text-3xl md:text-[2.05rem]'
-    : timerTextScale === 'monumental'
-    ? 'text-7xl sm:text-8xl md:text-[6.5rem]'
-    : timerTextScale === 'large'
-    ? 'text-6xl sm:text-7xl md:text-[5.5rem]'
-    : 'text-5xl sm:text-6xl md:text-7xl';
+      ? 'text-6xl sm:text-7xl md:text-[5.5rem]'
+      : 'text-5xl sm:text-6xl md:text-7xl';
 
   return (
     <div
@@ -1186,13 +1033,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       )}
 
       {/* Interior Layer: Timer Numerals, Session Label, or Completion Bloom */}
-      <div
-        className={`relative z-30 flex flex-col items-center justify-center text-center transition-all duration-500 ${
-          isCelestialJelly && status !== 'completed'
-            ? 'translate-y-[112px] sm:translate-y-[152px] md:translate-y-[168px] px-4 py-1.5 rounded-2xl bg-[#060713]/34 backdrop-blur-md border border-white/[0.06] shadow-[0_8px_28px_rgba(3,4,12,0.42)]'
-            : 'px-8'
-        }`}
-      >
+      <div className="relative z-30 flex flex-col items-center justify-center text-center px-8">
         {status === 'completed' ? (
           /* Restrained, Emotional Completion Experience inside the Lens */
           <div className="flex flex-col items-center gap-4 animate-fade-in">
@@ -1230,12 +1071,12 @@ export const LivingLens: React.FC<LivingLensProps> = ({
           <>
             {/* Subtle non-color state signal when Paused or on Break */}
             {(status === 'paused' || phase === 'break') && (
-              <span className="text-[10px] font-medium tracking-widest uppercase text-[#FFB08A] mb-1">
+              <span className="text-[11px] font-medium tracking-widest uppercase text-[#FFB08A] mb-1.5">
                 {status === 'paused' ? 'Paused' : 'Restorative Break'}
               </span>
             )}
 
-            {/* Timer Numerals (Visually quieter in Celestial Jelly mode so central anatomy dominates) */}
+            {/* Striking Timer Numerals */}
             <button
               type="button"
               onClick={onPrimaryAction}
@@ -1248,22 +1089,14 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                   ? 'resume'
                   : 'begin'
               }`}
-              className={`font-display ${
-                isCelestialJelly
-                  ? 'font-medium text-[#F5F6FF]/90'
-                  : 'font-semibold text-[#F5F6FF]'
-              } tracking-tight tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.75)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
+              className={`font-display font-semibold tracking-tight text-[#F5F6FF] tabular-nums leading-none drop-shadow-[0_4px_24px_rgba(7,8,18,0.75)] transition-transform duration-300 hover:scale-[1.01] focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-[#2FE8FF] rounded-2xl cursor-pointer ${numeralSizeClass}`}
             >
               {formatRemainingTime(remainingSeconds)}
             </button>
 
             {/* Simple Session Label ("Deep work") -> Inline 1-line text input when clicked */}
             {immersionMode !== 'deep' && (
-              <div
-                className={`${
-                  isCelestialJelly ? 'mt-1 min-h-[20px]' : 'mt-3.5 min-h-[28px]'
-                } flex items-center justify-center`}
-              >
+              <div className="mt-3.5 min-h-[28px] flex items-center justify-center">
                 {isEditingLabel ? (
                   <input
                     ref={labelInputRef}
@@ -1278,38 +1111,18 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                       }
                     }}
                     placeholder="What are you making?"
-                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-xs sm:text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-44"
+                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-52"
                   />
                 ) : (
                   <button
                     type="button"
                     onClick={() => setIsEditingLabel(true)}
                     title="Click to rename session"
-                    className={`${
-                      isCelestialJelly
-                        ? 'text-xs text-[#F5F6FF]/72'
-                        : 'text-sm text-[#F5F6FF]/85'
-                    } font-medium hover:text-[#F5F6FF] transition-colors px-2.5 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer`}
+                    className="text-sm font-medium text-[#F5F6FF]/85 hover:text-[#F5F6FF] transition-colors px-3 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
                   >
                     {sessionLabel.trim() || 'What are you making?'}
                   </button>
                 )}
-              </div>
-            )}
-
-            {/* Subtle Linear Progress Bar inside the Quiet Capsule when Celestial Jelly is Running/Paused */}
-            {isCelestialJelly && isRunningOrPaused && (
-              <div
-                aria-hidden="true"
-                className="w-28 h-[2px] rounded-full bg-white/[0.08] mt-1.5 overflow-hidden"
-              >
-                <div
-                  className="h-full rounded-full transition-all duration-300"
-                  style={{
-                    width: `${Math.max(2, (1 - progress) * 100)}%`,
-                    background: `linear-gradient(90deg, ${scene.colors.primary}, ${scene.colors.secondary})`,
-                  }}
-                />
               </div>
             )}
           </>

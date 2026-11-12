@@ -189,7 +189,7 @@ export class CelestialJelly3DSceneController {
     this.bellBackMaterial = new THREE.ShaderMaterial({
       uniforms: {
         ...sharedBellUniforms,
-        uPassOpacity: { value: 0.38 },
+        uPassOpacity: { value: 0.46 },
       },
       vertexShader: CELESTIAL_JELLY_BELL_VERTEX_SHADER,
       fragmentShader: CELESTIAL_JELLY_BELL_FRAGMENT_SHADER,
@@ -204,7 +204,7 @@ export class CelestialJelly3DSceneController {
     this.bellInnerTissueMaterial = new THREE.ShaderMaterial({
       uniforms: {
         ...sharedBellUniforms,
-        uPassOpacity: { value: 0.22 },
+        uPassOpacity: { value: 0.38 },
       },
       vertexShader: CELESTIAL_JELLY_BELL_VERTEX_SHADER,
       fragmentShader: CELESTIAL_JELLY_BELL_FRAGMENT_SHADER,
@@ -426,26 +426,14 @@ export class CelestialJelly3DSceneController {
     parentScene.add(this.rootGroup);
   }
 
-  private lastViewportW = 0;
-  private lastViewportH = 0;
-
   private syncLensContainerBounds(
     nowMs: number,
     viewportWidth: number,
     viewportHeight: number,
     camera: THREE.PerspectiveCamera
   ): void {
-    const sizeChanged =
-      viewportWidth !== this.lastViewportW ||
-      viewportHeight !== this.lastViewportH;
-    if (
-      sizeChanged ||
-      nowMs - this.lastRectQueryMs > 120 ||
-      !this.lensElement
-    ) {
+    if (nowMs - this.lastRectQueryMs > 120 || !this.lensElement) {
       this.lastRectQueryMs = nowMs;
-      this.lastViewportW = viewportWidth;
-      this.lastViewportH = viewportHeight;
       if (!this.lensElement || !this.lensElement.isConnected) {
         this.lensElement = document.querySelector(
           '[data-testid="living-lens-container"]'
@@ -547,71 +535,49 @@ export class CelestialJelly3DSceneController {
     this.currentTipCyan.lerp(_cTipCyan, colorLerp);
     this.currentBiolumeGold.lerp(_cBiolumeGold, colorLerp);
 
-    // STAGE F & H: Full-Body Frustum Composition & Continuous 3D Swimming Trajectory
-    // Frame the complete Crystalline Bell, Internal Corona, Central Oral Arms, and
-    // trailing tentacles with ~10–12% visual breathing room across all viewports.
-    const halfFovRad = THREE.MathUtils.degToRad(input.camera.fov * 0.5);
-    const visibleWorldHeight = 2.0 * input.camera.position.z * Math.tan(halfFovRad);
-    const aspect = input.viewportWidth / Math.max(1, input.viewportHeight);
-    const visibleWorldWidth = visibleWorldHeight * aspect;
+    // STAGE F & H: Composition & Continuous 3D Swimming Trajectory
+    // Elevate the bell so the Crystalline Bell, Internal Corona,
+    // and Central Ruffled Oral Arms form the commanding vertical silhouette.
+    const baseScale =
+      this.cachedLensDiameterWorld * 0.415 * stateParams.expansionScale;
 
-    // Complete organism spans ~3.32 local vertical units (+0.97 bell apex to -2.35 filament tips)
-    // and ~2.60 local horizontal units. Target ~63.5% of vertical frustum for ~10-12% breathing room
-    // below the top header pill and above the lower controls.
-    const scaleByHeight = (visibleWorldHeight * 0.635) / 3.32;
-    const scaleByWidth =
-      (visibleWorldWidth * (aspect < 0.85 ? 0.66 : 0.50)) / 2.60;
-    const frustumFitScale = Math.min(scaleByHeight, scaleByWidth);
-    const gentleStateScale =
-      1.0 + (stateParams.expansionScale - 1.0) * 0.18;
-    const baseScale = frustumFitScale * gentleStateScale;
-
-    // Zero-mean 3D underwater buoyancy drift + systolic jet thrust along the swimming axis
-    const propulsionSurge = (bellDyn.contraction - 0.36) * 0.036;
+    // Natural 3D underwater buoyancy drift + systolic jet thrust along the swimming axis
+    const propulsionSurge = bellDyn.contraction * 0.052;
     const floatX =
-      Math.sin(this.simTime * 0.38) * 0.028 +
-      Math.cos(this.simTime * 0.21) * 0.014 +
-      propulsionSurge * 0.24;
+      Math.sin(this.simTime * 0.38) * 0.045 +
+      Math.cos(this.simTime * 0.21) * 0.02 +
+      propulsionSurge * 0.38;
     const floatY =
-      Math.cos(this.simTime * 0.46) * 0.02 + propulsionSurge * 0.52;
-    const floatZ = Math.sin(this.simTime * 0.29) * 0.04;
-
-    const targetStageY =
-      aspect < 0.85 ? visibleWorldHeight * 0.075 : visibleWorldHeight * 0.012;
-    const stageCenterWorldY = THREE.MathUtils.lerp(
-      this.cachedLensCenterWorld.y,
-      targetStageY,
-      0.78
-    );
-    const organismMidpointLocalY = -0.60;
-    const anchorWorldY =
-      stageCenterWorldY - organismMidpointLocalY * baseScale;
+      Math.cos(this.simTime * 0.46) * 0.038 + propulsionSurge * 0.85;
+    const floatZ = Math.sin(this.simTime * 0.29) * 0.06;
 
     this.rootGroup.position.set(
-      this.cachedLensCenterWorld.x * 0.35 + floatX,
-      anchorWorldY + floatY,
+      this.cachedLensCenterWorld.x + floatX,
+      this.cachedLensCenterWorld.y +
+        this.cachedLensDiameterWorld * 0.22 +
+        floatY,
       floatZ
     );
     this.rootGroup.scale.setScalar(baseScale);
 
     // Continuous 3D orientation changes matching celestial-jelly-pulsing-reference.mp4
-    // Slight upward subumbrella view angle (targetRotX ~ 0.065) reveals the glowing Internal Corona
+    // Slight upward subumbrella view angle (targetRotX ~ 0.07) reveals the glowing Internal Corona
     const ptrOffsetX = input.pointerActive ? input.pointerNormX - 0.5 : 0;
     const ptrOffsetY = input.pointerActive ? input.pointerNormY - 0.5 : 0;
 
     const targetRotX =
-      0.065 +
-      Math.sin(this.simTime * 0.34) * 0.045 +
-      bellDyn.contraction * 0.028 -
-      ptrOffsetY * 0.12;
+      0.07 +
+      Math.sin(this.simTime * 0.34) * 0.055 +
+      bellDyn.contraction * 0.035 -
+      ptrOffsetY * 0.14;
     const targetRotY =
-      Math.sin(this.simTime * 0.24) * 0.12 +
-      Math.cos(this.simTime * 0.41) * 0.045 +
-      ptrOffsetX * 0.15;
+      Math.sin(this.simTime * 0.24) * 0.14 +
+      Math.cos(this.simTime * 0.41) * 0.05 +
+      ptrOffsetX * 0.18;
     const targetRotZ =
-      -0.16 +
-      Math.cos(this.simTime * 0.29 + 0.8) * 0.052 -
-      bellDyn.contraction * 0.02;
+      -0.21 +
+      Math.cos(this.simTime * 0.29 + 0.8) * 0.065 -
+      bellDyn.contraction * 0.025;
 
     this.swimGroup.rotation.x = THREE.MathUtils.damp(
       this.swimGroup.rotation.x,

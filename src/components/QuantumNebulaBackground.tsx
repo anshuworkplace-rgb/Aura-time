@@ -25,6 +25,7 @@ import {
   createNeutralFluidDataTexture,
 } from '../utils/infinityAuroraEngine';
 import { CelestialJelly3DSceneController } from './CelestialJelly3DScene';
+import { LivingBloom3DSceneController } from './LivingBloom3DScene';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
@@ -92,11 +93,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     backgroundMix,
   });
 
-  const renderImmediateRef = useRef<(() => void) | null>(null);
-
   useEffect(() => {
-    const prevOrb = liveStateRef.current.orbDesign;
-    const prevSceneId = liveStateRef.current.scene.id;
     liveStateRef.current = {
       scene,
       orbDesign,
@@ -109,9 +106,6 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       reducedMotion,
       backgroundMix,
     };
-    if (prevOrb !== orbDesign || prevSceneId !== scene.id) {
-      renderImmediateRef.current?.();
-    }
   }, [
     scene,
     orbDesign,
@@ -380,6 +374,15 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         initialPhase: liveStateRef.current.phase,
       });
 
+      // 6c. Modular 3D Living Bloom Controller (shares threeScene & renderer)
+      const livingBloomController = new LivingBloom3DSceneController({
+        parentScene: threeScene,
+        pixelRatio,
+        isSoftwareGl,
+        initialScene: liveStateRef.current.scene,
+        initialPhase: liveStateRef.current.phase,
+      });
+
       // Pre-warm shaders on hardware GPUs
       if (!isSoftwareGl) {
         renderer.compile(threeScene, camera);
@@ -405,15 +408,16 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       window.addEventListener('pointermove', onPointerMove, { passive: true });
       window.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
-      let needsResize = false;
       const onResize = () => {
         if (!container || !renderer) return;
         const w = container.clientWidth || window.innerWidth;
         const h = container.clientHeight || window.innerHeight;
         currentW = w;
         currentH = h;
-        needsResize = true;
-        renderImmediateRef.current?.();
+        camera.aspect = w / Math.max(1, h);
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+        fluidUniforms.uAspect.value = w / Math.max(1, h);
       };
       window.addEventListener('resize', onResize);
 
@@ -454,14 +458,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         frameId = window.setTimeout(poll, 5);
       }
 
-      function renderFrameStep() {
+      function tick() {
         if (isDisposed) return;
-        if (needsResize) {
-          needsResize = false;
-          camera.aspect = currentW / Math.max(1, currentH);
-          camera.updateProjectionMatrix();
-          activeRenderer.setSize(currentW, currentH);
-          fluidUniforms.uAspect.value = currentW / Math.max(1, currentH);
+
+        // Visibility-aware rendering: pause GPU work when tab is hidden
+        if (document.hidden) {
+          lastTimeMs = performance.now();
+          frameId = window.setTimeout(tick, 250);
+          return;
         }
 
         const nowMs = performance.now();
@@ -673,20 +677,26 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           camera,
         });
 
+        // Update 3D Living Bloom Controller
+        livingBloomController.update({
+          orbDesign: state.orbDesign,
+          scene: state.scene,
+          status: state.status,
+          phase: state.phase,
+          totalSeconds: state.totalSeconds || 2700,
+          progress: state.progress,
+          audioBands,
+          reducedMotion: state.reducedMotion,
+          dt,
+          pointerNormX: currentPtrX,
+          pointerNormY: currentPtrY,
+          pointerActive,
+          viewportWidth: currentW,
+          viewportHeight: currentH,
+          camera,
+        });
+
         activeRenderer.render(threeScene, camera);
-      }
-
-      renderImmediateRef.current = renderFrameStep;
-
-      function tick() {
-        if (isDisposed) return;
-        if (document.hidden) {
-          lastTimeMs = performance.now();
-          frameId = window.setTimeout(tick, 250);
-          return;
-        }
-
-        renderFrameStep();
 
         if (isSoftwareGl) {
           afterDraw(tick);
@@ -699,7 +709,6 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       return () => {
         isDisposed = true;
-        renderImmediateRef.current = null;
         cancelAnimationFrame(frameId);
         clearTimeout(frameId);
         window.removeEventListener('pointermove', onPointerMove);
@@ -711,6 +720,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         );
 
         celestialJellyController.dispose();
+        livingBloomController.dispose();
         fluidPipeline?.dispose();
         neutralFluidTex?.dispose();
         webgpuDevice?.destroy?.();
