@@ -78,8 +78,8 @@ export function computeCelestialJellyColorRig(
     Number((a[2] + (b[2] - a[2]) * t).toFixed(4)),
   ];
 
-  // Keep intrinsic identity >= 92% permanent; atmosphere provides subtle 6-8% environmental tint
-  const envTint = scene.id === 'deep-current' && phase === 'focus' ? 0.04 : 0.08;
+  // Keep intrinsic identity >= 96.5% permanent; atmosphere provides subtle 2-3.5% environmental reflection
+  const envTint = scene.id === 'deep-current' && phase === 'focus' ? 0.02 : 0.035;
 
   return {
     domeCyan: mix3(refCyan, sceneSecondary, envTint),
@@ -460,27 +460,32 @@ const PINNATE_SEGS_U = 4;
  * - 248 concentrated bioluminescent nodes distributed along the bell clefts, oral arms & tentacles
  */
 export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
-  // 1. Initialize 8 Elaborate Ruffled Oral Arms (staggered lengths & lush widths matching master image)
+  // 1. Initialize 8 Distinct, Sculpted Ruffled Oral Arms (staggered lengths, 3D fan spread & separated widths)
   const oralArms: OralArmChain3D[] = [];
-  const armLengths = [2.15, 1.76, 2.28, 1.62, 2.08, 1.88, 2.22, 1.70];
-  const armHalfWidths = [0.35, 0.30, 0.37, 0.29, 0.34, 0.31, 0.36, 0.30];
+  const armLengths = [1.96, 1.46, 2.08, 1.32, 1.82, 1.56, 2.02, 1.40];
+  const armHalfWidths = [0.20, 0.15, 0.22, 0.14, 0.19, 0.16, 0.21, 0.15];
+  const armRadialOffsets = [0.11, 0.25, 0.16, 0.29, 0.13, 0.27, 0.19, 0.24];
+  const armFanSpreadX = [-0.30, -0.19, -0.08, 0.04, 0.15, 0.28, -0.13, 0.11];
 
   for (let i = 0; i < JELLY_ORAL_ARM_COUNT; i++) {
     const baseAngle =
-      (i / JELLY_ORAL_ARM_COUNT) * Math.PI * 2.0 + (i % 2) * 0.16;
-    const radialOffset = i % 2 === 0 ? 0.10 : 0.22;
+      (i / JELLY_ORAL_ARM_COUNT) * Math.PI * 2.0 + (i % 2) * 0.22;
+    const radialOffset = armRadialOffsets[i];
     const totalArmLen = armLengths[i];
     const segLen = totalArmLen / (ORAL_ARM_SPINE_NODES - 1);
     const nodes: VerletNode3D[] = [];
 
     for (let n = 0; n < ORAL_ARM_SPINE_NODES; n++) {
       const frac = n / (ORAL_ARM_SPINE_NODES - 1);
-      const spiralAngle = baseAngle + frac * 0.82 * (i % 2 === 0 ? 1 : -1);
+      const spiralAngle = baseAngle + frac * 0.76 * (i % 2 === 0 ? 1 : -1);
       const r =
-        radialOffset * (0.85 + Math.sin(frac * Math.PI * 0.78) * 0.85) +
-        frac * 0.06 * (i % 3);
+        radialOffset * (0.92 + Math.sin(frac * Math.PI * 0.82) * 0.95) +
+        frac * 0.08 * (i % 3);
       nodes.push({
-        x: Math.cos(spiralAngle) * r - frac * frac * 0.18,
+        x:
+          Math.cos(spiralAngle) * r +
+          armFanSpreadX[i] * Math.pow(frac, 0.75) -
+          frac * frac * 0.14,
         // Anchor at y = -0.15 right at the base of the visible Internal Corona!
         y: -0.15 - n * segLen,
         z: Math.sin(spiralAngle) * r,
@@ -494,10 +499,10 @@ export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
       id: i,
       baseAngle,
       radialOffset,
-      twistRate: (i % 2 === 0 ? 1 : -1) * (2.4 + (i % 3) * 0.38),
-      // Smooth 3.4..4.6 macro curtain waves across 64 vertices = 16 vertices per wave (zero jagged triangles!)
-      ruffleFrequency: 3.4 + (i % 3) * 0.55,
-      phaseOffset: i * 0.92,
+      twistRate: (i % 2 === 0 ? 1 : -1) * (2.5 + (i % 3) * 0.42),
+      // Smooth 3.5..4.7 macro curtain waves across 64 vertices = 16 vertices per wave (zero jagged triangles!)
+      ruffleFrequency: 3.5 + (i % 3) * 0.58,
+      phaseOffset: i * 0.94,
       ribbonHalfWidth: armHalfWidths[i],
       segmentLength: segLen,
       nodes,
@@ -560,8 +565,8 @@ export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
   // 2. Initialize 16 Fine Marginal Filaments + 8 Delicate Feathery Pinnate Fronds
   const tentacles: TentacleChain3D[] = [];
   const filamentLengthVariations = [
-    2.48, 1.84, 2.24, 2.62, 1.74, 2.38, 2.02, 2.54,
-    2.18, 1.78, 2.44, 1.92, 2.58, 1.86, 2.32, 2.10,
+    2.22, 1.66, 2.02, 2.30, 1.58, 2.14, 1.82, 2.26,
+    1.96, 1.62, 2.18, 1.74, 2.28, 1.68, 2.08, 1.88,
   ];
 
   for (let f = 0; f < JELLY_MARGINAL_FILAMENT_COUNT; f++) {
@@ -578,7 +583,7 @@ export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
       const sCurve = Math.sin(frac * Math.PI * 1.7 + f * 0.85) * 0.25 * frac;
       const flareR = anchorR + Math.sin(frac * Math.PI * 0.72) * 0.36 + sCurve;
       nodes.push({
-        x: Math.cos(anchorAngle) * flareR - frac * frac * 0.22,
+        x: Math.cos(anchorAngle) * flareR - frac * frac * 0.18,
         y: -0.02 - n * segLen,
         z: Math.sin(anchorAngle) * flareR,
         vx: 0,
@@ -594,7 +599,7 @@ export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
       anchorAngle,
       anchorRadiusRatio: 0.95,
       segmentLength: segLen,
-      baseWidth: 0.0082 + (f % 3) * 0.0016,
+      baseWidth: 0.0076 + (f % 3) * 0.0014,
       frequency: 1.35 + (f % 5) * 0.19,
       phaseOffset: f * 0.79,
       colorVariant: (f % 3) as 0 | 1 | 2,
@@ -606,7 +611,7 @@ export function createCelestialJelly3DRig(): CelestialJelly3DRigState {
     const anchorAngle =
       ((p + 0.5) / JELLY_PINNATE_FROND_COUNT) * Math.PI * 2.0 +
       Math.cos(p * 1.7) * 0.06;
-    const totalLen = 2.05 + (p % 3) * 0.24;
+    const totalLen = 1.86 + (p % 3) * 0.18;
     const segLen = totalLen / (FILAMENT_SPINE_NODES - 1);
     const anchorR = 0.88;
     const nodes: VerletNode3D[] = [];
@@ -845,7 +850,8 @@ export function stepCelestialJelly3DPhysics(
     nodes[0].y = -0.15 + bellDynamics.contraction * 0.045;
     nodes[0].z = Math.sin(anchorAngle) * anchorR;
 
-    const armFanBiasX = ((aIdx % 4) - 1.5) * 0.09;
+    const armFanSpreadTable = [-0.30, -0.19, -0.08, 0.04, 0.15, 0.28, -0.13, 0.11];
+    const armFanBiasX = armFanSpreadTable[aIdx % 8];
 
     for (let n = 1; n < nodes.length; n++) {
       const prev = nodes[n - 1];
@@ -855,29 +861,29 @@ export function stepCelestialJelly3DPhysics(
       const wavePhase =
         time * (1.35 * speedScale) - frac * 4.4 + arm.phaseOffset;
       const secondaryOsc =
-        Math.cos(time * 0.92 - frac * 3.1 + aIdx * 1.3) * 0.075 * frac;
+        Math.cos(time * 0.92 - frac * 3.1 + aIdx * 1.3) * 0.085 * frac;
 
-      const crownSpread = Math.exp(-Math.pow((frac - 0.10) * 5.0, 2.0)) * 0.12;
-      const lowerFanSpread = Math.pow(frac, 1.35) * 0.14;
+      const crownSpread = Math.exp(-Math.pow((frac - 0.12) * 4.6, 2.0)) * 0.14;
+      const lowerFanSpread = Math.pow(frac, 1.25) * 0.18;
       const swayR =
-        arm.radialOffset * (0.92 + Math.sin(frac * Math.PI * 0.82) * 0.65) +
+        arm.radialOffset * (0.98 + Math.sin(frac * Math.PI * 0.82) * 0.78) +
         crownSpread +
         lowerFanSpread +
-        (1.0 - bellDynamics.contraction) * frac * 0.12;
+        (1.0 - bellDynamics.contraction) * frac * 0.14;
 
       const swirlAngle =
         anchorAngle +
-        Math.sin(wavePhase) * (0.34 + frac * 0.42) +
-        frac * 0.50 * (aIdx % 2 === 0 ? 1 : -1);
+        Math.sin(wavePhase) * (0.36 + frac * 0.44) +
+        frac * 0.52 * (aIdx % 2 === 0 ? 1 : -1);
 
       const currentSweepX =
-        -frac * frac * 0.19 +
-        armFanBiasX * frac +
-        Math.sin(wavePhase * 0.72 + aIdx) * 0.07 * frac;
+        -frac * frac * 0.14 +
+        armFanBiasX * Math.pow(frac, 0.75) +
+        Math.sin(wavePhase * 0.72 + aIdx * 1.4) * 0.08 * frac;
       const targetX = Math.cos(swirlAngle) * swayR + currentSweepX + secondaryOsc;
       const targetZ =
         Math.sin(swirlAngle) * swayR +
-        Math.cos(wavePhase * 0.82 - aIdx) * 0.07 * frac;
+        Math.cos(wavePhase * 0.82 - aIdx * 1.2) * 0.08 * frac;
       const targetY =
         prev.y - arm.segmentLength * (0.94 + bellDynamics.contraction * 0.07);
 
@@ -1731,54 +1737,68 @@ void main() {
   vec3 bodyColor = mix(crownHue, uColorMidLavender, smoothstep(0.28, 0.68, spineFrac));
   bodyColor = mix(bodyColor, uColorTipCyan, smoothstep(0.64, 0.96, spineFrac) * 0.72);
 
-  // 3. Soft Volumetric Internal Folds & Fine Longitudinal Biological Filaments
+  // 3. High-Contrast 3D Volumetric Folds, Depth Separation & Longitudinal Biological Filaments
+  // Separate individual arms in depth (z) and azimuth so the 8 oral arms never merge into a flat pink mass
+  float depthShade = smoothstep(-0.38, 0.32, vLocalPos.z);
+  float armToneVar = 0.86 + 0.24 * sin(armIdNorm * 18.8495 + 0.6);
+
   float softPillowFold =
     0.5 +
-    0.5 * sin(edgeDist * 14.0 - roundLobe1 * 2.4 + spineFrac * 22.0);
+    0.5 * sin(edgeDist * 16.0 - roundLobe1 * 2.8 + spineFrac * 24.0 + armIdNorm * 12.56);
+  float foldCrest = pow(softPillowFold, 1.65);
   float secondaryRuffle =
-    pow(0.5 + 0.5 * cos(edgeDist * 22.0 + roundLobe2 * 3.0 - spineFrac * 36.0), 3.0) *
-    smoothstep(0.12, 0.65, edgeDist);
+    pow(0.5 + 0.5 * cos(edgeDist * 24.0 + roundLobe2 * 3.2 - spineFrac * 38.0), 3.2) *
+    smoothstep(0.10, 0.62, edgeDist);
 
   float internalVeins =
-    pow(0.5 + 0.5 * cos(signedCross * 28.0 + sin(spineFrac * 18.0) * 1.6), 7.0) *
-    (1.0 - edgeDist * 0.55);
-  float centralMidrib = exp(-edgeDist * edgeDist * 16.0) * (1.0 - spineFrac * 0.42);
+    pow(0.5 + 0.5 * cos(signedCross * 32.0 + sin(spineFrac * 20.0) * 1.8), 6.5) *
+    (1.0 - edgeDist * 0.50);
+  float centralMidrib = exp(-edgeDist * edgeDist * 22.0) * (1.0 - spineFrac * 0.38);
 
   // 4. Concentrated Bioluminescent Micro-Highlights (amber-gold, pearl-pink, and electric cyan)
   vec2 sparkleUv = vec2(signedCross * 13.0 + armIdNorm * 23.0, spineFrac * 52.0 - uTime * 0.25);
   float sparkleNoise = smoothNoise2D(sparkleUv);
   float sparkle =
-    pow(smoothstep(0.67, 0.93, sparkleNoise), 2.7) *
+    pow(smoothstep(0.68, 0.93, sparkleNoise), 2.7) *
     (0.6 + 0.4 * sin(uTime * 2.8 + spineFrac * 30.0));
 
-  // Compose rich subsurface scattering + soft pillowy folds + pearlescent frilled edge
-  vec3 finalColor = bodyColor * (0.76 + fresnel * 0.50 + softPillowFold * 0.32);
-  finalColor += mix(uColorCrownPink, uColorCoronaChampagne, 0.48) * (centralMidrib * 0.48 + internalVeins * 0.34);
+  // Deep translucent rose-plum valleys between luminous coral-pink, rose & pearl fold ridges
+  vec3 valleyShadow = mix(vec3(0.18, 0.07, 0.30), bodyColor * 0.52, depthShade * 0.72);
+  vec3 ridgeTissue = bodyColor * (0.86 + fresnel * 0.56 + foldCrest * 0.52) * armToneVar;
+  vec3 finalColor = mix(valleyShadow, ridgeTissue, 0.32 + 0.68 * foldCrest);
+  finalColor *= (0.72 + 0.38 * depthShade);
 
-  // Luminous Pearl / Rose / Cyan frilled edge highlight
-  vec3 frillEdgeHue = mix(uColorPearl, uColorCrownPink * 1.15, 0.42);
-  frillEdgeHue = mix(frillEdgeHue, uColorTipCyan * 1.15, smoothstep(0.48, 0.92, spineFrac));
-  finalColor += frillEdgeHue * (frillRimHighlight * 1.12 + secondaryRuffle * 0.38);
+  // Luminous internal longitudinal filaments & midrib in coral-pink & warm champagne
+  finalColor +=
+    mix(uColorCrownPink * 1.15, uColorCoronaChampagne, 0.48) *
+    (centralMidrib * 0.72 + internalVeins * 0.54) *
+    (0.78 + 0.32 * depthShade);
+
+  // Crisp Pearlescent / Coral-Rose / Cyan ruffled edge highlight defining each individual arm's contour
+  vec3 frillEdgeHue = mix(uColorPearl, uColorCrownPink * 1.24, 0.42);
+  frillEdgeHue = mix(frillEdgeHue, uColorTipCyan * 1.15, smoothstep(0.54, 0.94, spineFrac));
+  finalColor += frillEdgeHue * (frillRimHighlight * 1.42 + secondaryRuffle * 0.50);
 
   // Embedded bioluminescent sparkles
-  vec3 sparkHue = mix(uColorBiolumeGold, uColorTipCyan, smoothstep(0.35, 0.85, spineFrac));
-  finalColor += sparkHue * sparkle * 1.6;
+  vec3 sparkHue = mix(uColorBiolumeGold, uColorTipCyan, smoothstep(0.38, 0.86, spineFrac));
+  finalColor += sparkHue * sparkle * 1.65;
 
-  finalColor *= uLuminescence * (1.0 + uAudioAmp * 0.15);
+  finalColor *= uLuminescence * (1.0 + uAudioAmp * 0.14);
   finalColor = finalColor / (vec3(1.0) + finalColor * 0.34);
 
   float alpha =
-    (0.26 +
-      fresnel * 0.36 +
-      frillRimHighlight * 0.54 +
-      secondaryRuffle * 0.22 +
-      centralMidrib * 0.24 +
-      internalVeins * 0.15 +
-      softPillowFold * 0.14 +
-      sparkle * 0.35) *
+    (0.13 +
+      foldCrest * 0.24 +
+      fresnel * 0.34 +
+      frillRimHighlight * 0.65 +
+      secondaryRuffle * 0.25 +
+      centralMidrib * 0.28 +
+      internalVeins * 0.21 +
+      sparkle * 0.36) *
+    (0.78 + 0.22 * depthShade) *
     edgeMask;
 
-  gl_FragColor = vec4(finalColor, clamp(alpha, 0.05, 0.92));
+  gl_FragColor = vec4(finalColor, clamp(alpha, 0.04, 0.92));
 }
 `;
 
