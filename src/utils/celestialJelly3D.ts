@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { FocusSceneConfig, TimerPhase } from '../types/aura';
+import { ChamberConfig, FocusSceneConfig, TimerPhase } from '../types/aura';
 import {
   JellyBellDynamics,
   computeJellyBellContraction,
@@ -35,24 +35,29 @@ export interface CelestialJellyColorRig {
 }
 
 /**
- * STAGE G — PERMANENT INTRINSIC COLOUR IDENTITY & ATMOSPHERE INDEPENDENCE
+ * STAGE G — PERMANENT INTRINSIC COLOUR IDENTITY & SOUNDSCAPE SYNCHRONIZATION
  *
  * Preserves the exact intrinsic anatomical palette of the master artwork
- * (`celestial-jelly-master.png`) across all 5 Aura Time atmospheres:
- * - Bell: Crystalline blue, deep violet, electric cyan, lavender, subtle magenta.
- * - Internal Corona: Rose-pink, coral, lavender, champagne, warm amber.
- * - Central Oral Arms: Rich coral-pink, rose, pearl, lavender, lower cyan-violet tips.
- * - Tentacles: Transparent lavender, fine cyan highlights, subtle pink & amber nodes.
+ * (`celestial-jelly-master.png`) across all 5 Aura Time atmospheres while
+ * subtly synchronizing bioluminescent highlights when a soundscape preset changes.
  */
 export function computeCelestialJellyColorRig(
   scene: FocusSceneConfig,
-  phase: TimerPhase = 'focus'
+  phase: TimerPhase = 'focus',
+  chamber?: ChamberConfig
 ): CelestialJellyColorRig {
   const theme = computeThemeOrganismPalette(scene, phase);
   const scenePrimary = hexToNormalizedRgb(theme.primaryHex);
   const sceneSecondary = hexToNormalizedRgb(theme.secondaryHex);
   const sceneTertiary = hexToNormalizedRgb(theme.tertiaryHex);
   const sceneIridescent = hexToNormalizedRgb(theme.iridescentHex);
+
+  const chamberPrimary = chamber
+    ? hexToNormalizedRgb(chamber.primaryHex)
+    : sceneSecondary;
+  const chamberSecondary = chamber
+    ? hexToNormalizedRgb(chamber.secondaryHex)
+    : scenePrimary;
 
   // Permanent Master Reference Intrinsic Palette (from celestial-jelly-master.png)
   const refCyan: [number, number, number] = [0.22, 0.93, 1.0]; // Electric Cyan #38EDFF
@@ -78,22 +83,23 @@ export function computeCelestialJellyColorRig(
     Number((a[2] + (b[2] - a[2]) * t).toFixed(4)),
   ];
 
-  // Keep intrinsic identity >= 96.5% permanent; atmosphere provides subtle 2-3.5% environmental reflection
+  // Keep intrinsic identity >= 95% permanent; atmosphere & soundscape provide subtle environmental reflection
   const envTint = scene.id === 'deep-current' && phase === 'focus' ? 0.02 : 0.035;
+  const soundTint = chamber ? 0.045 : 0.0;
 
   return {
-    domeCyan: mix3(refCyan, sceneSecondary, envTint),
+    domeCyan: mix3(mix3(refCyan, sceneSecondary, envTint), chamberPrimary, soundTint),
     domeBlue: mix3(refBlue, scenePrimary, envTint * 0.8),
-    domeViolet: mix3(refViolet, scenePrimary, envTint),
+    domeViolet: mix3(mix3(refViolet, scenePrimary, envTint), chamberSecondary, soundTint * 0.6),
     domeMagenta: mix3(refMagenta, sceneTertiary, envTint * 0.7),
     subumbrellaPeach: mix3(refSubPeach, sceneIridescent, envTint * 0.5),
     coronaRose: mix3(refCoronaRose, sceneTertiary, envTint * 0.5),
-    coronaChampagne: mix3(refCoronaChampagne, sceneIridescent, envTint * 0.4),
+    coronaChampagne: mix3(mix3(refCoronaChampagne, sceneIridescent, envTint * 0.4), chamberPrimary, soundTint * 0.5),
     oralArmCrownPink: mix3(refCrownPink, sceneIridescent, envTint * 0.45),
     oralArmPearl: refPearl,
     oralArmMidLavender: mix3(refMidLavender, scenePrimary, envTint * 0.6),
-    oralArmTipCyan: mix3(refTipCyan, sceneSecondary, envTint * 0.65),
-    biolumeGold: mix3(refGold, sceneIridescent, envTint * 0.4),
+    oralArmTipCyan: mix3(mix3(refTipCyan, sceneSecondary, envTint * 0.65), chamberPrimary, soundTint),
+    biolumeGold: mix3(mix3(refGold, sceneIridescent, envTint * 0.4), chamberPrimary, soundTint * 0.7),
   };
 }
 

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {
+  ChamberConfig,
   FocusSceneConfig,
   OrbDesignId,
   TimerPhase,
@@ -34,6 +35,7 @@ import { computeJellyBellContraction } from '../utils/organicOrbEngine';
 export interface CelestialJelly3DUpdateInput {
   orbDesign: OrbDesignId;
   scene: FocusSceneConfig;
+  chamber?: ChamberConfig;
   status: TimerStatus;
   phase: TimerPhase;
   totalSeconds: number;
@@ -518,8 +520,12 @@ export class CelestialJelly3DSceneController {
     // Compute asymmetric systolic/diastolic bell propulsion cycle (matching motion video)
     const bellDyn = computeJellyBellContraction(this.simTime);
 
-    // STAGE G: Maintain permanent intrinsic Celestial Jelly colour identity
-    const targetRig = computeCelestialJellyColorRig(input.scene, input.phase);
+    // STAGE G: Maintain permanent intrinsic Celestial Jelly colour identity + subtle soundscape sync
+    const targetRig = computeCelestialJellyColorRig(
+      input.scene,
+      input.phase,
+      input.chamber
+    );
     _cCyan.setRGB(...targetRig.domeCyan);
     _cBlue.setRGB(...targetRig.domeBlue);
     _cViolet.setRGB(...targetRig.domeViolet);
@@ -558,9 +564,9 @@ export class CelestialJelly3DSceneController {
     // Complete organism spans ~3.32 local vertical units (+0.97 bell apex to -2.35 filament tips)
     // and ~2.60 local horizontal units. Target ~63.5% of vertical frustum for ~10-12% breathing room
     // below the top header pill and above the lower controls.
-    const scaleByHeight = (visibleWorldHeight * 0.635) / 3.32;
+    const scaleByHeight = (visibleWorldHeight * 0.585) / 3.32;
     const scaleByWidth =
-      (visibleWorldWidth * (aspect < 0.85 ? 0.66 : 0.50)) / 2.60;
+      (visibleWorldWidth * (aspect < 0.85 ? 0.64 : 0.48)) / 2.60;
     const frustumFitScale = Math.min(scaleByHeight, scaleByWidth);
     const gentleStateScale =
       1.0 + (stateParams.expansionScale - 1.0) * 0.18;
@@ -577,13 +583,13 @@ export class CelestialJelly3DSceneController {
     const floatZ = Math.sin(this.simTime * 0.29) * 0.04;
 
     const targetStageY =
-      aspect < 0.85 ? visibleWorldHeight * 0.075 : visibleWorldHeight * 0.012;
+      aspect < 0.85 ? visibleWorldHeight * 0.045 : -visibleWorldHeight * 0.015;
     const stageCenterWorldY = THREE.MathUtils.lerp(
       this.cachedLensCenterWorld.y,
       targetStageY,
       0.78
     );
-    const organismMidpointLocalY = -0.60;
+    const organismMidpointLocalY = -0.50;
     const anchorWorldY =
       stageCenterWorldY - organismMidpointLocalY * baseScale;
 

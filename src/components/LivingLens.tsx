@@ -478,7 +478,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         );
         halo.addColorStop(
           0.55,
-          rgbaString(palette.secondaryRgb, 0.04 * stateParams.luminescence)
+          `${p.chamber.primaryHex}12`
         );
         halo.addColorStop(1, 'rgba(7, 8, 18, 0)');
         ctx.fillStyle = halo;
@@ -915,6 +915,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         data-testid="living-lens-container"
         data-timer-status={status}
         data-orb-design={orbDesign}
+        data-chamber-id={chamber.id}
         className={`relative flex items-center justify-center select-none transition-all duration-700 ease-out ${scaleClass}`}
       >
         {/* Real-Time Procedural ORB Canvas (Original | Celestial Jelly | Living Bloom) */}

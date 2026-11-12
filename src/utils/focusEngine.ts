@@ -31,7 +31,7 @@ export const FOCUS_SCENES: Record<FocusSceneId, FocusSceneConfig> = {
       elasticity: 0.45,
       refractionDepth: 0.95,
     },
-    suggestedChamberId: 'brown-noise',
+    suggestedChamberId: 'cosmic-silence',
     completionPhrase: 'Focus held.',
   },
   'chromatic-flow': {
@@ -53,7 +53,7 @@ export const FOCUS_SCENES: Record<FocusSceneId, FocusSceneConfig> = {
       elasticity: 1.15,
       refractionDepth: 1.1,
     },
-    suggestedChamberId: 'afterhours-cafe',
+    suggestedChamberId: 'celestial-tone',
     completionPhrase: 'That session is yours.',
   },
   'night-signal': {
@@ -97,7 +97,7 @@ export const FOCUS_SCENES: Record<FocusSceneId, FocusSceneConfig> = {
       elasticity: 0.65,
       refractionDepth: 0.9,
     },
-    suggestedChamberId: 'soft-drone',
+    suggestedChamberId: 'forest-echo',
     completionPhrase: 'Clarity achieved.',
   },
   'solar-drift': {
@@ -119,127 +119,143 @@ export const FOCUS_SCENES: Record<FocusSceneId, FocusSceneConfig> = {
       elasticity: 0.85,
       refractionDepth: 1.0,
     },
-    suggestedChamberId: 'coastal-static',
+    suggestedChamberId: 'ocean-drift',
     completionPhrase: 'Gentle progress held.',
   },
 };
 
+/**
+ * Six Curated Smart Soundscape Presets:
+ * 1. Rain Chamber – Rain ambience.
+ * 2. Ocean Drift – Ocean waves.
+ * 3. Forest Echo – Forest ambience.
+ * 4. Cosmic Silence – Space-inspired ambience.
+ * 5. Ember Glow – Fireplace ambience.
+ * 6. Celestial Tone – Soft atmospheric tones.
+ */
 export const CHAMBERS: ChamberConfig[] = [
   {
     id: 'rain-chamber',
     name: 'Rain Chamber',
+    shortDescription: 'Rain ambience',
     spaceType: 'Glass Conservatory',
     description:
-      'Droplets refracting across a dark architectural skylight with cool acoustic resonance.',
+      'Rain ambience. Soft architectural rainfall refracting across a dark skylight.',
     primaryHex: '#2FE8FF',
-    secondaryHex: '#8A5CFF',
+    secondaryHex: '#5B8CFF',
     materialEffect: 'droplets',
-    materialNote: 'Adds glass-like droplet ripples & cool cyan refraction',
-    waveformBars: [0.45, 0.78, 0.52, 0.88, 0.6, 0.74, 0.48, 0.82, 0.56, 0.42],
+    materialNote: 'Adds crystalline cyan droplet ripples & cool rain refraction',
+    waveformBars: [0.48, 0.78, 0.54, 0.88, 0.62, 0.74, 0.5, 0.82, 0.56, 0.44],
   },
   {
-    id: 'low-orbit',
-    name: 'Low Orbit',
-    spaceType: 'Pressurized Deck',
-    description:
-      'Sub-bass hull harmonics and weightless horizon stillness 400km above Earth.',
-    primaryHex: '#8A5CFF',
-    secondaryHex: '#2FE8FF',
-    materialEffect: 'orbital-dust',
-    materialNote: 'Adds slow floating light particles & deep navy space',
-    waveformBars: [0.92, 0.86, 0.74, 0.62, 0.5, 0.44, 0.38, 0.34, 0.3, 0.26],
-  },
-  {
-    id: 'vinyl-library',
-    name: 'Vinyl Library',
-    spaceType: 'Analog Study',
-    description:
-      'Warm needle dust, mahogany acoustics, and subtle analog tape floor.',
-    primaryHex: '#FFB08A',
-    secondaryHex: '#FF5D88',
-    materialEffect: 'amber-grain',
-    materialNote: 'Adds warm amber micro-grain & analog movement',
-    waveformBars: [0.38, 0.68, 0.44, 0.76, 0.52, 0.84, 0.46, 0.62, 0.5, 0.36],
-  },
-  {
-    id: 'afterhours-cafe',
-    name: 'Afterhours Café',
-    spaceType: 'Nocturnal Lounge',
-    description:
-      'Velvet lo-fi Rhodes chords drifting through a quiet late-night espresso room.',
-    primaryHex: '#FF4FA3',
-    secondaryHex: '#FFB08A',
-    materialEffect: 'warm-murmur',
-    materialNote: 'Adds elastic coral-magenta harmonic bloom',
-    waveformBars: [0.64, 0.78, 0.86, 0.58, 0.74, 0.82, 0.68, 0.54, 0.62, 0.48],
-  },
-  {
-    id: 'coastal-static',
-    name: 'Coastal Static',
+    id: 'ocean-drift',
+    name: 'Ocean Drift',
+    shortDescription: 'Ocean waves',
     spaceType: 'Midnight Shoreline',
     description:
-      'Long-period nocturnal swells breaking softly over dark volcanic stone.',
-    primaryHex: '#2FE8FF',
-    secondaryHex: '#FFB08A',
+      'Ocean waves. Long-period nocturnal swells rolling gently across deep pelagic waters.',
+    primaryHex: '#38F2FF',
+    secondaryHex: '#3B68FF',
     materialEffect: 'tidal-refraction',
-    materialNote: 'Adds slow tidal expansion & iridescent horizon glow',
+    materialNote: 'Adds slow tidal expansion & deep pelagic cyan-cobalt luminescence',
     waveformBars: [0.32, 0.58, 0.88, 0.92, 0.64, 0.36, 0.28, 0.54, 0.82, 0.48],
   },
   {
-    id: 'forest-2am',
-    name: 'Forest at 2 AM',
+    id: 'forest-echo',
+    name: 'Forest Echo',
+    shortDescription: 'Forest ambience',
     spaceType: 'High Canopy',
     description:
-      'High-altitude cedar wind and deep nocturnal stillness beneath open stars.',
-    primaryHex: '#D8FF52',
+      'Forest ambience. High-altitude cedar wind and bioluminescent nocturnal canopy stillness.',
+    primaryHex: '#5EF2C4',
     secondaryHex: '#2FE8FF',
     materialEffect: 'canopy-mist',
-    materialNote: 'Adds organic lime-cyan bioluminescent mist',
-    waveformBars: [0.4, 0.54, 0.68, 0.52, 0.46, 0.64, 0.74, 0.48, 0.38, 0.32],
+    materialNote: 'Adds organic emerald-cyan bioluminescent canopy mist',
+    waveformBars: [0.42, 0.56, 0.7, 0.54, 0.48, 0.66, 0.74, 0.5, 0.4, 0.34],
   },
   {
-    id: 'brown-noise',
-    name: 'Brown Noise',
-    spaceType: 'Acoustic Shield',
+    id: 'cosmic-silence',
+    name: 'Cosmic Silence',
+    shortDescription: 'Space-inspired ambience',
+    spaceType: 'Deep Orbital Field',
     description:
-      'Dense low-frequency waterfall warmth engineered to erase external distraction.',
+      'Space-inspired ambience. Weightless sub-orbital harmonics and deep horizon stillness.',
     primaryHex: '#8A5CFF',
-    secondaryHex: '#FF4FA3',
-    materialEffect: 'magnetic-velvet',
-    materialNote: 'Adds dense magnetic core viscosity',
-    waveformBars: [0.94, 0.9, 0.82, 0.72, 0.64, 0.54, 0.46, 0.38, 0.32, 0.28],
+    secondaryHex: '#4E33A8',
+    materialEffect: 'orbital-dust',
+    materialNote: 'Adds deep ion-violet orbital resonance & weightless stardust',
+    waveformBars: [0.9, 0.84, 0.72, 0.6, 0.48, 0.42, 0.36, 0.32, 0.28, 0.24],
   },
   {
-    id: 'soft-drone',
-    name: 'Soft Drone',
-    spaceType: 'Harmonic Field',
+    id: 'ember-glow',
+    name: 'Ember Glow',
+    shortDescription: 'Fireplace ambience',
+    spaceType: 'Warm Hearth Sanctuary',
     description:
-      'Slow-breathing fifth intervals on a glass-resonator polyphonic synth.',
-    primaryHex: '#D8FF52',
+      'Fireplace ambience. Gentle hearth crackle, warm amber embers, and intimate acoustic glow.',
+    primaryHex: '#FFB08A',
+    secondaryHex: '#FF5D88',
+    materialEffect: 'amber-grain',
+    materialNote: 'Adds warm amber-coral ember luminescence & hearth warmth',
+    waveformBars: [0.44, 0.72, 0.52, 0.84, 0.58, 0.78, 0.48, 0.66, 0.54, 0.4],
+  },
+  {
+    id: 'celestial-tone',
+    name: 'Celestial Tone',
+    shortDescription: 'Soft atmospheric tones',
+    spaceType: 'Harmonic Sanctuary',
+    description:
+      'Soft atmospheric tones. Slow-breathing glass-resonator fifth intervals and ethereal shimmer.',
+    primaryHex: '#FF4FA3',
     secondaryHex: '#8A5CFF',
     materialEffect: 'harmonic-rings',
-    materialNote: 'Adds concentric interferometric light rings',
-    waveformBars: [0.72, 0.78, 0.84, 0.8, 0.74, 0.68, 0.64, 0.58, 0.54, 0.5],
-  },
-  {
-    id: 'deep-quiet',
-    name: 'Deep Quiet',
-    spaceType: 'Anechoic Sanctuary',
-    description:
-      'Pure visual immersion with zero ambient audio—only optional completion harmonics.',
-    primaryHex: '#F5F6FF',
-    secondaryHex: '#A3A1BA',
-    materialEffect: 'pure-glass',
-    materialNote: 'Pure optical glass clarity without acoustic modulation',
-    waveformBars: [0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15, 0.15],
+    materialNote: 'Adds concentric interferometric light rings & harmonic bloom',
+    waveformBars: [0.7, 0.78, 0.86, 0.8, 0.74, 0.68, 0.64, 0.58, 0.54, 0.5],
   },
 ];
+
+const VALID_CHAMBER_IDS = new Set<ChamberId>(CHAMBERS.map((c) => c.id));
+
+const LEGACY_CHAMBER_MAP: Record<string, ChamberId> = {
+  'rain-chamber': 'rain-chamber',
+  'ocean-drift': 'ocean-drift',
+  'coastal-static': 'ocean-drift',
+  'forest-echo': 'forest-echo',
+  'forest-2am': 'forest-echo',
+  'cosmic-silence': 'cosmic-silence',
+  'low-orbit': 'cosmic-silence',
+  'brown-noise': 'cosmic-silence',
+  'ember-glow': 'ember-glow',
+  'vinyl-library': 'ember-glow',
+  'afterhours-cafe': 'ember-glow',
+  'celestial-tone': 'celestial-tone',
+  'soft-drone': 'celestial-tone',
+  'deep-quiet': 'cosmic-silence',
+};
+
+/**
+ * Normalizes any persisted or legacy chamber identifier to one of the 6 curated
+ * Smart Soundscape Switcher presets (`rain-chamber`, `ocean-drift`, `forest-echo`,
+ * `cosmic-silence`, `ember-glow`, `celestial-tone`).
+ */
+export function normalizeChamberId(rawId?: string | null): ChamberId {
+  if (!rawId) return 'rain-chamber';
+  if (VALID_CHAMBER_IDS.has(rawId as ChamberId)) {
+    return rawId as ChamberId;
+  }
+  return LEGACY_CHAMBER_MAP[rawId] || 'rain-chamber';
+}
+
+export function getChamberById(id?: string | null): ChamberConfig {
+  const normalized = normalizeChamberId(id);
+  return CHAMBERS.find((c) => c.id === normalized) || CHAMBERS[0];
+}
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
   dailyGoalMinutes: 180,
   breakMinutes: 10,
   ambienceVolume: 0.75,
-  secondaryVolume: 0.35,
+  secondaryVolume: 0,
   alertVolume: 0.7,
   audioReactive: true,
   reducedMotion: false,
@@ -542,8 +558,9 @@ export function calculateFavorites(sessions: SessionRecord[]): {
   for (const s of sessions) {
     sceneMinutes[s.sceneId] =
       (sceneMinutes[s.sceneId] || 0) + s.durationMinutes;
-    chamberMinutes[s.chamberId] =
-      (chamberMinutes[s.chamberId] || 0) + s.durationMinutes;
+    const normChamber = normalizeChamberId(s.chamberId);
+    chamberMinutes[normChamber] =
+      (chamberMinutes[normChamber] || 0) + s.durationMinutes;
   }
 
   let bestSceneId: FocusSceneId = 'deep-current';
@@ -608,7 +625,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Spatial Shader Exploration',
       durationMinutes: 50,
       sceneId: 'chromatic-flow',
-      chamberId: 'afterhours-cafe',
+      chamberId: 'celestial-tone',
       hour: 14,
     },
     {
@@ -616,7 +633,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Core Engine Architecture',
       durationMinutes: 60,
       sceneId: 'electric-quiet',
-      chamberId: 'soft-drone',
+      chamberId: 'forest-echo',
       hour: 11,
     },
     {
@@ -632,7 +649,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Product Narrative & Flows',
       durationMinutes: 60,
       sceneId: 'chromatic-flow',
-      chamberId: 'vinyl-library',
+      chamberId: 'ember-glow',
       hour: 15,
     },
     {
@@ -640,7 +657,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Protocol Spec Review',
       durationMinutes: 45,
       sceneId: 'deep-current',
-      chamberId: 'brown-noise',
+      chamberId: 'cosmic-silence',
       hour: 9,
     },
     {
@@ -648,7 +665,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Refractive Lens Physics',
       durationMinutes: 90,
       sceneId: 'deep-current',
-      chamberId: 'low-orbit',
+      chamberId: 'cosmic-silence',
       hour: 21,
     },
     {
@@ -656,7 +673,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Sound Synthesis Calibration',
       durationMinutes: 60,
       sceneId: 'solar-drift',
-      chamberId: 'coastal-static',
+      chamberId: 'ocean-drift',
       hour: 16,
     },
     {
@@ -664,7 +681,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Motion Curves & Springs',
       durationMinutes: 45,
       sceneId: 'electric-quiet',
-      chamberId: 'forest-2am',
+      chamberId: 'forest-echo',
       hour: 10,
     },
     {
@@ -672,7 +689,7 @@ export function generateSeedSessions(todayIsoDate: string): SessionRecord[] {
       label: 'Sunday Synthesis Journal',
       durationMinutes: 60,
       sceneId: 'solar-drift',
-      chamberId: 'vinyl-library',
+      chamberId: 'ember-glow',
       hour: 18,
     },
   ];

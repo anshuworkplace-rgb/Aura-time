@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
+  ChamberConfig,
   FocusSceneConfig,
   OrbDesignId,
   TimerPhase,
@@ -14,6 +15,7 @@ import {
   QUANTUM_PARTICLES_FRAGMENT_SHADER,
   QUANTUM_PARTICLES_VERTEX_SHADER,
   computeBackgroundMixWeights,
+  hexToNormalizedRgb,
   orbDesignToShaderMode,
 } from '../utils/quantumNebulaShaders';
 import {
@@ -29,6 +31,7 @@ import { LivingBloom3DSceneController } from './LivingBloom3DScene';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
+  chamber?: ChamberConfig;
   orbDesign?: OrbDesignId;
   status: TimerStatus;
   phase?: TimerPhase;
@@ -51,6 +54,7 @@ const _targetEngineBCoral = new THREE.Color();
 
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
+  chamber,
   orbDesign = 'original',
   status,
   phase = 'focus',
@@ -82,6 +86,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
   const liveStateRef = useRef({
     scene,
+    chamber,
     orbDesign,
     status,
     phase,
@@ -96,6 +101,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   useEffect(() => {
     liveStateRef.current = {
       scene,
+      chamber,
       orbDesign,
       status,
       phase,
@@ -108,6 +114,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     };
   }, [
     scene,
+    chamber,
     orbDesign,
     status,
     phase,
@@ -519,7 +526,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         simTimeB += dt * atmosphere.engineBTimeScale * flowMult;
         simTimeC += dt * atmosphere.engineCTimeScale * flowMult;
 
-        // Smoothly damp colors toward active Focus Scene & Break state
+        // Smoothly damp colors toward active Focus Scene, Soundscape & Break state
         _targetViolet.setRGB(...scenePalette.engineAPrimary);
         _targetCyan.setRGB(...scenePalette.engineASecondary);
         _targetMagenta.setRGB(...scenePalette.engineCMagentaInterference);
@@ -527,6 +534,19 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         _targetZenith.setRGB(...scenePalette.zenithTint);
         _targetEngineBPrimary.setRGB(...scenePalette.engineBPrimary);
         _targetEngineBCoral.setRGB(...scenePalette.engineBCoralHighlight);
+
+        if (state.chamber) {
+          const chPrimary = hexToNormalizedRgb(state.chamber.primaryHex);
+          const chSecondary = hexToNormalizedRgb(state.chamber.secondaryHex);
+          _targetCyan.lerp(
+            new THREE.Color(chPrimary[0], chPrimary[1], chPrimary[2]),
+            0.14
+          );
+          _targetEngineBPrimary.lerp(
+            new THREE.Color(chSecondary[0], chSecondary[1], chSecondary[2]),
+            0.14
+          );
+        }
 
         const colorDamp = 1 - Math.exp(-2.8 * dt);
         currentViolet.lerp(_targetViolet, colorDamp);
@@ -662,6 +682,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         celestialJellyController.update({
           orbDesign: state.orbDesign,
           scene: state.scene,
+          chamber: state.chamber,
           status: state.status,
           phase: state.phase,
           totalSeconds: state.totalSeconds || 2700,
@@ -747,6 +768,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       data-testid="quantum-nebula-bg"
       data-background-mix={backgroundMix}
       data-scene-id={scene.id}
+      data-chamber-id={chamber?.id || 'rain-chamber'}
       data-timer-status={status}
       data-timer-phase={phase}
       data-engine-architecture="dual-aurora-gpu-fluid"

@@ -162,10 +162,10 @@ export const CalibrationOverlay: React.FC<CalibrationOverlayProps> = ({
       },
     },
     ...(onSelectChamber
-      ? CHAMBERS.slice(0, 5).map((ch) => ({
+      ? CHAMBERS.map((ch) => ({
           id: `chamber-${ch.id}`,
-          label: `Switch Sound Chamber: ${ch.name}`,
-          tag: 'Sound',
+          label: `Switch Soundscape: ${ch.name} (${ch.shortDescription})`,
+          tag: 'Soundscape',
           run: () => {
             onSelectChamber(ch.id);
             onClose();

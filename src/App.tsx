@@ -21,6 +21,7 @@ import {
   formatRemainingTime,
   formatTodaySignal,
   generateSeedSessions,
+  normalizeChamberId,
 } from './utils/focusEngine';
 import { soundEngine } from './utils/soundSynthesizer';
 import { LivingLens } from './components/LivingLens';
@@ -41,6 +42,7 @@ const STORAGE_KEYS = {
   SETTINGS: 'aura_living_lens_settings_v2',
   SESSIONS: 'aura_living_lens_sessions_v2',
   STATE: 'aura_living_lens_state_v2',
+  SOUNDSCAPE: 'aura_selected_soundscape_v1',
 };
 
 function getTodayIsoDate(): string {
@@ -79,7 +81,7 @@ export default function App() {
     return generateSeedSessions(todayIsoDate);
   });
 
-  // 3. Remembered Defaults for Instant <2s Session Start
+  // 3. Remembered Defaults for Instant Session Start & Soundscape Persistence
   const [sceneId, setSceneId] = useState<FocusSceneId>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
@@ -97,19 +99,20 @@ export default function App() {
 
   const [chamberId, setChamberId] = useState<ChamberId>(() => {
     try {
+      const dedicatedSound = localStorage.getItem(STORAGE_KEYS.SOUNDSCAPE);
+      if (dedicatedSound) {
+        return normalizeChamberId(dedicatedSound);
+      }
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.chamberId) return parsed.chamberId;
+        if (parsed.chamberId) return normalizeChamberId(parsed.chamberId);
       }
     } catch {
       // ignore
     }
     return 'rain-chamber';
   });
-
-  const [secondaryChamberId, setSecondaryChamberId] =
-    useState<ChamberId | null>(null);
 
   const [durationMinutes, setDurationMinutes] = useState<number>(() => {
     try {
@@ -151,27 +154,13 @@ export default function App() {
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay>('none');
   const [immersionMode, setImmersionMode] =
     useState<FocusImmersionMode>('standard');
-  const [stageLayout] = useState<HomeStageLayout>(() => {
-    try {
-      const saved = localStorage.getItem('aura_home_stage_layout_v1');
-      if (
-        saved === 'atelier' ||
-        saved === 'horizon' ||
-        saved === 'sculpture'
-      ) {
-        return saved;
-      }
-    } catch {
-      // ignore
-    }
-    return 'atelier';
-  });
+  const [stageLayout] = useState<HomeStageLayout>('atelier');
   const [isFloatingOpen, setIsFloatingOpen] = useState<boolean>(false);
   const [railVisible, setRailVisible] = useState<boolean>(true);
 
   const targetEndTimestampRef = useRef<number | null>(null);
 
-  // Persist user settings, sessions, and remembered defaults
+  // Persist user settings, sessions, and remembered defaults (including last selected soundscape)
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
@@ -190,6 +179,7 @@ export default function App() {
 
   useEffect(() => {
     try {
+      localStorage.setItem(STORAGE_KEYS.SOUNDSCAPE, chamberId);
       localStorage.setItem(
         STORAGE_KEYS.STATE,
         JSON.stringify({
@@ -212,22 +202,14 @@ export default function App() {
     }
   }, [stageLayout]);
 
-  // Sync Web Audio API Chambers
+  // Sync Web Audio API Smart Soundscape (with 700ms equal-power crossfades)
   useEffect(() => {
     soundEngine.syncChambers({
       playing: isSoundPlaying,
       primaryChamberId: chamberId,
       ambienceVolume: settings.ambienceVolume,
-      secondaryChamberId,
-      secondaryVolume: settings.secondaryVolume,
     });
-  }, [
-    isSoundPlaying,
-    chamberId,
-    secondaryChamberId,
-    settings.ambienceVolume,
-    settings.secondaryVolume,
-  ]);
+  }, [isSoundPlaying, chamberId, settings.ambienceVolume]);
 
   // Sync document title
   useEffect(() => {
@@ -267,6 +249,19 @@ export default function App() {
   const updateSettings = useCallback((partial: Partial<UserSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
   }, []);
+
+  // Immediate Smart Soundscape Switcher handler (independent of timer state)
+  const handleSelectSoundscape = useCallback(
+    (nextChamberId: ChamberId) => {
+      const normalized = normalizeChamberId(nextChamberId);
+      setChamberId(normalized);
+      if (settings.ambienceVolume <= 0) {
+        updateSettings({ ambienceVolume: 0.75 });
+      }
+      setIsSoundPlaying(true);
+    },
+    [settings.ambienceVolume, updateSettings]
+  );
 
   // Complete Session Handler
   const handleCompleteSession = useCallback(() => {
@@ -346,7 +341,7 @@ export default function App() {
       setScrubberOpen(false);
       targetEndTimestampRef.current = Date.now() + startSecs * 1000;
       setStatus('running');
-      if (chamberId !== 'deep-quiet' && settings.ambienceVolume > 0) {
+      if (settings.ambienceVolume > 0) {
         setIsSoundPlaying(true);
       }
     } else if (status === 'running') {
@@ -363,7 +358,7 @@ export default function App() {
     } else if (status === 'paused') {
       targetEndTimestampRef.current = Date.now() + remainingSeconds * 1000;
       setStatus('running');
-      if (chamberId !== 'deep-quiet' && settings.ambienceVolume > 0) {
+      if (settings.ambienceVolume > 0) {
         setIsSoundPlaying(true);
       }
     } else if (status === 'completed') {
@@ -373,17 +368,11 @@ export default function App() {
       setRemainingSeconds(startSecs);
       targetEndTimestampRef.current = Date.now() + startSecs * 1000;
       setStatus('running');
-      if (chamberId !== 'deep-quiet' && settings.ambienceVolume > 0) {
+      if (settings.ambienceVolume > 0) {
         setIsSoundPlaying(true);
       }
     }
-  }, [
-    chamberId,
-    durationMinutes,
-    remainingSeconds,
-    settings.ambienceVolume,
-    status,
-  ]);
+  }, [durationMinutes, remainingSeconds, settings.ambienceVolume, status]);
 
   const handleStartBreak = useCallback(() => {
     const breakSecs = settings.breakMinutes * 60;
@@ -392,10 +381,10 @@ export default function App() {
     setRemainingSeconds(breakSecs);
     targetEndTimestampRef.current = Date.now() + breakSecs * 1000;
     setStatus('running');
-    if (chamberId !== 'deep-quiet' && settings.ambienceVolume > 0) {
+    if (settings.ambienceVolume > 0) {
       setIsSoundPlaying(true);
     }
-  }, [chamberId, settings.ambienceVolume, settings.breakMinutes]);
+  }, [settings.ambienceVolume, settings.breakMinutes]);
 
   const handleReset = useCallback(() => {
     targetEndTimestampRef.current = null;
@@ -440,16 +429,9 @@ export default function App() {
     setStatus('idle');
   }, []);
 
-  const handleSelectScene = useCallback(
-    (nextSceneId: FocusSceneId) => {
-      setSceneId(nextSceneId);
-      const suggested = FOCUS_SCENES[nextSceneId].suggestedChamberId;
-      if (status === 'idle') {
-        setChamberId(suggested);
-      }
-    },
-    [status]
-  );
+  const handleSelectScene = useCallback((nextSceneId: FocusSceneId) => {
+    setSceneId(nextSceneId);
+  }, []);
 
   const toggleBrowserFullScreen = useCallback(() => {
     if (!document.fullscreenElement) {
@@ -495,7 +477,8 @@ export default function App() {
           (target.tagName === 'BUTTON' ||
             target.getAttribute('role') === 'button' ||
             target.getAttribute('role') === 'switch' ||
-            target.closest('button, [role="button"], [role="switch"]'))
+            target.getAttribute('role') === 'radio' ||
+            target.closest('button, [role="button"], [role="switch"], [role="radio"]'))
         ) {
           return;
         }
@@ -564,9 +547,10 @@ export default function App() {
         settings.highContrast ? 'high-contrast' : ''
       }`}
     >
-      {/* Real-Time 3D Dual Volumetric Aurora × GPU Fluid Dynamics Background Coupled to ORB */}
+      {/* Real-Time 3D Dual Volumetric Aurora × GPU Fluid Dynamics Background Coupled to ORB & Soundscape */}
       <QuantumNebulaBackground
         scene={activeScene}
+        chamber={activeChamber}
         orbDesign={settings.orbDesign ?? 'original'}
         status={status}
         phase={phase}
@@ -655,25 +639,13 @@ export default function App() {
               activeScene={activeScene}
               onSelectScene={handleSelectScene}
               activeChamber={activeChamber}
-              onSelectChamber={(id) => {
-                setChamberId(id);
-                if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-                  setIsSoundPlaying(true);
-                } else if (id === 'deep-quiet') {
-                  setIsSoundPlaying(false);
-                }
-              }}
+              onSelectChamber={handleSelectSoundscape}
               isSoundPlaying={isSoundPlaying}
               onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
               onCycleChamber={() => {
                 const idx = CHAMBERS.findIndex((c) => c.id === chamberId);
                 const next = CHAMBERS[(idx + 1) % CHAMBERS.length];
-                setChamberId(next.id);
-                if (next.id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-                  setIsSoundPlaying(true);
-                } else if (next.id === 'deep-quiet') {
-                  setIsSoundPlaying(false);
-                }
+                handleSelectSoundscape(next.id);
               }}
               durationMinutes={durationMinutes}
               onChangeDuration={handleChangeDuration}
@@ -725,25 +697,7 @@ export default function App() {
                   scrubberOpen={scrubberOpen}
                   onToggleScrubber={() => setScrubberOpen((prev) => !prev)}
                   primaryChamberId={chamberId}
-                  onSelectPrimaryChamber={(id) => {
-                    setChamberId(id);
-                    if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-                      setIsSoundPlaying(true);
-                    } else if (id === 'deep-quiet') {
-                      setIsSoundPlaying(false);
-                    }
-                  }}
-                  secondaryChamberId={secondaryChamberId}
-                  onSelectSecondaryChamber={(id) => {
-                    setSecondaryChamberId(id);
-                    if (
-                      id &&
-                      id !== 'deep-quiet' &&
-                      settings.ambienceVolume > 0
-                    ) {
-                      setIsSoundPlaying(true);
-                    }
-                  }}
+                  onSelectPrimaryChamber={handleSelectSoundscape}
                   isSoundPlaying={isSoundPlaying}
                   onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
                   activeSceneId={sceneId}
@@ -808,33 +762,9 @@ export default function App() {
         isOpen={activeOverlay === 'chambers'}
         onClose={() => setActiveOverlay('none')}
         primaryChamberId={chamberId}
-        onSelectPrimaryChamber={(id) => {
-          setChamberId(id);
-          if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-            setIsSoundPlaying(true);
-          } else if (id === 'deep-quiet') {
-            setIsSoundPlaying(false);
-          }
-        }}
-        secondaryChamberId={secondaryChamberId}
-        onSelectSecondaryChamber={(id) => {
-          setSecondaryChamberId(id);
-          if (id && id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-            setIsSoundPlaying(true);
-          }
-        }}
+        onSelectPrimaryChamber={handleSelectSoundscape}
         isSoundPlaying={isSoundPlaying}
         onToggleSoundPreview={() => setIsSoundPlaying((prev) => !prev)}
-        ambienceVolume={settings.ambienceVolume}
-        onChangeAmbienceVolume={(val) =>
-          updateSettings({ ambienceVolume: val })
-        }
-        secondaryVolume={settings.secondaryVolume}
-        onChangeSecondaryVolume={(val) =>
-          updateSettings({ secondaryVolume: val })
-        }
-        alertVolume={settings.alertVolume}
-        onChangeAlertVolume={(val) => updateSettings({ alertVolume: val })}
       />
 
       <InsightsOverlay
@@ -851,12 +781,7 @@ export default function App() {
         onUpdateSettings={updateSettings}
         onSelectDuration={handleChangeDuration}
         onSelectScene={handleSelectScene}
-        onSelectChamber={(id) => {
-          setChamberId(id);
-          if (id !== 'deep-quiet' && settings.ambienceVolume > 0) {
-            setIsSoundPlaying(true);
-          }
-        }}
+        onSelectChamber={handleSelectSoundscape}
         onPrimaryAction={handlePrimaryAction}
         onResetSession={handleReset}
         onOpenOverlay={(ov) => setActiveOverlay(ov)}

@@ -99,9 +99,58 @@ test('Visual Journal analytics compute streaks, time-of-day, and favorites', () 
   assert.equal(favs.favoriteChamber.chamber.id, 'rain-chamber');
 });
 
-test('all 5 Focus Scenes and 9 Sound Chambers are defined', () => {
+test('all 5 Focus Scenes and 6 Curated Smart Soundscapes are defined with backward-compatible normalizer', async () => {
+  const { normalizeChamberId } = await import('./focusEngine');
+
   assert.equal(Object.keys(FOCUS_SCENES).length, 5);
-  assert.equal(CHAMBERS.length, 9);
+  assert.equal(CHAMBERS.length, 6);
+
+  assert.deepEqual(
+    CHAMBERS.map((c) => ({
+      id: c.id,
+      name: c.name,
+      shortDescription: c.shortDescription,
+    })),
+    [
+      {
+        id: 'rain-chamber',
+        name: 'Rain Chamber',
+        shortDescription: 'Rain ambience',
+      },
+      {
+        id: 'ocean-drift',
+        name: 'Ocean Drift',
+        shortDescription: 'Ocean waves',
+      },
+      {
+        id: 'forest-echo',
+        name: 'Forest Echo',
+        shortDescription: 'Forest ambience',
+      },
+      {
+        id: 'cosmic-silence',
+        name: 'Cosmic Silence',
+        shortDescription: 'Space-inspired ambience',
+      },
+      {
+        id: 'ember-glow',
+        name: 'Ember Glow',
+        shortDescription: 'Fireplace ambience',
+      },
+      {
+        id: 'celestial-tone',
+        name: 'Celestial Tone',
+        shortDescription: 'Soft atmospheric tones',
+      },
+    ]
+  );
+
+  // Verify legacy persisted IDs normalize cleanly
+  assert.equal(normalizeChamberId('coastal-static'), 'ocean-drift');
+  assert.equal(normalizeChamberId('forest-2am'), 'forest-echo');
+  assert.equal(normalizeChamberId('low-orbit'), 'cosmic-silence');
+  assert.equal(normalizeChamberId('vinyl-library'), 'ember-glow');
+  assert.equal(normalizeChamberId('soft-drone'), 'celestial-tone');
 });
 
 test('Quantum Nebula fluid dynamics & spectrum helpers compute valid shader parameters', async () => {
@@ -128,8 +177,13 @@ test('Quantum Nebula fluid dynamics & spectrum helpers compute valid shader para
   assert.equal(QUANTUM_NEBULA_WGSL.includes('evaluateQuantumNebula'), true);
 });
 
-test('multi-duration extensions (+1m, +5m, +10m) and acoustic presets work', async () => {
-  const { CHAMBER_PRESETS, soundEngine } = await import('./soundSynthesizer');
+test('multi-duration extensions (+1m, +5m, +10m), 700ms equal-power crossfades, and 6 soundscape presets work', async () => {
+  const {
+    SOUNDSCAPE_PRESETS,
+    CROSSFADE_DURATION_MS,
+    computeEqualPowerCrossfadeCurve,
+    soundEngine,
+  } = await import('./soundSynthesizer');
 
   const ext1 = extendTimer(1200, 1500, 1);
   assert.equal(ext1.remainingSeconds, 1260);
@@ -139,7 +193,28 @@ test('multi-duration extensions (+1m, +5m, +10m) and acoustic presets work', asy
   assert.equal(ext10.remainingSeconds, 1800);
   assert.equal(ext10.totalSeconds, 2100);
 
-  assert.equal(CHAMBER_PRESETS.length >= 4, true);
+  assert.equal(SOUNDSCAPE_PRESETS.length, 6);
+  assert.equal(CROSSFADE_DURATION_MS, 700);
+
+  // Verify equal-power crossfade curves (sin^2 + cos^2 == 1 at midpoint)
+  const fadeIn = computeEqualPowerCrossfadeCurve(65, 'in', 1.0, 0.0);
+  const fadeOut = computeEqualPowerCrossfadeCurve(65, 'out', 1.0, 1.0);
+  const midIdx = 32;
+  const powerSum =
+    fadeIn[midIdx] * fadeIn[midIdx] + fadeOut[midIdx] * fadeOut[midIdx];
+  assert.equal(Math.abs(powerSum - 1.0) < 0.001, true);
+  assert.equal(fadeIn[64], 1.0);
+  assert.equal(fadeOut[64] < 0.0001, true);
+
+  soundEngine.syncChambers({
+    playing: true,
+    primaryChamberId: 'ember-glow',
+    ambienceVolume: 0.75,
+  });
+  const state = soundEngine.getSoundscapeState();
+  assert.equal(state.activeChamberId, 'ember-glow');
+  assert.equal(state.crossfadeDurationMs, 700);
+
   const bands = soundEngine.getAudioBands();
   assert.equal(typeof bands.bass, 'number');
   assert.equal(typeof bands.treble, 'number');

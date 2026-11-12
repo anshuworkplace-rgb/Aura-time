@@ -36,8 +36,6 @@ interface ControlDockProps {
   onToggleScrubber: () => void;
   primaryChamberId: ChamberId;
   onSelectPrimaryChamber: (id: ChamberId) => void;
-  secondaryChamberId: ChamberId | null;
-  onSelectSecondaryChamber: (id: ChamberId | null) => void;
   isSoundPlaying: boolean;
   onToggleSound: () => void;
   activeSceneId: FocusSceneId;
@@ -65,8 +63,6 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   onToggleScrubber,
   primaryChamberId,
   onSelectPrimaryChamber,
-  secondaryChamberId,
-  onSelectSecondaryChamber,
   isSoundPlaying,
   onToggleSound,
   activeSceneId,
@@ -131,7 +127,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
       data-testid="aura-control-dock"
       className="relative flex flex-col items-center max-w-full"
     >
-      {/* Non-Overlapping Side Drawer on Desktop / Compact Sheet on Mobile */}
+      {/* Compact Floating Panel / Drawer */}
       <AnimatePresence mode="wait">
         {openGroup && (
           <motion.div
@@ -164,31 +160,12 @@ export const ControlDock: React.FC<ControlDockProps> = ({
             {openGroup === 'sound' && (
               <SoundControlPanel
                 primaryChamberId={primaryChamberId}
-                onSelectPrimaryChamber={onSelectPrimaryChamber}
-                secondaryChamberId={secondaryChamberId}
-                onSelectSecondaryChamber={onSelectSecondaryChamber}
+                onSelectPrimaryChamber={(id) => {
+                  onSelectPrimaryChamber(id);
+                }}
                 isSoundPlaying={isSoundPlaying}
                 onToggleSound={onToggleSound}
-                ambienceVolume={settings.ambienceVolume}
-                onChangeAmbienceVolume={(val) =>
-                  onUpdateSettings({ ambienceVolume: val })
-                }
-                secondaryVolume={settings.secondaryVolume}
-                onChangeSecondaryVolume={(val) =>
-                  onUpdateSettings({ secondaryVolume: val })
-                }
-                alertVolume={settings.alertVolume}
-                onChangeAlertVolume={(val) =>
-                  onUpdateSettings({ alertVolume: val })
-                }
-                audioReactive={settings.audioReactive}
-                onToggleAudioReactive={() =>
-                  onUpdateSettings({ audioReactive: !settings.audioReactive })
-                }
-                onOpenChambersStudio={() => {
-                  setOpenGroup(null);
-                  onOpenOverlay('chambers');
-                }}
+                onClose={() => setOpenGroup(null)}
                 reducedMotion={settings.reducedMotion}
               />
             )}
@@ -257,7 +234,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Unified Compact Control Bar: [Play/Pause] [Reset] | [Time] | [Sound] | [Atmosphere] | [Settings] */}
+      {/* Unified Compact Control Bar: [Play/Pause] [Reset] | [Time] | [Soundscape] | [Atmosphere] | [Settings] */}
       <div className="flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]">
         {/* Primary Session Action: Play / Pause / Resume */}
         {onPrimaryAction && (
@@ -334,11 +311,11 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           aria-hidden="true"
         />
 
-        {/* Sound Selector Trigger */}
+        {/* Single Smart Soundscape Button */}
         <button
           type="button"
           data-testid="dock-group-sound"
-          aria-label={`Sound: ${activeChamber.name}`}
+          aria-label={`Soundscape: ${activeChamber.name}`}
           aria-expanded={openGroup === 'sound'}
           onClick={() => toggleGroup('sound')}
           className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
@@ -348,14 +325,17 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           }`}
         >
           {isSoundPlaying ? (
-            <Volume2 className="w-3.5 h-3.5 text-[#2FE8FF] shrink-0" />
+            <Volume2
+              className="w-3.5 h-3.5 shrink-0 transition-colors duration-300"
+              style={{ color: activeChamber.primaryHex }}
+            />
           ) : (
             <VolumeX className="w-3.5 h-3.5 text-[#A3A1BA] shrink-0" />
           )}
-          <span className="hidden sm:inline tracking-wide max-w-[116px] truncate">
+          <span className="hidden sm:inline tracking-wide max-w-[124px] truncate">
             {activeChamber.name}
           </span>
-          <span className="sm:hidden">Sound</span>
+          <span className="sm:hidden">Soundscape</span>
         </button>
 
         <span
