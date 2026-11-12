@@ -35,9 +35,7 @@ import { AuraButton } from './components/AuraButton';
 import {
   HomeStageLayout,
   HomeStageOrbitalFrame,
-  HomeStageSwitcherPill,
 } from './components/HomeStageAtelier';
-import { SlidersHorizontal } from 'lucide-react';
 
 const STORAGE_KEYS = {
   SETTINGS: 'aura_living_lens_settings_v2',
@@ -153,7 +151,7 @@ export default function App() {
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay>('none');
   const [immersionMode, setImmersionMode] =
     useState<FocusImmersionMode>('standard');
-  const [stageLayout, setStageLayout] = useState<HomeStageLayout>(() => {
+  const [stageLayout] = useState<HomeStageLayout>(() => {
     try {
       const saved = localStorage.getItem('aura_home_stage_layout_v1');
       if (
@@ -580,7 +578,7 @@ export default function App() {
         backgroundMix={settings.backgroundMix ?? 0.52}
       />
 
-      {/* Minimal Gallery Top Edge: [AURA TIME] ... [Atelier | Horizon | Sculpture] ... [2h 20m today] */}
+      {/* Minimal Gallery Top Edge: [AURA TIME] ... [2h 20m today] */}
       <header
         className={`relative z-30 w-full px-6 sm:px-12 pt-5 flex items-center justify-between transition-opacity duration-700 ${
           isRunningOrPaused && !railVisible
@@ -600,14 +598,7 @@ export default function App() {
           </button>
         </div>
 
-        {/* Center-Top: Creative Home Stage Designer Switcher (Atelier | Horizon | Sculpture) */}
-        <HomeStageSwitcherPill
-          stageLayout={stageLayout}
-          onChangeStageLayout={setStageLayout}
-          activeScene={activeScene}
-        />
-
-        {/* Upper-Right: Minimal "today" signal ("2h 20m today") + subtle calibration trigger */}
+        {/* Upper-Right: Minimal "today" signal ("2h 20m today") */}
         <div className="flex items-center gap-2.5 aura-glass px-3.5 py-1.5 rounded-full">
           <button
             type="button"
@@ -617,19 +608,6 @@ export default function App() {
             className="font-mono tabular-nums text-xs text-[#F5F6FF]/90 hover:text-[#2FE8FF] transition-colors cursor-pointer"
           >
             {formatTodaySignal(todayMinutes)}
-          </button>
-
-          <span className="w-[1px] h-3 bg-white/15" aria-hidden="true" />
-
-          <button
-            type="button"
-            data-testid="calibration-trigger-btn"
-            onClick={() => setActiveOverlay('calibration')}
-            aria-label="Open Studio Calibration and Commands"
-            title="Studio Calibration & Commands (⌘K)"
-            className="p-1 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5" />
           </button>
         </div>
       </header>
