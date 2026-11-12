@@ -306,5 +306,98 @@ test('Infinity Aurora Engine A, Engine B, Engine C palettes, WGSL shaders, and t
   assert.equal(NEBULA_FLUID_FRAGMENT_SHADER.includes('renderEngineBSecondaryAurora'), true);
 });
 
+test('Phase 1: 3D Celestial Jelly geometry, 16-lobe bell, 8 ruffled oral arms, 16 marginal filaments, 8 pinnate fronds, bioluminescent nodes, and 3D physics work accurately', async () => {
+  const {
+    JELLY_RADIAL_LOBES,
+    JELLY_ORAL_ARM_COUNT,
+    JELLY_MARGINAL_FILAMENT_COUNT,
+    JELLY_PINNATE_FROND_COUNT,
+    JELLY_TOTAL_TENTACLE_CHAINS,
+    buildCelestialJellyBellGeometry,
+    buildInnerManubriumCoreGeometry,
+    buildPelagicPlanktonGeometry,
+    computeCelestialJellyColorRig,
+    createCelestialJelly3DRig,
+    stepCelestialJelly3DPhysics,
+    CELESTIAL_JELLY_BELL_FRAGMENT_SHADER,
+    CELESTIAL_JELLY_ORAL_ARM_FRAGMENT_SHADER,
+  } = await import('./celestialJelly3D');
+  const { computeJellyBellContraction } = await import('./organicOrbEngine');
+
+  // 1. Anatomical counts match specification
+  assert.equal(JELLY_RADIAL_LOBES, 16);
+  assert.equal(JELLY_ORAL_ARM_COUNT, 8);
+  assert.equal(JELLY_MARGINAL_FILAMENT_COUNT, 16);
+  assert.equal(JELLY_PINNATE_FROND_COUNT, 8);
+  assert.equal(JELLY_TOTAL_TENTACLE_CHAINS, 24);
+
+  // 2. 16-lobe bell & inner manubrium geometries
+  const bellGeo = buildCelestialJellyBellGeometry(48, 28);
+  assert.equal(bellGeo.getAttribute('position').count > 1000, true);
+  assert.equal(bellGeo.getAttribute('aBellParams').itemSize, 4);
+
+  const manubriumGeo = buildInnerManubriumCoreGeometry(32, 16);
+  assert.equal(manubriumGeo.getAttribute('position').count > 400, true);
+
+  // 3. 3D Physics Rig: 8 oral arms, 16 marginal filaments, 8 pinnate fronds, 248 biolume nodes
+  const rig = createCelestialJelly3DRig();
+  assert.equal(rig.oralArms.length, 8);
+  assert.equal(
+    rig.tentacles.filter((t) => t.kind === 'marginal-filament').length,
+    16
+  );
+  assert.equal(
+    rig.tentacles.filter((t) => t.kind === 'pinnate-frond').length,
+    8
+  );
+  assert.equal(rig.biolumeNodeCount, 248);
+
+  // Step 3D physics and verify finite 3D coordinates and dynamic buffer updates
+  const bellPulse = computeJellyBellContraction(2.1);
+  stepCelestialJelly3DPhysics(rig, bellPulse, 2.1, 0.016, 0.15, -0.25, 0.85);
+  assert.equal(Number.isFinite(rig.oralArms[0].nodes[10].x), true);
+  assert.equal(Number.isFinite(rig.oralArms[0].nodes[10].y), true);
+  assert.equal(Number.isFinite(rig.oralArms[0].nodes[10].z), true);
+  assert.equal(Number.isFinite(rig.tentacles[20].nodes[12].z), true);
+  assert.equal(Number.isFinite(rig.oralArmsPositions[15]), true);
+  assert.equal(Number.isFinite(rig.pinnateFrondsPositions[15]), true);
+  assert.equal(Number.isFinite(rig.biolumeNodesPositions[15]), true);
+
+  // 4. Plankton geometry & neural-vein + crystalline shaders
+  const planktonGeo = buildPelagicPlanktonGeometry(100);
+  assert.equal(planktonGeo.getAttribute('position').count, 100);
+  assert.equal(
+    CELESTIAL_JELLY_BELL_FRAGMENT_SHADER.includes('neuralVeinAndCrystalField'),
+    true
+  );
+  assert.equal(
+    CELESTIAL_JELLY_ORAL_ARM_FRAGMENT_SHADER.includes('uColorCrownPink'),
+    true
+  );
+
+  // 5. Permanent intrinsic color identity across all 5 Focus Scenes (Stage G)
+  const deepCurrentRig = computeCelestialJellyColorRig(
+    FOCUS_SCENES['deep-current'],
+    'focus'
+  );
+  for (const scene of Object.values(FOCUS_SCENES)) {
+    const colorRig = computeCelestialJellyColorRig(scene, 'focus');
+    assert.equal(colorRig.domeCyan.length, 3);
+    assert.equal(colorRig.domeBlue.length, 3);
+    assert.equal(colorRig.coronaRose.length, 3);
+    assert.equal(colorRig.oralArmPearl.length, 3);
+    assert.equal(colorRig.subumbrellaPeach.length, 3);
+    assert.equal(colorRig.biolumeGold.length, 3);
+
+    // Ensure organism retains its intrinsic coral-pink crown and blue-violet bell across all atmospheres
+    const crownDiff = Math.abs(
+      colorRig.oralArmCrownPink[0] - deepCurrentRig.oralArmCrownPink[0]
+    );
+    const blueDiff = Math.abs(colorRig.domeBlue[2] - deepCurrentRig.domeBlue[2]);
+    assert.equal(crownDiff < 0.1, true);
+    assert.equal(blueDiff < 0.1, true);
+  }
+});
+
 
 

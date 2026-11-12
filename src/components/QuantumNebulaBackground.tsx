@@ -24,6 +24,7 @@ import {
   computeTimerAwareAtmosphereState,
   createNeutralFluidDataTexture,
 } from '../utils/infinityAuroraEngine';
+import { CelestialJelly3DSceneController } from './CelestialJelly3DScene';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
@@ -363,27 +364,46 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       quantumParticles.renderOrder = 2;
       threeScene.add(quantumParticles);
 
+      // 6b. Modular 3D Celestial Jellyfish Controller (shares threeScene & renderer)
+      const celestialJellyController = new CelestialJelly3DSceneController({
+        parentScene: threeScene,
+        pixelRatio,
+        isSoftwareGl,
+        initialScene: liveStateRef.current.scene,
+        initialPhase: liveStateRef.current.phase,
+      });
+
       // Pre-warm shaders on hardware GPUs
       if (!isSoftwareGl) {
         renderer.compile(threeScene, camera);
       }
 
-      // Pointer tracking for subtle interactive fluid wake
+      // Pointer tracking for subtle interactive fluid wake & 3D organism deflection
       let targetPtrX = 0.5;
       let targetPtrY = 0.5;
       let currentPtrX = 0.5;
       let currentPtrY = 0.5;
+      let pointerActive = false;
+      let currentW = width;
+      let currentH = height;
 
       const onPointerMove = (e: PointerEvent) => {
         targetPtrX = e.clientX / Math.max(1, window.innerWidth);
         targetPtrY = 1.0 - e.clientY / Math.max(1, window.innerHeight);
+        pointerActive = true;
+      };
+      const onPointerLeave = () => {
+        pointerActive = false;
       };
       window.addEventListener('pointermove', onPointerMove, { passive: true });
+      window.addEventListener('pointerleave', onPointerLeave, { passive: true });
 
       const onResize = () => {
         if (!container || !renderer) return;
         const w = container.clientWidth || window.innerWidth;
         const h = container.clientHeight || window.innerHeight;
+        currentW = w;
+        currentH = h;
         camera.aspect = w / Math.max(1, h);
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
@@ -449,10 +469,11 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
         const state = liveStateRef.current;
 
-        const audioAmp =
+        const audioBands =
           state.audioReactive && state.status === 'running'
-            ? soundEngine.getAudioAmplitude()
-            : 0;
+            ? soundEngine.getAudioBands()
+            : { bass: 0, mid: 0, treble: 0, overall: 0 };
+        const audioAmp = audioBands.overall;
 
         const secondsSinceStart =
           sessionStartMsRef.current > 0
@@ -627,6 +648,25 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         particlesUniforms.uColorCyan.value.copy(currentCyan);
         particlesUniforms.uColorMagenta.value.copy(currentMagenta);
 
+        // Update 3D Celestial Jellyfish Controller
+        celestialJellyController.update({
+          orbDesign: state.orbDesign,
+          scene: state.scene,
+          status: state.status,
+          phase: state.phase,
+          totalSeconds: state.totalSeconds || 2700,
+          progress: state.progress,
+          audioBands,
+          reducedMotion: state.reducedMotion,
+          dt,
+          pointerNormX: currentPtrX,
+          pointerNormY: currentPtrY,
+          pointerActive,
+          viewportWidth: currentW,
+          viewportHeight: currentH,
+          camera,
+        });
+
         activeRenderer.render(threeScene, camera);
 
         if (isSoftwareGl) {
@@ -643,12 +683,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         cancelAnimationFrame(frameId);
         clearTimeout(frameId);
         window.removeEventListener('pointermove', onPointerMove);
+        window.removeEventListener('pointerleave', onPointerLeave);
         window.removeEventListener('resize', onResize);
         activeRenderer.domElement.removeEventListener(
           'webglcontextlost',
           onContextLost
         );
 
+        celestialJellyController.dispose();
         fluidPipeline?.dispose();
         neutralFluidTex?.dispose();
         webgpuDevice?.destroy?.();

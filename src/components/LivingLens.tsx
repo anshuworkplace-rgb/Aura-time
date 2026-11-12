@@ -21,10 +21,8 @@ import {
   computeJellyBellContraction,
   computeOrbStateParameters,
   computeThemeOrganismPalette,
-  createJellyTentacles,
   generateBloomPetals,
   rgbaString,
-  stepJellyTentacles,
 } from '../utils/organicOrbEngine';
 import { soundEngine } from '../utils/soundSynthesizer';
 import { AuraButton } from './AuraButton';
@@ -202,9 +200,6 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       phase: idx * 0.67,
     }));
 
-    // Procedural Spring-Spline Tentacles for Celestial Jelly
-    const jellyTentacles = createJellyTentacles(size / 2, 304);
-
     let animId = 0;
     let time = 0;
     let lastDraw = 0;
@@ -248,70 +243,6 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         const y = cy + Math.sin(theta) * r;
         if (i === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
-      }
-      ctx.closePath();
-    };
-
-    // ------------------------------------------------------------------------
-    // Helper: Celestial Jelly Bell Umbrella Path
-    // ------------------------------------------------------------------------
-    const traceJellyBellPath = (
-      bellCx: number,
-      bellCy: number,
-      rx: number,
-      ry: number,
-      marginPhase: number,
-      ptrX: number | null,
-      ptrY: number | null,
-      scaleFactor = 1.0
-    ) => {
-      const sRx = rx * scaleFactor;
-      const sRy = ry * scaleFactor;
-      const domeSamples = 56;
-      const marginSamples = 48;
-
-      ctx.beginPath();
-      // Upper umbrella dome (from left margin PI to right margin 0)
-      for (let i = 0; i <= domeSamples; i++) {
-        const u = i / domeSamples; // 0 .. 1
-        const angle = Math.PI * (1 - u); // PI .. 0
-        const domeProfile = Math.sin(angle);
-        // Gentle skirt flare near the lower bell margin
-        const skirtFlare = 1 + Math.pow(1 - domeProfile, 2.2) * 0.06;
-        const rawX = bellCx + Math.cos(angle) * sRx * skirtFlare;
-        const rawY =
-          bellCy -
-          Math.pow(domeProfile, 0.94) * sRy +
-          Math.sin(angle * 4 + marginPhase) * 1.8 * domeProfile;
-
-        let defX = 0;
-        let defY = 0;
-        if (ptrX !== null && ptrY !== null) {
-          const dx = rawX - ptrX;
-          const dy = rawY - ptrY;
-          const d = Math.hypot(dx, dy);
-          if (d < 130 && d > 1) {
-            const f = (1 - d / 130) * 11;
-            defX = (dx / d) * f;
-            defY = (dy / d) * f;
-          }
-        }
-
-        if (i === 0) ctx.moveTo(rawX + defX, rawY + defY);
-        else ctx.lineTo(rawX + defX, rawY + defY);
-      }
-
-      // Scalloped subumbrella margin (right +sRx*1.06 back to left -sRx*1.06)
-      for (let j = 1; j <= marginSamples; j++) {
-        const v = j / marginSamples; // 0 .. 1
-        const xRatio = 1 - v * 2; // +1 .. -1
-        const arch = Math.cos(xRatio * Math.PI * 0.5);
-        const lappetWave =
-          Math.sin(v * Math.PI * 10 + marginPhase) * 5.2 * arch +
-          Math.cos(v * Math.PI * 5 - marginPhase * 0.7) * 2.8 * arch;
-        const mx = bellCx + xRatio * sRx * 1.06;
-        const my = bellCy + arch * (24 * scaleFactor) + lappetWave;
-        ctx.lineTo(mx, my);
       }
       ctx.closePath();
     };
@@ -520,31 +451,21 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       }
 
       // ======================================================================
-      // BRANCH 1: CELESTIAL JELLY — BIOLUMINESCENT PELAGIC ORGANISM
+      // BRANCH 1: CELESTIAL JELLY — 3D PROCEDURAL PELAGIC ORGANISM OVERLAY
+      // (The 3D 16-lobe bell, inner manubrium, 8 ruffled oral arms, 16 marginal
+      //  filaments, 8 pinnate fronds, bioluminescent nodes, and plankton are
+      //  rendered in real-time 3D by CelestialJelly3DSceneController in the
+      //  shared Three.js renderer. Here we render only the subtle optical bridge
+      //  halo and central numeral readability scrim.)
       // ======================================================================
       if (p.orbDesign === 'celestial-jelly') {
         const bellDyn = computeJellyBellContraction(time);
-        const floatOffsetX = Math.sin(time * 0.42) * 8;
-        const floatOffsetY =
-          Math.cos(time * 0.55) * 7 - bellDyn.contraction * 11;
-        const bellCx = cx + floatOffsetX;
-        const bellCy = cy - 22 + floatOffsetY;
-        const bellRx =
-          (176 + bands.bass * 16) *
-          bellDyn.radialScale *
-          stateParams.expansionScale;
-        const bellRy =
-          (148 + bands.mid * 12) *
-          bellDyn.verticalStretch *
-          stateParams.expansionScale;
-
-        // 1. Wide Pelagic Bioluminescent Halo bridging the ORB into the WebGL field
-        const haloRadius = 296 + bellDyn.contraction * 14;
+        const haloRadius = 294 + bellDyn.contraction * 10;
         const halo = ctx.createRadialGradient(
-          bellCx,
+          cx,
           cy,
-          16,
-          bellCx,
+          36,
+          cx,
           cy,
           haloRadius
         );
@@ -552,345 +473,17 @@ export const LivingLens: React.FC<LivingLensProps> = ({
           0,
           rgbaString(
             palette.primaryRgb,
-            (0.42 + bellDyn.contraction * 0.08) * stateParams.luminescence
+            0.06 * stateParams.luminescence
           )
         );
         halo.addColorStop(
-          0.45,
-          rgbaString(palette.secondaryRgb, 0.24 * stateParams.luminescence)
-        );
-        halo.addColorStop(
-          0.76,
-          rgbaString(palette.tertiaryRgb, 0.1 * stateParams.luminescence)
+          0.55,
+          rgbaString(palette.secondaryRgb, 0.04 * stateParams.luminescence)
         );
         halo.addColorStop(1, 'rgba(7, 8, 18, 0)');
         ctx.fillStyle = halo;
         ctx.beginPath();
-        ctx.arc(bellCx, cy, haloRadius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // 2. Step Spring-Spline Tentacles Physics
-        stepJellyTentacles(
-          jellyTentacles,
-          bellCx,
-          bellCy + 8,
-          bellRx,
-          bellDyn,
-          time,
-          dt,
-          ptr.x,
-          ptr.y,
-          stateParams.motionSpeed
-        );
-
-        // Helper to draw a group of tentacles
-        const renderTentacleGroup = (filterBack: boolean) => {
-          for (const t of jellyTentacles) {
-            const isBack = t.id % 2 === 0 && t.kind !== 'oral-arm';
-            if (isBack !== filterBack) continue;
-
-            const nodes = t.nodes;
-            if (nodes.length < 2) continue;
-
-            const tRgb =
-              t.colorVariant === 0
-                ? palette.secondaryRgb
-                : t.colorVariant === 1
-                ? palette.primaryRgb
-                : palette.iridescentRgb;
-            const tipNode = nodes[nodes.length - 1];
-
-            const grad = ctx.createLinearGradient(
-              nodes[0].x,
-              nodes[0].y,
-              tipNode.x,
-              tipNode.y
-            );
-            const alphaScale = filterBack ? 0.48 : 0.82;
-            grad.addColorStop(
-              0,
-              rgbaString(palette.primaryRgb, 0.55 * alphaScale)
-            );
-            grad.addColorStop(
-              0.55,
-              rgbaString(tRgb, 0.42 * alphaScale * stateParams.luminescence)
-            );
-            grad.addColorStop(
-              1,
-              rgbaString(palette.iridescentRgb, 0.12 * alphaScale)
-            );
-
-            ctx.strokeStyle = grad;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.lineWidth =
-              t.baseThickness *
-              (t.kind === 'oral-arm'
-                ? 1 + 0.2 * Math.sin(time * 1.4 + t.id)
-                : 1);
-
-            ctx.beginPath();
-            ctx.moveTo(nodes[0].x, nodes[0].y);
-            for (let k = 1; k < nodes.length - 1; k++) {
-              const xc = (nodes[k].x + nodes[k + 1].x) * 0.5;
-              const yc = (nodes[k].y + nodes[k + 1].y) * 0.5;
-              ctx.quadraticCurveTo(nodes[k].x, nodes[k].y, xc, yc);
-            }
-            ctx.lineTo(tipNode.x, tipNode.y);
-            ctx.stroke();
-
-            // Oral arms get a delicate second ruffled translucent ribbon edge
-            if (t.kind === 'oral-arm') {
-              ctx.strokeStyle = rgbaString(
-                palette.secondaryRgb,
-                0.28 * stateParams.luminescence
-              );
-              ctx.lineWidth = 1.6;
-              ctx.beginPath();
-              for (let k = 0; k < nodes.length; k++) {
-                const ruffle =
-                  Math.sin(k * 1.3 - time * 2.2 + t.id) * (6.5 - k * 0.35);
-                const rx = nodes[k].x + ruffle;
-                const ry = nodes[k].y;
-                if (k === 0) ctx.moveTo(rx, ry);
-                else ctx.lineTo(rx, ry);
-              }
-              ctx.stroke();
-            }
-
-            // Independently moving luminous nematocyst tip
-            const tipGlow = ctx.createRadialGradient(
-              tipNode.x,
-              tipNode.y,
-              0.5,
-              tipNode.x,
-              tipNode.y,
-              8
-            );
-            tipGlow.addColorStop(
-              0,
-              rgbaString(palette.iridescentRgb, 0.85 * alphaScale)
-            );
-            tipGlow.addColorStop(0.5, rgbaString(tRgb, 0.45 * alphaScale));
-            tipGlow.addColorStop(1, 'rgba(0,0,0,0)');
-            ctx.fillStyle = tipGlow;
-            ctx.beginPath();
-            ctx.arc(tipNode.x, tipNode.y, 8, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        };
-
-        // 3. Render Background Tentacles (behind subumbrella)
-        renderTentacleGroup(true);
-
-        // 4. Render Volumetric Bell Dome & Internal Bioluminescent World
-        ctx.save();
-        traceJellyBellPath(
-          bellCx,
-          bellCy,
-          bellRx,
-          bellRy,
-          bellDyn.marginWavePhase,
-          ptr.x,
-          ptr.y,
-          1.0
-        );
-        ctx.clip();
-
-        // Subsurface Mesoglea Translucent Fill
-        const domeGrad = ctx.createRadialGradient(
-          bellCx,
-          bellCy - bellRy * 0.45,
-          14,
-          bellCx,
-          bellCy,
-          bellRx * 1.15
-        );
-        domeGrad.addColorStop(
-          0,
-          rgbaString(
-            palette.primaryRgb,
-            0.46 * bellDyn.subsurfacePulse * stateParams.luminescence
-          )
-        );
-        domeGrad.addColorStop(
-          0.52,
-          rgbaString(palette.secondaryRgb, 0.28 * stateParams.luminescence)
-        );
-        domeGrad.addColorStop(0.85, rgbaString(palette.tertiaryRgb, 0.22));
-        domeGrad.addColorStop(
-          1,
-          rgbaString(palette.iridescentRgb, 0.38 * stateParams.luminescence)
-        );
-        ctx.fillStyle = domeGrad;
-        ctx.fillRect(0, 0, size, size);
-
-        // Internal Gonad / Manubrium Bioluminescent Core Rings
-        ctx.globalCompositeOperation = 'screen';
-        for (let ring = 0; ring < 3; ring++) {
-          const coreR =
-            (44 + ring * 22) * (0.9 + bellDyn.contraction * 0.16);
-          const coreGrad = ctx.createRadialGradient(
-            bellCx,
-            bellCy - bellRy * 0.28,
-            4,
-            bellCx,
-            bellCy - bellRy * 0.28,
-            coreR
-          );
-          coreGrad.addColorStop(
-            0,
-            rgbaString(palette.iridescentRgb, 0.35 - ring * 0.08)
-          );
-          coreGrad.addColorStop(
-            0.6,
-            rgbaString(palette.secondaryRgb, 0.24 - ring * 0.05)
-          );
-          coreGrad.addColorStop(1, 'rgba(0,0,0,0)');
-          ctx.fillStyle = coreGrad;
-          ctx.beginPath();
-          ctx.ellipse(
-            bellCx,
-            bellCy - bellRy * 0.28,
-            coreR * 1.15,
-            coreR * 0.72,
-            0,
-            0,
-            Math.PI * 2
-          );
-          ctx.fill();
-        }
-
-        // 8 Radial Gastrovascular Bioluminescent Canals along the 3D bell dome
-        const canalCount = 8;
-        for (let c = 0; c < canalCount; c++) {
-          const frac = (c / (canalCount - 1)) * 2 - 1; // -1 .. 1
-          const pulseWave =
-            0.5 + 0.5 * Math.sin(time * 2.1 - Math.abs(frac) * 2.0 + c);
-          ctx.strokeStyle = rgbaString(
-            c % 2 === 0 ? palette.secondaryRgb : palette.iridescentRgb,
-            (0.18 + pulseWave * 0.24) * stateParams.luminescence
-          );
-          ctx.lineWidth = 1.45;
-          ctx.beginPath();
-          ctx.moveTo(
-            bellCx + frac * 18,
-            bellCy - bellRy * 0.88 + Math.abs(frac) * 5
-          );
-          ctx.bezierCurveTo(
-            bellCx + frac * bellRx * 0.54,
-            bellCy - bellRy * 0.82,
-            bellCx + frac * bellRx * 0.92,
-            bellCy - bellRy * 0.36,
-            bellCx + frac * bellRx * 0.96,
-            bellCy + Math.cos(frac * Math.PI * 0.5) * 18
-          );
-          ctx.stroke();
-        }
-
-        // Circulating internal bioluminescent organelles & caustic particles
-        ctx.globalCompositeOperation = 'screen';
-        for (const pt of particles) {
-          if (!p.reducedMotion && p.status !== 'paused') {
-            pt.x += pt.vx * stateParams.particleSpeed;
-            pt.y +=
-              (pt.vy - bellDyn.contraction * 0.22) * stateParams.particleSpeed;
-            if (ptr.x !== null && ptr.y !== null) {
-              const dx = bellCx + pt.x - ptr.x;
-              const dy = bellCy - 20 + pt.y - ptr.y;
-              const d = Math.hypot(dx, dy);
-              if (d < 110 && d > 1) {
-                pt.x += (dx / d) * 1.6;
-                pt.y += (dy / d) * 1.6;
-              }
-            }
-            if (Math.hypot(pt.x, pt.y) > 165) {
-              pt.x *= -0.82;
-              pt.y *= -0.82;
-            }
-          }
-          const cRgb =
-            pt.hueShift === 0
-              ? palette.iridescentRgb
-              : pt.hueShift === 1
-              ? palette.secondaryRgb
-              : palette.primaryRgb;
-          ctx.fillStyle = rgbaString(
-            cRgb,
-            pt.alpha * (0.5 + 0.5 * Math.sin(time * 1.6 + pt.phase))
-          );
-          ctx.beginPath();
-          ctx.arc(
-            bellCx + pt.x * 0.85,
-            bellCy - 28 + pt.y * 0.65,
-            pt.r,
-            0,
-            Math.PI * 2
-          );
-          ctx.fill();
-        }
-
-        ctx.restore(); // End Bell Clip
-
-        // 5. Outer Fresnel Iridescent Bell Rim & Double Membrane Highlight
-        traceJellyBellPath(
-          bellCx,
-          bellCy,
-          bellRx,
-          bellRy,
-          bellDyn.marginWavePhase,
-          ptr.x,
-          ptr.y,
-          1.0
-        );
-        const bellRimGrad = ctx.createLinearGradient(
-          bellCx - bellRx,
-          bellCy - bellRy,
-          bellCx + bellRx,
-          bellCy + 30
-        );
-        bellRimGrad.addColorStop(
-          0,
-          rgbaString(palette.iridescentRgb, 0.72 * stateParams.luminescence)
-        );
-        bellRimGrad.addColorStop(
-          0.5,
-          rgbaString(palette.secondaryRgb, 0.58 * stateParams.luminescence)
-        );
-        bellRimGrad.addColorStop(
-          1,
-          rgbaString(palette.primaryRgb, 0.64 * stateParams.luminescence)
-        );
-        ctx.strokeStyle = bellRimGrad;
-        ctx.lineWidth = 2.0;
-        ctx.stroke();
-
-        // Inner mesoglea membrane contour
-        traceJellyBellPath(
-          bellCx,
-          bellCy + 4,
-          bellRx,
-          bellRy,
-          bellDyn.marginWavePhase + 0.4,
-          ptr.x,
-          ptr.y,
-          0.88
-        );
-        ctx.strokeStyle = rgbaString(palette.secondaryRgb, 0.24);
-        ctx.lineWidth = 1.1;
-        ctx.stroke();
-
-        // 6. Render Foreground Tentacles & Ruffled Oral Arms
-        renderTentacleGroup(false);
-
-        // 7. Gentle Optical Depth Scrim behind central timer numerals
-        const textScrim = ctx.createRadialGradient(cx, cy, 12, cx, cy, 155);
-        textScrim.addColorStop(0, 'rgba(8, 10, 24, 0.44)');
-        textScrim.addColorStop(0.65, 'rgba(8, 10, 24, 0.18)');
-        textScrim.addColorStop(1, 'rgba(8, 10, 24, 0)');
-        ctx.fillStyle = textScrim;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 155, 0, Math.PI * 2);
+        ctx.arc(cx, cy, haloRadius, 0, Math.PI * 2);
         ctx.fill();
       }
 
@@ -1331,19 +924,24 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       // SHARED: PROGRESS REFRACTION ARC AROUND THE PERIMETER WHEN ACTIVE
       // ======================================================================
       if (p.status === 'running' || p.status === 'paused') {
-        const progressArcRadius = 224;
+        const isJelly3D = p.orbDesign === 'celestial-jelly';
+        const progressArcRadius = isJelly3D ? 286 : 224;
         const startAng = -Math.PI / 2;
         const remainingRatio = Math.max(0.01, 1 - p.progress);
         const endAng = startAng + Math.PI * 2 * remainingRatio;
 
-        ctx.strokeStyle = 'rgba(245, 246, 255, 0.08)';
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = isJelly3D
+          ? 'rgba(245, 246, 255, 0.04)'
+          : 'rgba(245, 246, 255, 0.08)';
+        ctx.lineWidth = isJelly3D ? 1.0 : 1.5;
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, 0, Math.PI * 2);
         ctx.stroke();
 
-        ctx.strokeStyle = palette.secondaryHex;
-        ctx.lineWidth = 2.8;
+        ctx.strokeStyle = isJelly3D
+          ? rgbaString(palette.secondaryRgb, 0.28)
+          : palette.secondaryHex;
+        ctx.lineWidth = isJelly3D ? 1.25 : 2.8;
         ctx.lineCap = 'round';
         ctx.beginPath();
         ctx.arc(cx, cy, progressArcRadius, startAng, endAng);
@@ -1352,9 +950,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
         // Luminous leading droplet
         const tx = cx + Math.cos(endAng) * progressArcRadius;
         const ty = cy + Math.sin(endAng) * progressArcRadius;
-        ctx.fillStyle = '#F5F6FF';
+        ctx.fillStyle = isJelly3D ? 'rgba(245, 246, 255, 0.58)' : '#F5F6FF';
         ctx.beginPath();
-        ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+        ctx.arc(tx, ty, isJelly3D ? 2.4 : 4, 0, Math.PI * 2);
         ctx.fill();
       }
 
