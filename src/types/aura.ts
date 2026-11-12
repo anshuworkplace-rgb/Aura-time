@@ -26,8 +26,31 @@ export type LegacyChamberId =
 
 export type OrbDesignId = 'original' | 'celestial-jelly' | 'living-bloom';
 
+export type NavigationTab = 'focus' | 'restore' | 'reflect' | 'profile';
+
+export type SoundCategory = 'focus' | 'restore';
+
+export type RestoreModeId = 'breathing' | 'quiet-moment';
+
+export type RestoreEnvironmentId =
+  | 'rain-garden'
+  | 'ocean-drift'
+  | 'forest-stillness'
+  | 'celestial-night';
+
+export type BreathingPresetId =
+  | 'coherent-calm'
+  | 'deep-rest'
+  | 'box-breath'
+  | 'simple-flow'
+  | 'custom';
+
+export type QuietMomentPresetId = 'reset-2m' | 'calm-5m' | 'pause-10m';
+
 export type TimerStatus = 'idle' | 'running' | 'paused' | 'completed';
 export type TimerPhase = 'focus' | 'break';
+
+export type SessionCompletionStatus = 'completed' | 'interrupted';
 
 export type ActiveOverlay =
   | 'none'
@@ -69,6 +92,9 @@ export interface ChamberConfig {
   description: string;
   primaryHex: string;
   secondaryHex: string;
+  category?: SoundCategory;
+  restoreLabel?: string;
+  focusLabel?: string;
   materialEffect:
     | 'droplets'
     | 'tidal-refraction'
@@ -83,7 +109,20 @@ export interface ChamberConfig {
 export interface SessionRecord {
   id: string;
   label: string;
+  /** Actual focused duration in minutes credited toward daily and weekly totals */
   durationMinutes: number;
+  /** Planned target duration in minutes when the session began */
+  plannedMinutes?: number;
+  /** Explicit actual focused duration in minutes */
+  actualMinutes?: number;
+  /** Measured elapsed focused time in seconds */
+  actualFocusedSeconds?: number;
+  /** Whether the session reached natural completion or was ended early */
+  completionStatus?: SessionCompletionStatus;
+  /** Selected organism during the session */
+  orbDesign?: OrbDesignId;
+  /** Marks initial deterministic demo records so users can distinguish or clear them */
+  isSeed?: boolean;
   completedAt: string; // ISO timestamp
   isoDate: string; // YYYY-MM-DD
   hourOfDay: number; // 0..23
@@ -91,15 +130,58 @@ export interface SessionRecord {
   chamberId: ChamberId;
 }
 
+export interface RestoreSessionRecord {
+  id: string;
+  mode: RestoreModeId;
+  title: string;
+  elapsedSeconds: number;
+  environmentId: RestoreEnvironmentId;
+  completedAt: string; // ISO timestamp
+  isoDate: string; // YYYY-MM-DD
+}
+
+export interface BreathingPatternConfig {
+  id: BreathingPresetId;
+  name: string;
+  subtitle: string;
+  description: string;
+  inhaleSeconds: number;
+  holdInSeconds: number;
+  exhaleSeconds: number;
+  holdOutSeconds: number;
+}
+
+export interface QuietMomentConfig {
+  id: QuietMomentPresetId;
+  name: string;
+  durationMinutes: number;
+  subtitle: string;
+  guidance: string;
+}
+
+export interface RestoreEnvironmentConfig {
+  id: RestoreEnvironmentId;
+  name: string;
+  tagline: string;
+  description: string;
+  sceneId: FocusSceneId;
+  chamberId: ChamberId;
+  primaryHex: string;
+  secondaryHex: string;
+}
+
 export type PerformanceMode = 'auto' | 'balanced' | 'ultra';
 export type PerformanceProfileTier = 'ultra' | 'balanced';
 
 export interface UserSettings {
   dailyGoalMinutes: number;
+  weeklyGoalMinutes?: number;
+  dailySessionsGoal?: number;
   breakMinutes: number;
   ambienceVolume: number; // 0..1
   secondaryVolume: number; // 0..1
   alertVolume: number; // 0..1
+  soundMuted?: boolean;
   audioReactive: boolean;
   reducedMotion: boolean;
   highContrast: boolean;

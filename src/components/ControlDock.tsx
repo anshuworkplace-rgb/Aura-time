@@ -165,6 +165,14 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 }}
                 isSoundPlaying={isSoundPlaying}
                 onToggleSound={onToggleSound}
+                ambienceVolume={settings.ambienceVolume}
+                onChangeAmbienceVolume={(vol) =>
+                  onUpdateSettings({ ambienceVolume: vol, soundMuted: false })
+                }
+                alertVolume={settings.alertVolume}
+                onChangeAlertVolume={(vol) =>
+                  onUpdateSettings({ alertVolume: vol })
+                }
                 onClose={() => setOpenGroup(null)}
                 reducedMotion={settings.reducedMotion}
               />
@@ -234,7 +242,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Unified Compact Control Bar: [Play/Pause] [Reset] | [Time] | [Soundscape] | [Atmosphere] | [Settings] */}
+      {/* Unified Compact Control Bar: [Play/Pause] [Reset] [Active Controls] | [Time] | [Soundscape] | [Atmosphere] | [Settings] */}
       <div className="flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]">
         {/* Primary Session Action: Play / Pause / Resume */}
         {onPrimaryAction && (
@@ -283,6 +291,50 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         >
           <RotateCcw className="w-3.5 h-3.5" />
         </button>
+
+        {/* Active Session Direct Actions: Extend +5m, End Session, Minimal Mode */}
+        {(status === 'running' || status === 'paused') && (
+          <>
+            <button
+              type="button"
+              data-testid="dock-extend-5m-btn"
+              onClick={() => onAddMinutes(5)}
+              title="Extend session by 5 minutes"
+              className="px-2 sm:px-2.5 py-1.5 rounded-full text-[11px] font-mono text-[#2FE8FF] hover:bg-[#2FE8FF]/14 transition-colors cursor-pointer shrink-0"
+            >
+              +5m
+            </button>
+            <button
+              type="button"
+              data-testid="dock-end-session-btn"
+              onClick={() => {
+                setOpenGroup(null);
+                onCompleteSession();
+              }}
+              title="End session and log actual focused time"
+              className="px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-medium text-[#FFB08A] hover:bg-[#FFB08A]/14 transition-colors cursor-pointer shrink-0"
+            >
+              End Session
+            </button>
+            <button
+              type="button"
+              data-testid="dock-minimal-mode-btn"
+              onClick={() =>
+                onChangeImmersionMode(
+                  immersionMode === 'minimal' ? 'balanced' : 'minimal'
+                )
+              }
+              title="Toggle minimal distraction-free mode (M)"
+              className={`hidden md:inline-flex px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer shrink-0 ${
+                immersionMode === 'minimal'
+                  ? 'bg-[#2FE8FF]/20 text-[#2FE8FF]'
+                  : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
+              }`}
+            >
+              {immersionMode === 'minimal' ? 'Exit Minimal' : 'Minimal Mode'}
+            </button>
+          </>
+        )}
 
         <span
           className="hidden sm:block w-[1px] h-4 bg-white/10 mx-0.5 shrink-0"

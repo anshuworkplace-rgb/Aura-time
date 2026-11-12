@@ -1,9 +1,9 @@
 import React from 'react';
 import { TimerStatus } from '../types/aura';
 import {
+  FOCUS_PRESET_MINUTES,
   MAX_SCRUB_MINUTES,
   MIN_SCRUB_MINUTES,
-  SNAP_PRESET_MINUTES,
 } from '../utils/focusEngine';
 import { AuraButton } from './AuraButton';
 import { Clock, Plus, Minus, Compass } from 'lucide-react';
@@ -90,18 +90,19 @@ export const TimeControlPanel: React.FC<TimeControlPanelProps> = ({
         </div>
       </div>
 
-      {/* Quick Magnetic Duration Presets (25, 45, 60, 90 min) */}
+      {/* Curated Session Duration Presets (15, 25, 45, 50, 60, 90 min) */}
       <div className="flex flex-col gap-2">
         <span className="text-[11px] text-[#A3A1BA]">
-          Magnetic Duration Presets
+          Session Presets (Remembered Automatically)
         </span>
-        <div className="grid grid-cols-4 gap-1.5">
-          {SNAP_PRESET_MINUTES.map((preset) => {
+        <div className="grid grid-cols-3 gap-1.5">
+          {FOCUS_PRESET_MINUTES.map((preset) => {
             const isCurrent = durationMinutes === preset;
             return (
               <button
                 key={preset}
                 type="button"
+                data-testid={`time-preset-${preset}m`}
                 onClick={() => onChangeDuration(preset)}
                 className={`py-2 rounded-xl font-mono tabular-nums text-xs font-medium transition-colors border cursor-pointer ${
                   isCurrent

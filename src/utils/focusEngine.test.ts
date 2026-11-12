@@ -677,3 +677,158 @@ test('Intelligent Mobile Performance Engine detects smartphone vs desktop capabi
   assert.equal(sample2.rollingFps > 35 && sample2.rollingFps <= 60, true);
   assert.equal(buildPerformanceProfile('balanced', mobileCaps).profileId, 'balanced');
 });
+
+test('Stage 2: createActualSessionRecord strictly credits actual elapsed time and distinguishes completed vs interrupted sessions', async () => {
+  const { createActualSessionRecord } = await import('./focusEngine');
+
+  // 1. Accidental immediate stop (< 15 seconds elapsed) returns null and does not pollute history
+  const accidental = createActualSessionRecord({
+    label: 'Physics chapter',
+    plannedTotalSeconds: 2700,
+    remainingSecondsAtEnd: 2692,
+    endedEarly: true,
+    sceneId: 'electric-quiet',
+    chamberId: 'ocean-drift',
+    orbDesign: 'celestial-jelly',
+  });
+  assert.equal(accidental, null);
+
+  // 2. Early stop after 12 minutes of a 45-minute planned session records 12m actual, 45m planned, and 'interrupted' status
+  const earlyStop = createActualSessionRecord({
+    label: 'Complete my physics chapter',
+    plannedTotalSeconds: 45 * 60,
+    remainingSecondsAtEnd: 33 * 60,
+    endedEarly: true,
+    sceneId: 'electric-quiet',
+    chamberId: 'ocean-drift',
+    orbDesign: 'celestial-jelly',
+    nowDate: new Date('2026-11-12T14:30:00Z'),
+  });
+  assert.notEqual(earlyStop, null);
+  assert.equal(earlyStop?.plannedMinutes, 45);
+  assert.equal(earlyStop?.actualMinutes, 12);
+  assert.equal(earlyStop?.durationMinutes, 12); // Never awards planned time when actual time was lower
+  assert.equal(earlyStop?.completionStatus, 'interrupted');
+
+  // 3. Full natural completion of a 25-minute session records 25m actual, 25m planned, and 'completed' status
+  const completed = createActualSessionRecord({
+    label: 'Build my website',
+    plannedTotalSeconds: 25 * 60,
+    remainingSecondsAtEnd: 0,
+    endedEarly: false,
+    sceneId: 'deep-current',
+    chamberId: 'rain-chamber',
+    orbDesign: 'living-bloom',
+    nowDate: new Date('2026-11-12T16:00:00Z'),
+  });
+  assert.notEqual(completed, null);
+  assert.equal(completed?.plannedMinutes, 25);
+  assert.equal(completed?.actualMinutes, 25);
+  assert.equal(completed?.durationMinutes, 25);
+  assert.equal(completed?.completionStatus, 'completed');
+});
+
+test('Stage 2: Reflect TodaySummary, WeeklyOverview, PersonalFocusPatterns (including empty state), and My Aura Garden rules work accurately', async () => {
+  const {
+    calculateTodaySummary,
+    calculateWeeklyOverview,
+    calculatePersonalFocusPatterns,
+    computeAuraGardenState,
+    calculateBreathingPhaseAtTime,
+    BREATHING_PRESETS,
+    QUIET_MOMENT_PRESETS,
+    RESTORE_ENVIRONMENTS,
+    FOCUS_PRESET_MINUTES,
+    CATEGORIZED_SOUND_OPTIONS,
+  } = await import('./focusEngine');
+
+  // Verify presets and categories
+  assert.deepEqual(FOCUS_PRESET_MINUTES, [15, 25, 45, 50, 60, 90]);
+  assert.equal(
+    CATEGORIZED_SOUND_OPTIONS.filter((s) => s.category === 'focus').length,
+    4
+  );
+  assert.equal(
+    CATEGORIZED_SOUND_OPTIONS.filter((s) => s.category === 'restore').length,
+    4
+  );
+  assert.equal(RESTORE_ENVIRONMENTS.length, 4);
+  assert.equal(QUIET_MOMENT_PRESETS.length, 3);
+  assert.equal(BREATHING_PRESETS.length >= 4, true);
+
+  // Verify breathing phase calculation
+  const boxPreset = BREATHING_PRESETS.find((b) => b.id === 'box-4-4-4-4')!;
+  const inhalePhase = calculateBreathingPhaseAtTime(boxPreset, 2.0);
+  assert.equal(inhalePhase.phase, 'inhale');
+  assert.equal(inhalePhase.expansion > 0 && inhalePhase.expansion < 1, true);
+  const holdInPhase = calculateBreathingPhaseAtTime(boxPreset, 5.0);
+  assert.equal(holdInPhase.phase, 'hold-in');
+  assert.equal(holdInPhase.expansion, 1);
+
+  // Verify empty state for PersonalFocusPatterns and AuraGarden
+  const emptyPatterns = calculatePersonalFocusPatterns([]);
+  assert.equal(emptyPatterns.hasData, false);
+  assert.equal(emptyPatterns.frequentLengths.length, 0);
+
+  const emptyGarden = computeAuraGardenState([], 600, '2026-11-12');
+  assert.equal(emptyGarden.totalCompletedSessions, 0);
+  assert.equal(emptyGarden.growthStageIndex, 0);
+  assert.equal(emptyGarden.floraNodes.length, 0);
+
+  // Verify mixed completed + interrupted sessions
+  const sampleSessions: SessionRecord[] = [
+    {
+      id: 's1',
+      label: 'Finish my assignment',
+      durationMinutes: 45,
+      plannedMinutes: 45,
+      actualMinutes: 45,
+      completionStatus: 'completed',
+      completedAt: '2026-11-12T09:30:00Z',
+      isoDate: '2026-11-12',
+      hourOfDay: 9,
+      sceneId: 'electric-quiet',
+      chamberId: 'ocean-drift',
+      orbDesign: 'celestial-jelly',
+    },
+    {
+      id: 's2',
+      label: 'Read 30 pages',
+      durationMinutes: 15,
+      plannedMinutes: 45,
+      actualMinutes: 15,
+      completionStatus: 'interrupted',
+      completedAt: '2026-11-12T14:00:00Z',
+      isoDate: '2026-11-12',
+      hourOfDay: 14,
+      sceneId: 'deep-current',
+      chamberId: 'rain-chamber',
+      orbDesign: 'living-bloom',
+    },
+  ];
+
+  const todaySum = calculateTodaySummary(sampleSessions, 120, '2026-11-12');
+  assert.equal(todaySum.actualMinutes, 60); // 45 + 15 actual minutes
+  assert.equal(todaySum.completedCount, 1);
+  assert.equal(todaySum.interruptedCount, 1);
+  assert.equal(todaySum.goalProgressPercent, 50);
+  assert.equal(todaySum.intentions.length, 2);
+
+  const weekly = calculateWeeklyOverview(sampleSessions, 600, '2026-11-12');
+  assert.equal(weekly.totalActualMinutes, 60);
+  assert.equal(weekly.totalCompletedSessions, 1);
+  assert.equal(weekly.weeklyGoalProgressPercent, 10);
+
+  const garden = computeAuraGardenState(sampleSessions, 600, '2026-11-12');
+  // Interrupted sessions do not increment totalCompletedSessions or award full completion bloom
+  assert.equal(garden.totalCompletedSessions, 1);
+  assert.equal(
+    garden.floraNodes.filter((n) => n.completed).length,
+    1
+  );
+  assert.equal(
+    garden.floraNodes.filter((n) => !n.completed).length,
+    1
+  );
+});
+

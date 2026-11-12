@@ -5,10 +5,13 @@ import {
   FocusSceneConfig,
   OrbDesignId,
   PerformanceMode,
+  SessionRecord,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
 import {
+  FOCUS_PRESET_MINUTES,
+  SESSION_INTENTION_SUGGESTIONS,
   SNAP_PRESET_MINUTES,
   formatRemainingTime,
   minutesToRadialFraction,
@@ -53,8 +56,10 @@ interface LivingLensProps {
   performanceMode?: PerformanceMode;
   timerTextScale: 'default' | 'large' | 'monumental';
   immersionMode: FocusImmersionMode;
+  lastCompletedSession?: SessionRecord | null;
   onPrimaryAction: () => void;
   onStartBreak: () => void;
+  onOpenRestore?: () => void;
   onStartAgain: () => void;
 }
 
@@ -90,8 +95,10 @@ export const LivingLens: React.FC<LivingLensProps> = ({
   performanceMode = 'auto',
   timerTextScale,
   immersionMode,
+  lastCompletedSession,
   onPrimaryAction,
   onStartBreak,
+  onOpenRestore,
   onStartAgain,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -1077,20 +1084,82 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       {/* Dedicated Balanced Timer & Intention Focal Zone (Cleanly Separated From Organism) */}
       <div
         data-testid="timer-display-zone"
-        className="relative z-30 mt-3 sm:mt-4 flex flex-col items-center justify-center text-center px-6"
+        className="relative z-30 mt-2.5 sm:mt-3.5 flex flex-col items-center justify-center text-center px-4 max-w-xl"
       >
         {status === 'completed' ? (
-          <div className="flex flex-col items-center gap-2.5 animate-fade-in">
-            <span className="text-xs font-medium tracking-wide text-[#2FE8FF]">
-              {scene.name} · {durationMinutes}m {sessionLabel || 'Deep work'}
-            </span>
-            <h2 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] tracking-tight">
-              {scene.completionPhrase}
+          <div
+            data-testid="session-completion-summary"
+            className="flex flex-col items-center gap-2.5 animate-fade-in aura-glass rounded-3xl px-6 py-4 border border-white/10"
+          >
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span
+                data-testid="completion-status-badge"
+                className={`text-[10px] font-mono uppercase tracking-[0.16em] px-2.5 py-0.5 rounded-full ${
+                  (lastCompletedSession?.completionStatus ?? 'completed') ===
+                  'completed'
+                    ? 'bg-[#38F8A8]/16 text-[#38F8A8] border border-[#38F8A8]/40'
+                    : 'bg-[#FFB08A]/16 text-[#FFB08A] border border-[#FFB08A]/40'
+                }`}
+              >
+                {(lastCompletedSession?.completionStatus ?? 'completed') ===
+                'completed'
+                  ? 'Session Completed'
+                  : 'Ended Early · Actual Time Logged'}
+              </span>
+              <span className="text-xs font-medium tracking-wide text-[#2FE8FF]">
+                {scene.name}
+              </span>
+            </div>
+
+            <h2 className="font-display text-xl sm:text-2xl font-semibold text-[#F5F6FF] tracking-tight">
+              {(lastCompletedSession?.completionStatus ?? 'completed') ===
+              'completed'
+                ? scene.completionPhrase
+                : 'Focus Progress Recorded'}
             </h2>
-            <div className="mt-1 flex items-center gap-3">
+
+            <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-[#A3A1BA]">
+              <span>
+                Intention:{' '}
+                <strong className="text-[#F5F6FF] font-medium">
+                  {lastCompletedSession?.label || sessionLabel || 'Deep work'}
+                </strong>
+              </span>
+              <span>·</span>
+              <span data-testid="completion-actual-time">
+                Focused:{' '}
+                <strong className="text-[#2FE8FF] font-mono">
+                  {lastCompletedSession
+                    ? `${lastCompletedSession.actualMinutes ?? lastCompletedSession.durationMinutes}m`
+                    : `${durationMinutes}m`}
+                </strong>
+                {lastCompletedSession?.plannedMinutes &&
+                  lastCompletedSession.plannedMinutes !==
+                    (lastCompletedSession.actualMinutes ??
+                      lastCompletedSession.durationMinutes) && (
+                    <span className="text-[#A3A1BA] ml-1">
+                      (of {lastCompletedSession.plannedMinutes}m planned)
+                    </span>
+                  )}
+              </span>
+            </div>
+
+            <div className="mt-1.5 flex flex-wrap items-center justify-center gap-2.5">
+              {onOpenRestore && (
+                <AuraButton
+                  variant="secondary"
+                  size="md"
+                  data-testid="completion-restore-btn"
+                  reducedMotion={reducedMotion}
+                  onClick={onOpenRestore}
+                >
+                  Restorative Break
+                </AuraButton>
+              )}
               <AuraButton
                 variant="secondary"
                 size="md"
+                data-testid="completion-quick-break-btn"
                 reducedMotion={reducedMotion}
                 onClick={onStartBreak}
               >
@@ -1099,6 +1168,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
               <AuraButton
                 variant="primary"
                 size="md"
+                data-testid="completion-start-again-btn"
                 accentColor={scene.colors.primary}
                 secondaryColor={scene.colors.secondary}
                 reducedMotion={reducedMotion}
@@ -1134,32 +1204,95 @@ export const LivingLens: React.FC<LivingLensProps> = ({
             </button>
 
             {immersionMode !== 'deep' && (
-              <div className="mt-1.5 min-h-[24px] flex items-center justify-center">
+              <div className="mt-1.5 min-h-[26px] flex flex-col items-center justify-center">
                 {isEditingLabel ? (
-                  <input
-                    ref={labelInputRef}
-                    type="text"
-                    aria-label="Session intention"
-                    value={sessionLabel}
-                    onChange={(e) => onChangeSessionLabel(e.target.value)}
-                    onBlur={() => setIsEditingLabel(false)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === 'Escape') {
-                        setIsEditingLabel(false);
-                      }
-                    }}
-                    placeholder="What are you focusing on?"
-                    className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-xs sm:text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-48"
-                  />
+                  <div className="flex flex-col items-center gap-2">
+                    <input
+                      ref={labelInputRef}
+                      type="text"
+                      aria-label="Session intention"
+                      data-testid="session-intention-input"
+                      value={sessionLabel}
+                      onChange={(e) => onChangeSessionLabel(e.target.value)}
+                      onBlur={() => {
+                        window.setTimeout(() => setIsEditingLabel(false), 160);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === 'Escape') {
+                          setIsEditingLabel(false);
+                        }
+                      }}
+                      placeholder="What do you intend to accomplish?"
+                      className="bg-transparent border-b border-[#2FE8FF]/60 text-center text-xs sm:text-sm font-medium text-[#F5F6FF] placeholder:text-[#A3A1BA]/60 focus:outline-none px-2 py-0.5 w-64"
+                    />
+                    {/* Quick Intention Suggestions */}
+                    <div className="flex flex-wrap items-center justify-center gap-1 max-w-md">
+                      {SESSION_INTENTION_SUGGESTIONS.map((suggestion) => (
+                        <button
+                          key={suggestion}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            onChangeSessionLabel(suggestion);
+                            setIsEditingLabel(false);
+                          }}
+                          className="px-2 py-0.5 rounded-full text-[10px] bg-white/[0.06] hover:bg-[#2FE8FF]/20 text-[#A3A1BA] hover:text-[#F5F6FF] border border-white/10 transition-colors cursor-pointer"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : (
                   <button
                     type="button"
+                    data-testid="session-intention-trigger"
                     onClick={() => setIsEditingLabel(true)}
-                    title="Click to edit session focus"
+                    title="Click to set your session intention"
                     className="text-xs sm:text-sm font-normal text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors px-2.5 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
                   >
-                    {sessionLabel.trim() || 'Deep work'}
+                    {sessionLabel.trim() || 'Set session intention…'}
                   </button>
+                )}
+
+                {/* Quick Session Presets when Idle (15, 25, 45, 50, 60, 90m + Custom) */}
+                {status === 'idle' && !isEditingLabel && (
+                  <div
+                    data-testid="home-session-presets"
+                    className="mt-2 flex flex-wrap items-center justify-center gap-1"
+                  >
+                    {FOCUS_PRESET_MINUTES.map((mins) => {
+                      const isCurrent = durationMinutes === mins;
+                      return (
+                        <button
+                          key={mins}
+                          type="button"
+                          data-testid={`stage-preset-${mins}m`}
+                          onClick={() => onChangeDurationMinutes(mins)}
+                          className={`px-2 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
+                            isCurrent
+                              ? 'bg-[#2FE8FF]/20 text-[#2FE8FF] border border-[#2FE8FF]/50 font-semibold'
+                              : 'text-[#A3A1BA]/85 hover:text-[#F5F6FF] bg-white/[0.03] hover:bg-white/[0.08] border border-white/8'
+                          }`}
+                        >
+                          {mins}m
+                        </button>
+                      );
+                    })}
+                    <button
+                      type="button"
+                      data-testid="stage-preset-custom"
+                      onClick={() => onToggleScrubber(!scrubberOpen)}
+                      className={`px-2 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
+                        scrubberOpen ||
+                        !FOCUS_PRESET_MINUTES.includes(durationMinutes)
+                          ? 'bg-[#8A5CFF]/25 text-[#F5F6FF] border border-[#8A5CFF]/55'
+                          : 'text-[#A3A1BA]/85 hover:text-[#F5F6FF] bg-white/[0.03] hover:bg-white/[0.08] border border-white/8'
+                      }`}
+                    >
+                      Custom
+                    </button>
+                  </div>
                 )}
               </div>
             )}

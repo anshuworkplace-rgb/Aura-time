@@ -570,13 +570,17 @@ class AuraSoundEngine {
     playing: boolean;
     primaryChamberId: ChamberId;
     ambienceVolume: number;
+    muted?: boolean;
     secondaryChamberId?: ChamberId | null;
     secondaryVolume?: number;
   }) {
     const normalizedId = normalizeChamberId(options.primaryChamberId);
-    const safeVolume = Math.max(0, Math.min(1, options.ambienceVolume ?? 0.75));
+    const isMuted = Boolean(options.muted);
+    const safeVolume = isMuted
+      ? 0
+      : Math.max(0, Math.min(1, options.ambienceVolume ?? 0.75));
 
-    this.desiredPlaying = options.playing && safeVolume > 0.001;
+    this.desiredPlaying = options.playing && !isMuted && safeVolume > 0.001;
     this.desiredChamberId = normalizedId;
     this.desiredVolume = safeVolume;
 
@@ -615,6 +619,40 @@ class AuraSoundEngine {
         // ignore
       }
     }
+  }
+
+  /**
+   * Plays a brief 2.4-second acoustic preview of a soundscape without permanently
+   * overriding or duplicating an active session slot.
+   */
+  public previewSoundscape(chamberId: ChamberId, volume = 0.65) {
+    if (this.desiredPlaying) {
+      // When already playing, syncChambers handles the live crossfade smoothly
+      return;
+    }
+    const safeVol = Math.max(0.05, Math.min(0.85, volume));
+    const ctx = this.ensureContext();
+    if (!ctx || !this.masterGain) return;
+
+    if (this.activeSlot) {
+      this.fadeOutAndStopSlot(this.activeSlot);
+      this.activeSlot = null;
+    }
+
+    const previewSlot = this.buildChamberGraph(
+      ctx,
+      chamberId,
+      this.masterGain,
+      safeVol
+    );
+    this.activeSlot = previewSlot;
+
+    window.setTimeout(() => {
+      if (this.activeSlot === previewSlot && !this.desiredPlaying) {
+        this.fadeOutAndStopSlot(previewSlot);
+        this.activeSlot = null;
+      }
+    }, 2400);
   }
 
   /**
@@ -664,6 +702,37 @@ class AuraSoundEngine {
 
       osc.start(start);
       osc.stop(start + 3.5);
+    });
+  }
+
+  /**
+   * Plays a softer, grounding harmonic bell for Restore / Breathing completion.
+   */
+  public playRestoreCompletionChime(alertVolume = 0.65) {
+    if (alertVolume <= 0.01) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const notes = [349.23, 440.0, 523.25, 659.25]; // Warm Fmaj7 resonance
+
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = idx % 2 === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.22);
+
+      const start = now + idx * 0.22;
+      const peak = 0.085 * alertVolume;
+      gain.gain.setValueAtTime(0.0001, start);
+      gain.gain.exponentialRampToValueAtTime(peak, start + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 3.8);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.start(start);
+      osc.stop(start + 3.9);
     });
   }
 
