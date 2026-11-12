@@ -1,4 +1,5 @@
 import { FocusSceneConfig, OrbDesignId, TimerStatus } from '../types/aura';
+import { INFINITY_AURORA_WGSL_SOURCE } from './infinityAuroraEngine';
 
 export interface NebulaSpectrum {
   violet: [number, number, number];
@@ -11,7 +12,7 @@ export interface BackgroundMixPreset {
   id: 'fluid-dominant' | 'balanced-synthesis' | 'nebula-atmosphere';
   label: string;
   shortLabel: string;
-  mix: number; // 0..1 (0 = GPU Fluid Dynamics, 1 = Quantum Nebula Atmosphere)
+  mix: number; // 0..1 (0 = GPU Fluid Dynamics, 1 = Dual Volumetric Aurora)
   description: string;
 }
 
@@ -21,21 +22,24 @@ export const BACKGROUND_MIX_PRESETS: BackgroundMixPreset[] = [
     label: 'GPU Fluid Dynamics',
     shortLabel: 'Fluid Stream',
     mix: 0.18,
-    description: 'Silky curl-advected liquid currents radiating from the ORB',
+    description:
+      'Luminous Navier-Stokes liquid energy currents connecting both auroras',
   },
   {
     id: 'balanced-synthesis',
     label: 'Balanced Synthesis',
     shortLabel: 'Balanced Mix',
     mix: 0.52,
-    description: 'Harmonious ORB-coupled fluid wake & soft nebula aura',
+    description:
+      'Harmonious Dual Volumetric Aurora × GPU Fluid Dynamics synthesis',
   },
   {
     id: 'nebula-atmosphere',
     label: 'Quantum Nebula',
     shortLabel: 'Nebula Cloud',
     mix: 0.85,
-    description: 'Deep volumetric sanctuary halo emanating from the ORB',
+    description:
+      'Deep ray-marched Primary & Secondary Volumetric Aurora curtains',
   },
 ];
 
@@ -64,8 +68,8 @@ export function orbDesignToShaderMode(
 }
 
 /**
- * Computes shader weights for blending the GPU Fluid Dynamics layer
- * and the Quantum Nebula Atmosphere layer from a normalized 0..1 mix value.
+ * Computes shader weights for blending Engine C (GPU Fluid Dynamics)
+ * and Engines A & B (Dual Volumetric Aurora) from a normalized 0..1 mix value.
  */
 export function computeBackgroundMixWeights(
   backgroundMix = 0.52
@@ -218,9 +222,11 @@ export function computeFluidTurbulenceGain(
 }
 
 /**
- * Custom WGSL Shader Module for WebGPU ORB-Centric Quantum Nebula × Calm Fluid Dynamics
+ * Custom WGSL Shader Module for WebGPU Dual Volumetric Aurora × GPU Fluid Dynamics.
  */
 export const QUANTUM_NEBULA_WGSL = /* wgsl */ `
+${INFINITY_AURORA_WGSL_SOURCE}
+
 struct NebulaUniforms {
   time: f32,
   aspect: f32,
@@ -238,52 +244,25 @@ struct NebulaUniforms {
   colorDeep: vec3<f32>,
 };
 
-fn smoothNoise(p: vec2<f32>) -> f32 {
-  let i = floor(p);
-  let f = fract(p);
-  let u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
-  let a = fract(sin(dot(i, vec2<f32>(127.1, 311.7))) * 43758.5453);
-  let b = fract(sin(dot(i + vec2<f32>(1.0, 0.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
-  let c = fract(sin(dot(i + vec2<f32>(0.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
-  let d = fract(sin(dot(i + vec2<f32>(1.0, 1.0), vec2<f32>(127.1, 311.7))) * 43758.5453);
-  return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
-}
+fn evaluateQuantumNebula(uv: vec2<f32>, u_neb: NebulaUniforms) -> vec3<f32> {
+  let centered = (uv - vec2<f32>(0.5, 0.475)) * vec2<f32>(u_neb.aspect, 1.0);
+  let r = length(centered);
+  let rayPos = vec3<f32>(centered.x * 2.2, centered.y * 1.8, 1.0);
+  let fluidOff = vec2<f32>(sin(u_neb.time * 0.22), cos(u_neb.time * 0.17)) * 0.25;
 
-fn silkFluidFbm(p_in: vec2<f32>) -> f32 {
-  var v = 0.0;
-  var a = 0.55;
-  var p = p_in;
-  let rot = mat2x2<f32>(0.8, 0.6, -0.6, 0.8);
-  for (var i = 0; i < 3; i = i + 1) {
-    v = v + a * smoothNoise(p);
-    p = rot * p * 1.65 + vec2<f32>(1.7, 9.2);
-    a = a * 0.48;
-  }
-  return v;
-}
+  let densA = samplePrimaryAuroraDensity(rayPos, u_neb.time, fluidOff);
+  let densB = sampleSecondaryAuroraDensity(rayPos, u_neb.time * 0.618, fluidOff);
 
-fn evaluateQuantumNebula(uv: vec2<f32>, u: NebulaUniforms) -> vec3<f32> {
-  var p = (uv - vec2<f32>(0.5, 0.47)) * vec2<f32>(u.aspect, 1.0);
-  let r = length(p);
-  let t = u.time * 0.14;
-  let radialDir = p / max(0.001, r);
-  let radialOutflow = p - radialDir * (t * 0.35);
-  let q = vec2<f32>(
-    silkFluidFbm(radialOutflow * 1.35 + vec2<f32>(0.0, t)),
-    silkFluidFbm(radialOutflow * 1.35 + vec2<f32>(3.4, -t * 0.85))
-  );
-  let fluidStream = silkFluidFbm(radialOutflow * 1.45 + q * (1.25 + u.turbulence));
-  let nebulaCloud = silkFluidFbm(radialOutflow * 0.92 - q * 0.55);
-  // Tight radial decay so the background emanates from the ORB and fades into dark periphery
-  let orbEmanation = exp(-r * r * 2.65);
-  let fluidLayer = (u.colorCyan * fluidStream * 0.52 + u.colorMagenta * q.x * 0.38) * u.fluidWeight;
-  let nebulaLayer = (u.colorViolet * nebulaCloud * 0.56 + u.colorMagenta * q.y * 0.34) * u.nebulaWeight;
-  return u.colorDeep + (fluidLayer + nebulaLayer) * orbEmanation * 0.52;
+  let engineAColor = mix(u_neb.colorViolet, u_neb.colorCyan, clamp(densA * 1.4, 0.0, 1.0)) * densA * u_neb.nebulaWeight;
+  let engineBColor = mix(u_neb.colorViolet, u_neb.colorMagenta, clamp(densB * 1.3, 0.0, 1.0)) * densB * u_neb.nebulaWeight * 0.82;
+  let sanctuary = mix(0.38, 1.0, smoothstep(0.08, 0.34, r));
+
+  return u_neb.colorDeep + (engineAColor + engineBColor) * sanctuary;
 }
 `;
 
 /**
- * Vertex Shader for the Full-Viewport Volumetric Quantum Nebula × Fluid Dynamics Plane
+ * Vertex Shader for the Full-Viewport Volumetric Dual Aurora × GPU Fluid Dynamics Plane
  */
 export const NEBULA_FLUID_VERTEX_SHADER = /* glsl */ `
 varying vec2 vUv;
@@ -295,22 +274,34 @@ void main() {
 `;
 
 /**
- * Fragment Shader for ORB-Centric Synthesis of:
- * 1) GPU Fluid Dynamics (curl-advected liquid streams radiating from the central ORB)
- * 2) Quantum Nebula Atmosphere (subsurface aura & volumetric halo anchored to the ORB)
+ * Master Volumetric Ray-Marching & GPU Fluid Dynamics Fragment Shader:
+ * AURA TIME — INFINITY AURORA
  *
- * The background is engineered as the physical medium and radiating aura OF the central ORB:
- * - High visual focus remains on the ORB at the center.
- * - Ripples, caustics, and fluid currents originate from the ORB's position and organism mode
- *   (0 = Original Lens, 1 = Celestial Jelly, 2 = Living Bloom) and attenuate into calm,
- *   deep-space velvet toward the outer screen edges.
+ * Implements 3 interconnected rendering engines across 5 volumetric depth layers
+ * (Layer 6 is rendered by the 3D depth-sorted particle field):
+ *
+ * - Layer 1: Deep atmospheric background & zenith light absorption
+ * - Layer 2: Distant high-altitude auroral veil (deep spatial parallax)
+ * - Layer 3: ENGINE A — Primary Volumetric Aurora (3D ray-marched auroral curtains,
+ *            domain warping, 4-octave FBM, magnetic field striations, anisotropic light scattering)
+ * - Layer 4: ENGINE B — Secondary Volumetric Aurora (independent oblique spatial orientation,
+ *            incommensurate time coordinate uTimeB, distinct frequency FBM, subtle magenta/violet/blue
+ *            and restrained coral highlights, radiative cross-illumination with Engine A)
+ * - Layer 5: ENGINE C — GPU-Accelerated Fluid Dynamics (couples real-time GPU ping-pong
+ *            Navier-Stokes simulation texture uFluidSimTex with multiscale curl-advected liquid
+ *            energy currents flowing through 3D space between Engine A and Engine B)
+ * - Cinematic Pipeline: Multi-scale bloom, HDR luminance control, subtle chromatic refraction,
+ *   ACES Filmic tone mapping, and strict Central Timer Sanctuary protection.
  */
 export const NEBULA_FLUID_FRAGMENT_SHADER = /* glsl */ `
 precision highp float;
 
 varying vec2 vUv;
 
+// Independent multi-timescale uniforms (Engine A, Engine B, Engine C never synchronize)
 uniform float uTime;
+uniform float uTimeB;
+uniform float uTimeC;
 uniform float uAspect;
 uniform float uTurbulence;
 uniform float uGravityStrength;
@@ -319,20 +310,41 @@ uniform float uAudioAmp;
 uniform float uFluidWeight;
 uniform float uNebulaWeight;
 uniform float uOrbMode;
+uniform float uConvergencePulse;
+uniform float uFinalFiveBoost;
+uniform float uCompletionRelease;
+uniform float uCurtainSharpness;
+uniform float uSecondaryWaveAmp;
 uniform vec2 uPointer;
-uniform vec3 uColorViolet;
-uniform vec3 uColorCyan;
-uniform vec3 uColorMagenta;
-uniform vec3 uColorDeep;
 
+// Real-time Ping-Pong Navier-Stokes GPU Fluid Simulation Texture (R,G=vel, B=dye, A=vorticity)
+uniform sampler2D uFluidSimTex;
+
+// Scene-calibrated color uniforms for Engine A, Engine B, Engine C, and Deep Space
+uniform vec3 uColorViolet;          // Engine A Primary (Ion Violet / Scene Primary)
+uniform vec3 uColorCyan;            // Engine A Secondary & Fluid Cyan (Electric Cyan / Scene Secondary)
+uniform vec3 uColorMagenta;         // Engine C Interference & Accents (Signal Magenta / Scene Tertiary)
+uniform vec3 uColorDeep;            // Layer 1 Deep Space Midnight Ink
+uniform vec3 uColorZenith;          // Layer 1 Upper Atmospheric Zenith Tint
+uniform vec3 uColorEngineBPrimary;  // Engine B Primary Wave Color
+uniform vec3 uColorEngineBCoral;    // Engine B Restrained Coral/Iridescent Highlight
+
+// ----------------------------------------------------------------------------
+// 3D & 2D Procedural Noise Primitives (Quintic C2-Continuous, Zero Grid Seams)
+// ----------------------------------------------------------------------------
 float hash21(vec2 p) {
   p = fract(p * vec2(234.34, 435.345));
   p += dot(p, p + 34.23);
   return fract(p.x * p.y);
 }
 
-// Quintic C2-continuous smooth noise (zero sharp grid or contour edges)
-float smoothNoise(vec2 p) {
+float hash31(vec3 p) {
+  p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+  p += dot(p, p.yxz + 33.33);
+  return fract((p.x + p.y) * p.z);
+}
+
+float smoothNoise2D(vec2 p) {
   vec2 i = floor(p);
   vec2 f = fract(p);
   vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
@@ -345,33 +357,203 @@ float smoothNoise(vec2 p) {
   return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+float smoothNoise3D(vec3 p) {
+  vec3 i = floor(p);
+  vec3 f = fract(p);
+  vec3 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+
+  float n000 = hash31(i + vec3(0.0, 0.0, 0.0));
+  float n100 = hash31(i + vec3(1.0, 0.0, 0.0));
+  float n010 = hash31(i + vec3(0.0, 1.0, 0.0));
+  float n110 = hash31(i + vec3(1.0, 1.0, 0.0));
+  float n001 = hash31(i + vec3(0.0, 0.0, 1.0));
+  float n101 = hash31(i + vec3(1.0, 0.0, 1.0));
+  float n011 = hash31(i + vec3(0.0, 1.0, 1.0));
+  float n111 = hash31(i + vec3(1.0, 1.0, 1.0));
+
+  float nx00 = mix(n000, n100, u.x);
+  float nx10 = mix(n010, n110, u.x);
+  float nx01 = mix(n001, n101, u.x);
+  float nx11 = mix(n011, n111, u.x);
+
+  float nxy0 = mix(nx00, nx10, u.y);
+  float nxy1 = mix(nx01, nx11, u.y);
+
+  return mix(nxy0, nxy1, u.z);
+}
+
 mat2 rot2(float a) {
   float s = sin(a);
   float c = cos(a);
   return mat2(c, -s, s, c);
 }
 
-// Low-frequency 3-octave velvety FBM
-float calmFluidFbm(vec2 p) {
+// 3-Octave Velvety FBM for Fluid & Domain Warping
+float fbm2D(vec2 p) {
   float v = 0.0;
   float amp = 0.54;
   mat2 m = rot2(0.58);
   for (int i = 0; i < 3; i++) {
-    v += amp * smoothNoise(p);
-    p = m * p * 1.58 + vec2(1.7, 9.2);
+    v += amp * smoothNoise2D(p);
+    p = m * p * 1.62 + vec2(1.7, 9.2);
     amp *= 0.46;
   }
   return v;
 }
 
-// Smooth divergence-free curl velocity field
-vec2 computeCurlFlow(vec2 p, float t) {
-  float eps = 0.18;
-  float n1 = calmFluidFbm(p + vec2(0.0, eps) + vec2(t * 0.32, -t * 0.24));
-  float n2 = calmFluidFbm(p - vec2(0.0, eps) + vec2(t * 0.32, -t * 0.24));
-  float n3 = calmFluidFbm(p + vec2(eps, 0.0) + vec2(-t * 0.26, t * 0.30));
-  float n4 = calmFluidFbm(p - vec2(eps, 0.0) + vec2(-t * 0.26, t * 0.30));
+// Divergence-free multiscale curl velocity field
+vec2 computeCurlVelocity(vec2 p, float t) {
+  float eps = 0.14;
+  float n1 = fbm2D(p + vec2(0.0, eps) + vec2(t * 0.28, -t * 0.21));
+  float n2 = fbm2D(p - vec2(0.0, eps) + vec2(t * 0.28, -t * 0.21));
+  float n3 = fbm2D(p + vec2(eps, 0.0) + vec2(-t * 0.23, t * 0.26));
+  float n4 = fbm2D(p - vec2(eps, 0.0) + vec2(-t * 0.23, t * 0.26));
   return vec2((n1 - n2) / (2.0 * eps), -(n3 - n4) / (2.0 * eps));
+}
+
+// ----------------------------------------------------------------------------
+// ENGINE A — PRIMARY VOLUMETRIC AURORA (3D Ray-Marched Magnetic Curtains)
+// ----------------------------------------------------------------------------
+// Evaluates a 3D volumetric curtain density field with domain warping, vertical
+// magnetic field-line striations, and altitude-dependent Beer-Lambert scattering.
+vec4 renderEngineAPrimaryAurora(
+  vec3 rayOrigin,
+  vec3 rayDir,
+  vec2 fluidVelocity,
+  float fluidDye,
+  float tA
+) {
+  vec3 accumulatedLight = vec3(0.0);
+  float transmittance = 1.0;
+
+  // 8 volumetric ray-marching slices through the 3D atmospheric curtain volume
+  for (int i = 0; i < 8; i++) {
+    float fi = float(i) / 7.0;
+    float marchDist = 1.05 + fi * 2.25;
+    vec3 samplePos = rayOrigin + rayDir * marchDist;
+
+    // Couple GPU fluid velocity field into the lower auroral boundary
+    float fluidCoupling = exp(-max(0.0, samplePos.y + 0.25) * 1.65);
+    samplePos.xz += fluidVelocity * (0.52 * fluidCoupling);
+
+    // Sweeping S-curve auroral arc across the upper & mid celestial vault
+    float arcCurve = sin(samplePos.x * 1.15 + tA * 0.18) * 0.38
+                   + cos(samplePos.x * 2.1 - tA * 0.13) * 0.18;
+
+    // 3D Domain Warping for organic folding auroral curtains
+    vec2 curtainCoord = vec2(samplePos.x * 0.85, (samplePos.z - arcCurve) * 1.05);
+    vec2 warp = vec2(
+      fbm2D(curtainCoord * 1.05 + vec2(tA * 0.16, -tA * 0.11)),
+      fbm2D(curtainCoord * 1.05 + vec2(-tA * 0.12, tA * 0.14) + vec2(4.7, 2.3))
+    );
+
+    vec2 warpedXZ = curtainCoord + (warp - 0.5) * (1.35 + uTurbulence * 0.58);
+
+    // Primary and secondary curtain fold sheets (ridged multifractal ribbons)
+    float sheetA = smoothNoise3D(vec3(warpedXZ * 1.55, samplePos.y * 0.34 + tA * 0.11));
+    float ribbonA = 1.0 - abs(sheetA * 2.0 - 1.0);
+    ribbonA = pow(clamp(ribbonA, 0.0, 1.0), 2.65 * uCurtainSharpness);
+
+    float sheetB = smoothNoise3D(vec3(warpedXZ * 2.45 + vec2(2.3, -1.7), samplePos.y * 0.42 - tA * 0.09));
+    float ribbonB = pow(clamp(1.0 - abs(sheetB * 2.0 - 1.0), 0.0, 1.0), 3.1 * uCurtainSharpness);
+
+    float curtainFold = ribbonA * 0.72 + ribbonB * 0.48;
+
+    // Fine vertical magnetic field-line pillars/striations along the auroral curtain
+    float fieldRayA = smoothNoise2D(vec2(warpedXZ.x * 7.8 + warpedXZ.y * 3.4, samplePos.y * 1.25 - tA * 0.52));
+    float fieldRayB = smoothNoise2D(vec2(warpedXZ.x * 14.5 - warpedXZ.y * 5.2, samplePos.y * 1.85 - tA * 0.78));
+    float fieldStriations = 0.52 + 0.48 * smoothstep(0.22, 0.86, fieldRayA * 0.65 + fieldRayB * 0.35);
+
+    // Altitude profile: luminous cyan/violet lower curtain edge -> deep violet mid -> magenta crown
+    float altitudeNorm = clamp((samplePos.y + 0.58 - arcCurve * 0.25) / 1.48, 0.0, 1.0);
+    float altitudeEnvelope = smoothstep(0.02, 0.22, altitudeNorm) * exp(-pow(max(0.0, altitudeNorm - 0.26), 1.75) * 3.1);
+
+    float sliceDensity = curtainFold * fieldStriations * altitudeEnvelope * (0.34 + fluidDye * 0.16);
+
+    if (sliceDensity > 0.002) {
+      // Vertically stratified auroral emission spectrum
+      vec3 curtainEmission = mix(uColorCyan, uColorViolet, smoothstep(0.10, 0.62, altitudeNorm));
+      curtainEmission = mix(curtainEmission, uColorMagenta, smoothstep(0.62, 0.96, altitudeNorm) * 0.46);
+
+      // Forward anisotropic light scattering boost along bright curtain folds
+      float scatterPhase = 1.0 + 0.48 * pow(curtainFold, 2.0);
+      vec3 sampleLight = curtainEmission * sliceDensity * scatterPhase * 0.68;
+
+      accumulatedLight += sampleLight * transmittance;
+      transmittance *= exp(-sliceDensity * 0.62);
+    }
+  }
+
+  return vec4(accumulatedLight, 1.0 - transmittance);
+}
+
+// ----------------------------------------------------------------------------
+// ENGINE B — SECONDARY VOLUMETRIC AURORA (Independent Oblique Atmospheric Waves)
+// ----------------------------------------------------------------------------
+// Completely independent volumetric aurora with oblique spatial orientation,
+// distinct noise frequencies, independent time coordinate uTimeB, and delicate
+// cross-illumination with Engine A.
+vec4 renderEngineBSecondaryAurora(
+  vec3 rayOrigin,
+  vec3 rayDir,
+  vec2 fluidVelocity,
+  float primaryAuroraAlpha,
+  float tB
+) {
+  vec3 accumulatedWave = vec3(0.0);
+  float transmittance = 1.0;
+
+  // Oblique 42-degree spatial orientation matrix (distinct from Engine A)
+  mat2 obliqueRot = rot2(-0.7330);
+
+  for (int j = 0; j < 6; j++) {
+    float fj = float(j) / 5.0;
+    float marchDist = 1.35 + fj * 2.15;
+    vec3 samplePos = rayOrigin + rayDir * marchDist;
+
+    // Rotate into Engine B's independent coordinate frame
+    vec2 rotXZ = obliqueRot * samplePos.xz - fluidVelocity * 0.36;
+    float obliqueWaveUndulation = 0.22 * sin(rotXZ.x * 1.45 - tB * 0.24)
+                                + 0.14 * cos(rotXZ.y * 1.85 + tB * 0.19);
+    float obliqueWaveHeight = samplePos.y + 0.14 - obliqueWaveUndulation;
+
+    // Broad, flowing atmospheric waves with different noise frequencies from Engine A
+    float waveFbmA = fbm2D(rotXZ * 0.72 + vec2(-tB * 0.18, tB * 0.13));
+    float waveFbmB = smoothNoise3D(vec3(rotXZ * 1.32 + waveFbmA * 0.72, obliqueWaveHeight * 0.72 - tB * 0.15));
+    float waveCrest = 1.0 - abs(waveFbmB * 2.0 - 1.0);
+
+    float waveBand = exp(-pow(obliqueWaveHeight * 1.75 + (waveFbmA - 0.5) * 0.9, 2.0) * 2.9);
+    float waveDensity = (smoothstep(0.24, 0.84, waveFbmB) * 0.65 + pow(waveCrest, 2.2) * 0.55)
+      * waveBand
+      * uSecondaryWaveAmp
+      * 0.26;
+
+    if (waveDensity > 0.002) {
+      // Subtle magenta, violet, deep blue, and extremely restrained coral highlights
+      vec3 waveColor = mix(uColorEngineBPrimary, uColorMagenta, smoothstep(0.18, 0.76, waveFbmA) * 0.74);
+      float coralCrest = pow(clamp(waveCrest, 0.0, 1.0), 2.4) * 0.44;
+      waveColor = mix(waveColor, uColorEngineBCoral, coralCrest);
+
+      // Delicate radiative cross-illumination where Engine A and Engine B intersect in 3D space
+      vec3 crossIllum = uColorCyan * (primaryAuroraAlpha * 0.30);
+      vec3 sliceLight = (waveColor + crossIllum) * waveDensity * 0.62;
+
+      accumulatedWave += sliceLight * transmittance;
+      transmittance *= exp(-waveDensity * 0.52);
+    }
+  }
+
+  return vec4(accumulatedWave, 1.0 - transmittance);
+}
+
+// ACES Filmic Tone Mapping for cinematic HDR luminance management without clipping
+vec3 acesFilmicToneMap(vec3 x) {
+  float a = 2.51;
+  float b = 0.03;
+  float c = 2.43;
+  float d = 0.59;
+  float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
 }
 
 void main() {
@@ -382,117 +564,177 @@ void main() {
   vec2 radialDir = centered / max(0.0001, dist);
   float angle = atan(centered.y, centered.x);
 
-  // Subtle pointer wake perturbation around the ORB
-  vec2 ptr = (uPointer - orbCenter) * vec2(uAspect, 1.0);
-  vec2 toPtr = centered - ptr;
-  float ptrInfluence = exp(-dot(toPtr, toPtr) * 2.6) * 0.08;
-  vec2 ptrFlow = vec2(-toPtr.y, toPtr.x) * ptrInfluence;
+  // ============================================================================
+  // SAMPLE LIVE GPU FLUID SIMULATION TEXTURE (ENGINE C PING-PONG SOLVER)
+  // ============================================================================
+  vec4 fluidSimSample = texture2D(uFluidSimTex, vUv);
+  vec2 gpuFluidVel = (fluidSimSample.rg - 0.5) * 2.0;
+  float gpuFluidDye = fluidSimSample.b;
+  float gpuFluidVorticity = (fluidSimSample.a - 0.5) * 2.0;
 
-  float t = uTime * 0.15;
+  // Combine GPU FBO velocity with analytical multiscale curl velocity for infinite detail
+  vec2 pointerCentered = (uPointer - orbCenter) * vec2(uAspect, 1.0);
+  vec2 toPtr = centered - pointerCentered;
+  float ptrWake = exp(-dot(toPtr, toPtr) * 3.2) * 0.09;
+  vec2 ptrSwirl = vec2(-toPtr.y, toPtr.x) * ptrWake;
 
-  // Radial outflow coordinate: fluid currents gently emanate outward from the ORB
-  float softTwist = uGravityStrength * 0.38 * exp(-dist * dist * 2.2);
-  vec2 radialOutflow = rot2(softTwist) * (centered + ptrFlow) - radialDir * (t * 0.22);
+  float tA = uTime * 0.16;
+  float tB = uTimeB * 0.16;
+  float tC = uTimeC * 0.16;
+
+  // Session start convergence twist & gravitational coupling around the ORB
+  float gravityTwist = (uGravityStrength * 0.36 + uConvergencePulse * 0.28) * exp(-dist * dist * 2.1);
+  vec2 fluidCoord = rot2(gravityTwist) * (centered + ptrSwirl) - radialDir * (tC * 0.21 - uConvergencePulse * 0.15);
+
+  vec2 curlVel = computeCurlVelocity(fluidCoord * 0.92, tC);
+  vec2 totalFluidVel = gpuFluidVel * 0.65 + curlVel * (0.68 + uTurbulence * 0.42);
 
   // ============================================================================
-  // ORGANISM-SPECIFIC HARMONIC COUPLING (Original / Celestial Jelly / Living Bloom)
+  // LAYER 1: DEEP ATMOSPHERIC BACKGROUND & ZENITH ABSORPTION
   // ============================================================================
+  float zenithGrad = smoothstep(-0.65, 0.85, centered.y);
+  vec3 layer1DeepSpace = mix(uColorDeep, uColorZenith, zenithGrad * 0.48);
+
+  // ============================================================================
+  // LAYER 2: DISTANT VOLUMETRIC AURORAL FORMATIONS (High-Altitude Veil)
+  // ============================================================================
+  vec2 distantCoord = centered * 0.58 + vec2(tA * 0.05, -tB * 0.04) + totalFluidVel * 0.08;
+  float distantVeilNoise = fbm2D(distantCoord * 1.15);
+  float distantHorizonMask = smoothstep(-0.45, 0.42, centered.y) * exp(-dist * dist * 0.85);
+  vec3 layer2DistantAurora = mix(uColorViolet, uColorEngineBPrimary, distantVeilNoise)
+    * smoothstep(0.26, 0.85, distantVeilNoise)
+    * distantHorizonMask
+    * 0.18
+    * uNebulaWeight;
+
+  // ============================================================================
+  // CONSTRUCT 3D VIEW RAY FOR VOLUMETRIC AURORA ENGINES A & B
+  // ============================================================================
+  vec3 rayOrigin = vec3(0.0, -0.10, 0.0);
+  // Subtle chromatic refraction along fluid shear gradient
+  vec2 refractedCentered = centered + totalFluidVel * 0.038;
+  vec3 rayDir = normalize(vec3(refractedCentered.x * 1.22, refractedCentered.y * 1.12 + 0.14, 1.32));
+
+  // ============================================================================
+  // LAYER 3: ENGINE A — PRIMARY VOLUMETRIC AURORA
+  // ============================================================================
+  vec4 engineAResult = renderEngineAPrimaryAurora(
+    rayOrigin,
+    rayDir,
+    totalFluidVel,
+    gpuFluidDye,
+    tA
+  );
+  vec3 layer3PrimaryAurora = engineAResult.rgb * (0.78 + uFinalFiveBoost * 0.18 + uAudioAmp * 0.14) * uNebulaWeight;
+
+  // ============================================================================
+  // LAYER 4: ENGINE B — SECONDARY VOLUMETRIC AURORA
+  // ============================================================================
+  vec4 engineBResult = renderEngineBSecondaryAurora(
+    rayOrigin,
+    rayDir,
+    totalFluidVel,
+    engineAResult.a,
+    tB
+  );
+  vec3 layer4SecondaryAurora = engineBResult.rgb * (0.74 + uFinalFiveBoost * 0.15 + uCompletionRelease * 0.22) * uNebulaWeight;
+
+  // ============================================================================
+  // LAYER 5: ENGINE C — GPU-ACCELERATED FLUID DYNAMICS (Luminous Liquid Energy)
+  // ============================================================================
+  // Evaluates translucent flowing energy streams connecting Engine A and Engine B,
+  // coupled with the active ORB organism mode (Original Lens / Celestial Jelly / Living Bloom).
   float isJelly = clamp(1.0 - abs(uOrbMode - 1.0), 0.0, 1.0);
   float isBloom = clamp(1.0 - abs(uOrbMode - 2.0), 0.0, 1.0);
   float isOriginal = clamp(1.0 - isJelly - isBloom, 0.0, 1.0);
 
-  // 1. Original Lens: Gentle concentric liquid-glass wave
-  float originalRipple = 0.5 + 0.5 * sin(dist * 7.5 - uTime * 0.85 + angle);
-
-  // 2. Celestial Jelly: Pelagic propulsion breathing wave & soft downward wake
+  float originalRipple = 0.5 + 0.5 * sin(dist * 7.2 - uTime * 0.82 + angle);
   float jellyBellPulse = pow(max(0.0, sin(uTime * 1.45)), 2.2);
-  float jellyRingWave = 0.5 + 0.5 * sin(dist * 8.5 - uTime * 1.15 - jellyBellPulse * 0.8);
-  float lowerWakeMask = smoothstep(0.15, -0.42, centered.y) * exp(-centered.x * centered.x * 7.5);
-  float jellyTentacleWake = lowerWakeMask * (0.5 + 0.5 * sin(centered.x * 10.0 + centered.y * 5.0 - uTime * 1.1));
-
-  // 3. Living Bloom: Gentle botanical corolla harmonic
-  float bloomPetalCaustic = 0.5 + 0.5 * cos(angle * 6.0 - dist * 4.5 + uTime * 0.42);
-  float bloomSpiral = 0.5 + 0.5 * sin(angle * 3.0 + dist * 5.5 - uTime * 0.48);
+  float jellyRingWave = 0.5 + 0.5 * sin(dist * 8.2 - uTime * 1.12 - jellyBellPulse * 0.8);
+  float lowerWakeMask = smoothstep(0.15, -0.45, centered.y) * exp(-centered.x * centered.x * 7.2);
+  float jellyTentacleWake = lowerWakeMask * (0.5 + 0.5 * sin(centered.x * 9.5 + centered.y * 5.0 - uTime * 1.1));
+  float bloomPetalCaustic = 0.5 + 0.5 * cos(angle * 6.0 - dist * 4.4 + uTime * 0.42);
+  float bloomSpiral = 0.5 + 0.5 * sin(angle * 3.0 + dist * 5.2 - uTime * 0.48);
 
   float organismWave =
     isOriginal * originalRipple +
     isJelly * (jellyRingWave * 0.68 + jellyTentacleWake * 0.32) +
     isBloom * (bloomPetalCaustic * 0.58 + bloomSpiral * 0.42);
 
-  // ============================================================================
-  // LAYER 1: ORB-EMITTED GPU FLUID DYNAMICS (Velvety Radial Silk Currents)
-  // ============================================================================
-  vec2 curlVel = computeCurlFlow(radialOutflow * 0.95, t);
-  vec2 advectedFluid = radialOutflow * 1.05 + curlVel * (0.72 + uTurbulence * 0.45);
-
+  vec2 advectedPos = fluidCoord * 1.08 + totalFluidVel * 0.88;
   vec2 fluidQ = vec2(
-    calmFluidFbm(advectedFluid + vec2(0.0, t * 0.72)),
-    calmFluidFbm(advectedFluid + vec2(4.2, 1.7 - t * 0.64))
+    fbm2D(advectedPos + vec2(0.0, tC * 0.68)),
+    fbm2D(advectedPos + vec2(4.2, 1.7 - tC * 0.61))
   );
-
   vec2 fluidR = vec2(
-    calmFluidFbm(advectedFluid * 1.12 + 1.25 * fluidQ + vec2(1.7 + t * 0.42, 6.2)),
-    calmFluidFbm(advectedFluid * 1.12 + 1.25 * fluidQ + vec2(5.8 - t * 0.38, 2.4))
+    fbm2D(advectedPos * 1.18 + 1.25 * fluidQ + vec2(1.7 + tC * 0.38, 6.2)),
+    fbm2D(advectedPos * 1.18 + 1.25 * fluidQ + vec2(5.8 - tC * 0.35, 2.4))
   );
 
-  float fluidStream = calmFluidFbm(advectedFluid + (1.05 + uTurbulence * 0.48) * fluidR);
-  float streamHarmonic = 0.5 + 0.5 * sin(dist * 6.5 - t * 1.8 + fluidQ.x * 2.4);
+  float fluidStream = fbm2D(advectedPos + (1.06 + uTurbulence * 0.48) * fluidR);
+  // Crisp luminous fluid filaments (streamlines connecting the auroral fields)
+  float fluidFilament = pow(clamp(1.0 - abs(fluidStream * 2.0 - 1.0), 0.0, 1.0), 2.4);
+  float vorticitySwirl = smoothstep(0.10, 0.86, abs(gpuFluidVorticity) * 0.65 + length(totalFluidVel) * 0.52);
 
-  // Smooth radial decay from the ORB outward so the background is a subtle extension of the ORB
-  float orbFluidEnvelope = exp(-dist * dist * 2.15) * (0.52 + uAudioAmp * 0.16);
+  // Fluid streams flow through the atmospheric space between Engine A and Engine B
+  float fluidSpatialEnvelope = mix(
+    exp(-dist * dist * 1.32),
+    1.0,
+    clamp((engineAResult.a + engineBResult.a) * 0.52, 0.0, 0.72)
+  ) * (0.58 + gpuFluidDye * 0.25 + uAudioAmp * 0.14);
 
-  vec3 fluidDynamicsLayer = vec3(0.0);
-  fluidDynamicsLayer += uColorCyan * smoothstep(0.15, 0.92, fluidStream * 0.64 + organismWave * 0.36) * 0.34;
-  fluidDynamicsLayer += uColorMagenta * smoothstep(0.18, 0.92, fluidR.x * 0.62 + streamHarmonic * 0.38) * 0.28;
-  fluidDynamicsLayer += uColorViolet * smoothstep(0.14, 0.90, fluidQ.y * 0.68 + fluidStream * 0.32) * 0.32;
-  fluidDynamicsLayer *= orbFluidEnvelope * uFluidWeight;
-
-  // ============================================================================
-  // LAYER 2: ORB-COUPLED QUANTUM NEBULA HALO (Subsurface Sanctuary Diffusion)
-  // ============================================================================
-  vec2 nebulaCoord = rot2(-0.22) * (radialOutflow * 0.78) + curlVel * 0.20;
-  float nebulaBillowA = calmFluidFbm(nebulaCoord * 0.88 + vec2(t * 0.18, -t * 0.14));
-  float nebulaBillowB = calmFluidFbm(nebulaCoord * 1.18 - vec2(nebulaBillowA * 0.72, t * 0.15) + vec2(6.4, 2.9));
-  float nebulaVeil = calmFluidFbm(nebulaCoord * 0.68 + vec2(nebulaBillowB * 0.82, t * 0.10));
-
-  float orbNebulaReach = exp(-dist * dist * 1.65);
-
-  vec3 quantumNebulaLayer = vec3(0.0);
-  quantumNebulaLayer += uColorViolet * smoothstep(0.14, 0.90, nebulaVeil * 0.70 + organismWave * 0.30) * 0.36;
-  quantumNebulaLayer += uColorMagenta * smoothstep(0.18, 0.92, nebulaBillowB * 0.66 + nebulaBillowA * 0.34) * 0.26;
-  quantumNebulaLayer += uColorCyan * smoothstep(0.22, 0.92, organismWave * 0.48 + nebulaVeil * 0.52) * 0.24;
-  quantumNebulaLayer *= orbNebulaReach * uNebulaWeight;
+  vec3 layer5FluidStreams = vec3(0.0);
+  // Subtle cyan & violet luminous currents + filament caustics
+  layer5FluidStreams += uColorCyan * (smoothstep(0.16, 0.88, fluidStream * 0.62 + organismWave * 0.38) * 0.32 + fluidFilament * 0.22);
+  layer5FluidStreams += uColorViolet * (smoothstep(0.14, 0.88, fluidQ.y * 0.66 + fluidStream * 0.34) * 0.32);
+  // Occasional restrained magenta interference along high-vorticity filaments
+  float magentaInterference = smoothstep(0.28, 0.90, fluidR.x * 0.54 + vorticitySwirl * 0.46) * (0.7 + fluidFilament * 0.3);
+  layer5FluidStreams += uColorMagenta * magentaInterference * 0.26;
+  layer5FluidStreams *= fluidSpatialEnvelope * uFluidWeight;
 
   // ============================================================================
-  // UNIFIED ORB-TO-BACKGROUND BRIDGE & RADIAL FOCUS HIERARCHY
+  // ADVANCED VOLUMETRIC LIGHTING, MULTI-SCALE BLOOM & COMPOSITING PIPELINE
   // ============================================================================
-  vec3 combinedAtmosphere = 1.0 - (1.0 - clamp(fluidDynamicsLayer, 0.0, 0.75)) * (1.0 - clamp(quantumNebulaLayer, 0.0, 0.75));
+  // Combine Engine A and Engine B with physically inspired soft screen/transmittance blending
+  vec3 dualAuroraComposite = layer2DistantAurora + layer3PrimaryAurora + layer4SecondaryAurora * (1.0 - layer3PrimaryAurora * 0.30);
 
-  // Seamless subsurface aura directly tethering the ORB to the background field
-  float orbCorona = exp(-dist * dist * 4.2) * (0.22 + jellyBellPulse * isJelly * 0.08 + uAudioAmp * 0.10);
-  float pelagicStreamGlow = isJelly * lowerWakeMask * 0.12;
+  // Integrate Engine C fluid currents through the auroral density field
+  vec3 unifiedEcosystem = 1.0 - (1.0 - clamp(dualAuroraComposite, 0.0, 0.84)) * (1.0 - clamp(layer5FluidStreams, 0.0, 0.80));
 
-  vec3 bridgeColor = mix(uColorViolet, uColorCyan, organismWave * 0.52 + 0.24);
-  bridgeColor = mix(bridgeColor, uColorMagenta, isBloom * 0.28);
+  // Soft volumetric multi-scale atmospheric bloom & subsurface scattering halo
+  float auroraEnergyDensity = length(dualAuroraComposite) * 0.58 + length(layer5FluidStreams) * 0.42;
+  vec3 volumetricScatterBloom = mix(uColorViolet, uColorCyan, 0.45) * pow(clamp(auroraEnergyDensity, 0.0, 1.0), 1.55) * 0.19;
 
-  combinedAtmosphere += bridgeColor * (orbCorona + pelagicStreamGlow);
+  // Timer-aware session transitions: Begin convergence ring & Completion release wave
+  float convergenceHalo = exp(-pow(dist - (0.38 - uConvergencePulse * 0.16), 2.0) * 18.0) * uConvergencePulse * 0.22;
+  float completionHalo = exp(-pow(dist - (0.24 + (1.0 - uCompletionRelease) * 0.45), 2.0) * 12.0) * uCompletionRelease * 0.24;
+  float orbSubsurfaceBridge = exp(-dist * dist * 3.8) * (0.20 + jellyBellPulse * isJelly * 0.07 + uAudioAmp * 0.09);
 
-  // Calm peripheral vignette so outer screen frames the ORB in deep space
-  float peripheralFocusMask = smoothstep(1.16, 0.18, dist);
-  combinedAtmosphere *= peripheralFocusMask * 0.68;
+  vec3 bridgeHue = mix(uColorViolet, uColorCyan, organismWave * 0.5 + 0.25);
+  bridgeHue = mix(bridgeHue, uColorEngineBCoral, isBloom * 0.25);
 
-  // Keep the immediate interior behind the ORB crystal-clear and high-contrast
-  float orbInteriorCalm = mix(0.42, 1.0, smoothstep(0.06, 0.28, dist));
+  unifiedEcosystem += volumetricScatterBloom + bridgeHue * (orbSubsurfaceBridge + convergenceHalo + completionHalo);
 
-  vec3 finalColor = uColorDeep + combinedAtmosphere * orbInteriorCalm;
+  // ============================================================================
+  // STRICT VISUAL HIERARCHY: CENTRAL TIMER SANCTUARY & PERIPHERAL VIGNETTE
+  // ============================================================================
+  // Keep the brightest auroral structures behind/away from the central timer's immediate reading zone
+  float timerReadingSanctuary = mix(0.32, 1.0, smoothstep(0.08, 0.35, dist));
+  float peripheralHorizonVignette = smoothstep(1.36, 0.22, dist);
+
+  vec3 preToneMapped = layer1DeepSpace + unifiedEcosystem * timerReadingSanctuary * peripheralHorizonVignette * 0.82;
+
+  // Filmic tone mapping & luxury dark-violet color grading
+  vec3 toneMapped = acesFilmicToneMap(preToneMapped * 1.10);
+  vec3 finalColor = mix(preToneMapped, toneMapped, 0.68);
 
   gl_FragColor = vec4(finalColor, 1.0);
 }
 `;
 
 /**
- * GPU-Accelerated Quantum Particle System Vertex Shader
- * Bioluminescent motes & spores that emerge from the central ORB and drift in its wake.
+ * Layer 6: Extremely Subtle 3D Atmospheric Particles & Light Details Vertex Shader
+ * Advected by both aurora waves and fluid turbulence, with strict clearance behind the timer.
  */
 export const QUANTUM_PARTICLES_VERTEX_SHADER = /* glsl */ `
 attribute float aPhase;
@@ -514,46 +756,44 @@ void main() {
   float radius = length(position.xy);
   float baseAngle = atan(position.y, position.x);
 
-  // Calm orbital & radial drift synchronized with the central ORB
-  float angularVel = aSpeed * (0.08 + 0.08 / (radius + 0.35));
+  // Multi-timescale orbital & fluid drift
+  float angularVel = aSpeed * (0.065 + 0.075 / (radius + 0.4));
   float angle = baseAngle + uTime * angularVel;
 
-  float waveX = sin(uTime * 0.42 + aPhase * 6.2831) * 0.08 * uTurbulence;
-  float waveY = cos(uTime * 0.38 + aPhase * 4.7123) * 0.08 * uTurbulence;
-  float waveZ = sin(uTime * 0.3 + radius * 1.8 + aPhase * 3.1415) * 0.20;
+  float waveX = sin(uTime * 0.38 + aPhase * 6.2831) * 0.09 * uTurbulence;
+  float waveY = cos(uTime * 0.31 + aPhase * 4.7123) * 0.09 * uTurbulence;
+  float waveZ = sin(uTime * 0.27 + radius * 1.6 + aPhase * 3.1415) * 0.22;
 
-  // Concentrate particles closer to the ORB aura (0.28 .. 1.65) so they feel part of the ORB
-  float orbTetheredRadius = 0.24 + radius * 0.68;
-  float radialPulse = orbTetheredRadius * (1.0 + sin(uTime * 0.36 + aPhase * 6.28) * 0.05 + uAudioAmp * 0.05);
+  float spatialRadius = 0.28 + radius * 0.74;
+  float radialBreath = spatialRadius * (1.0 + sin(uTime * 0.32 + aPhase * 6.28) * 0.045 + uAudioAmp * 0.04);
 
   vec3 advectedPos = vec3(
-    cos(angle) * radialPulse + waveX,
-    sin(angle) * radialPulse + waveY,
+    cos(angle) * radialBreath + waveX,
+    sin(angle) * radialBreath + waveY,
     position.z + waveZ
   );
 
   vec4 mvPosition = modelViewMatrix * vec4(advectedPos, 1.0);
   gl_Position = projectionMatrix * mvPosition;
 
-  // Clear directly behind the timer digits, peak in the ORB's outer corona, and fade in the far periphery
+  // Strict clearance behind central timer numerals (screenDist < 0.38)
   float screenDist = length(advectedPos.xy);
-  float centerClearance = smoothstep(0.18, 0.48, screenDist);
-  float orbProximityFade = exp(-screenDist * screenDist * 0.42) * (1.0 - smoothstep(1.35, 2.25, screenDist));
+  float centerClearance = smoothstep(0.24, 0.56, screenDist);
+  float peripheralFade = exp(-screenDist * screenDist * 0.34) * (1.0 - smoothstep(1.45, 2.35, screenDist));
 
-  float twinkle = 0.5 + 0.5 * sin(uTime * (0.9 + aSpeed * 0.8) + aPhase * 12.566);
-  vAlpha = twinkle * centerClearance * orbProximityFade * smoothstep(-5.2, -0.9, mvPosition.z);
+  float twinkle = 0.5 + 0.5 * sin(uTime * (0.75 + aSpeed * 0.65) + aPhase * 12.566);
+  vAlpha = twinkle * centerClearance * peripheralFade * smoothstep(-5.2, -0.9, mvPosition.z);
 
   gl_PointSize = clamp(
-    (aScale * (10.5 + uAudioAmp * 4.5) * uPixelRatio) / max(0.9, -mvPosition.z),
-    1.5,
-    13.5
+    (aScale * (9.5 + uAudioAmp * 3.8) * uPixelRatio) / max(0.9, -mvPosition.z),
+    1.2,
+    11.5
   );
 }
 `;
 
 /**
- * GPU-Accelerated Quantum Particle System Fragment Shader
- * Feather-soft radial Gaussian glow modulated by uParticleGain.
+ * Layer 6: Extremely Subtle Atmospheric Particles Fragment Shader
  */
 export const QUANTUM_PARTICLES_FRAGMENT_SHADER = /* glsl */ `
 precision highp float;
@@ -572,11 +812,11 @@ void main() {
   if (r > 1.0) discard;
 
   // Ultra-soft Gaussian bokeh falloff
-  float glow = exp(-r * r * 4.4) * (1.0 - r);
+  float glow = exp(-r * r * 4.6) * (1.0 - r);
 
   vec3 particleColor = mix(uColorViolet, uColorCyan, smoothstep(0.0, 0.5, vColorMix));
   particleColor = mix(particleColor, uColorMagenta, smoothstep(0.5, 1.0, vColorMix));
 
-  gl_FragColor = vec4(particleColor, glow * vAlpha * 0.46 * uParticleGain);
+  gl_FragColor = vec4(particleColor, glow * vAlpha * 0.38 * uParticleGain);
 }
 `;

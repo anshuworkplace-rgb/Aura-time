@@ -566,11 +566,14 @@ export default function App() {
         settings.highContrast ? 'high-contrast' : ''
       }`}
     >
-      {/* Real-Time 3D Quantum Nebula × GPU Fluid Dynamics Background Coupled to ORB */}
+      {/* Real-Time 3D Dual Volumetric Aurora × GPU Fluid Dynamics Background Coupled to ORB */}
       <QuantumNebulaBackground
         scene={activeScene}
         orbDesign={settings.orbDesign ?? 'original'}
         status={status}
+        phase={phase}
+        remainingSeconds={remainingSeconds}
+        totalSeconds={totalSeconds}
         progress={progress}
         audioReactive={settings.audioReactive}
         reducedMotion={settings.reducedMotion || activeOverlay !== 'none'}

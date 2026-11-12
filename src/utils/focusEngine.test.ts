@@ -205,5 +205,106 @@ test('strictly 3 ORB designs (Original, Celestial Jelly, Living Bloom) and organ
   assert.equal(petals.length > 30, true);
 });
 
+test('Infinity Aurora Engine A, Engine B, Engine C palettes, WGSL shaders, and timer-aware states work across all 5 Focus Scenes', async () => {
+  const {
+    computeSceneAuroraPalette,
+    computeTimerAwareAtmosphereState,
+    computeAdaptiveQualityTier,
+    INFINITY_AURORA_WGSL_SOURCE,
+  } = await import('./infinityAuroraEngine');
+  const { NEBULA_FLUID_FRAGMENT_SHADER } = await import('./quantumNebulaShaders');
+
+  // 1. All 5 Focus Scenes produce distinct Engine A, Engine B, and Engine C spectra
+  for (const scene of Object.values(FOCUS_SCENES)) {
+    const pal = computeSceneAuroraPalette(scene, 'focus');
+    assert.equal(pal.engineAPrimary.length, 3);
+    assert.equal(pal.engineBPrimary.length, 3);
+    assert.equal(pal.engineCCyanCurrent.length, 3);
+    assert.equal(pal.turbulenceScale > 0, true);
+  }
+
+  // Electric Quiet has reduced turbulence compared to Chromatic Flow
+  const electricPal = computeSceneAuroraPalette(FOCUS_SCENES['electric-quiet'], 'focus');
+  const chromaticPal = computeSceneAuroraPalette(FOCUS_SCENES['chromatic-flow'], 'focus');
+  assert.equal(electricPal.turbulenceScale < chromaticPal.turbulenceScale, true);
+
+  // Break phase softens turbulence and warms palette
+  const breakPal = computeSceneAuroraPalette(FOCUS_SCENES['deep-current'], 'break');
+  const focusPal = computeSceneAuroraPalette(FOCUS_SCENES['deep-current'], 'focus');
+  assert.equal(breakPal.turbulenceScale < focusPal.turbulenceScale, true);
+
+  // 2. Timer-aware visual state machine: Engine A and Engine B never move in synchronization
+  const idleState = computeTimerAwareAtmosphereState({
+    status: 'idle',
+    phase: 'focus',
+    remainingSeconds: 2700,
+    totalSeconds: 2700,
+    progress: 0,
+    audioAmplitude: 0,
+    reducedMotion: false,
+    secondsSinceStart: 999,
+    secondsSinceCompletion: 999,
+  });
+  assert.notEqual(idleState.engineATimeScale, idleState.engineBTimeScale);
+
+  // Session start convergence pulse triggers right after Begin
+  const beginState = computeTimerAwareAtmosphereState({
+    status: 'running',
+    phase: 'focus',
+    remainingSeconds: 2699,
+    totalSeconds: 2700,
+    progress: 0.001,
+    audioAmplitude: 0,
+    reducedMotion: false,
+    secondsSinceStart: 1.0,
+    secondsSinceCompletion: 999,
+  });
+  assert.equal(beginState.convergencePulse > 0.2, true);
+
+  // Final 5 minutes (<= 300s) triggers subtle atmospheric energy increase
+  const finalFiveState = computeTimerAwareAtmosphereState({
+    status: 'running',
+    phase: 'focus',
+    remainingSeconds: 120,
+    totalSeconds: 2700,
+    progress: 0.95,
+    audioAmplitude: 0,
+    reducedMotion: false,
+    secondsSinceStart: 2580,
+    secondsSinceCompletion: 999,
+  });
+  assert.equal(finalFiveState.finalFiveMinBoost > 0, true);
+  assert.equal(finalFiveState.auroraLuminousIntensity > idleState.auroraLuminousIntensity, true);
+
+  // Completion triggers energy-release transition
+  const completedState = computeTimerAwareAtmosphereState({
+    status: 'completed',
+    phase: 'focus',
+    remainingSeconds: 0,
+    totalSeconds: 2700,
+    progress: 1,
+    audioAmplitude: 0,
+    reducedMotion: false,
+    secondsSinceStart: 2700,
+    secondsSinceCompletion: 0.8,
+  });
+  assert.equal(completedState.completionRelease > 0.4, true);
+
+  // 3. Adaptive quality tier scales appropriately
+  const swTier = computeAdaptiveQualityTier(60, true, false);
+  const ultraTier = computeAdaptiveQualityTier(60, false, false);
+  assert.equal(swTier.tier, 'software-safe');
+  assert.equal(swTier.enableMultiPassFluidFbo, false);
+  assert.equal(ultraTier.tier, 'ultra');
+  assert.equal(ultraTier.enableMultiPassFluidFbo, true);
+
+  // 4. Shaders include Engine A, Engine B, and Engine C implementations
+  assert.equal(INFINITY_AURORA_WGSL_SOURCE.includes('samplePrimaryAuroraDensity'), true);
+  assert.equal(INFINITY_AURORA_WGSL_SOURCE.includes('sampleSecondaryAuroraDensity'), true);
+  assert.equal(INFINITY_AURORA_WGSL_SOURCE.includes('computeFluidStep'), true);
+  assert.equal(NEBULA_FLUID_FRAGMENT_SHADER.includes('renderEngineAPrimaryAurora'), true);
+  assert.equal(NEBULA_FLUID_FRAGMENT_SHADER.includes('renderEngineBSecondaryAurora'), true);
+});
+
 
 

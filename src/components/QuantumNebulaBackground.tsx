@@ -1,7 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { FocusSceneConfig, OrbDesignId, TimerStatus } from '../types/aura';
+import {
+  FocusSceneConfig,
+  OrbDesignId,
+  TimerPhase,
+  TimerStatus,
+} from '../types/aura';
 import { soundEngine } from '../utils/soundSynthesizer';
 import {
   NEBULA_FLUID_FRAGMENT_SHADER,
@@ -9,31 +14,46 @@ import {
   QUANTUM_PARTICLES_FRAGMENT_SHADER,
   QUANTUM_PARTICLES_VERTEX_SHADER,
   computeBackgroundMixWeights,
-  computeFluidTurbulenceGain,
-  interpolateNebulaSpectrum,
   orbDesignToShaderMode,
 } from '../utils/quantumNebulaShaders';
+import {
+  GPUFluidSimulationPipeline,
+  INFINITY_AURORA_WGSL_SOURCE,
+  computeAdaptiveQualityTier,
+  computeSceneAuroraPalette,
+  computeTimerAwareAtmosphereState,
+  createNeutralFluidDataTexture,
+} from '../utils/infinityAuroraEngine';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
   orbDesign?: OrbDesignId;
   status: TimerStatus;
+  phase?: TimerPhase;
+  remainingSeconds?: number;
+  totalSeconds?: number;
   progress: number;
   audioReactive: boolean;
   reducedMotion: boolean;
   backgroundMix?: number;
 }
 
-// Pre-allocated module-scope helpers for zero GC in the animation loop
+// Pre-allocated module-scope helpers for zero GC in the 60fps animation loop
 const _targetViolet = new THREE.Color();
 const _targetCyan = new THREE.Color();
 const _targetMagenta = new THREE.Color();
 const _targetDeep = new THREE.Color();
+const _targetZenith = new THREE.Color();
+const _targetEngineBPrimary = new THREE.Color();
+const _targetEngineBCoral = new THREE.Color();
 
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
   orbDesign = 'original',
   status,
+  phase = 'focus',
+  remainingSeconds = 2700,
+  totalSeconds = 2700,
   progress,
   audioReactive,
   reducedMotion,
@@ -42,10 +62,29 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
 
+  // Track session state transition timestamps for timer-aware visual behavior
+  const sessionStartMsRef = useRef<number>(-10000);
+  const sessionCompleteMsRef = useRef<number>(-10000);
+  const prevStatusRef = useRef<TimerStatus>(status);
+
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    if (prev !== 'running' && status === 'running') {
+      sessionStartMsRef.current = performance.now();
+    }
+    if (prev !== 'completed' && status === 'completed') {
+      sessionCompleteMsRef.current = performance.now();
+    }
+    prevStatusRef.current = status;
+  }, [status]);
+
   const liveStateRef = useRef({
     scene,
     orbDesign,
     status,
+    phase,
+    remainingSeconds,
+    totalSeconds,
     progress,
     audioReactive,
     reducedMotion,
@@ -57,6 +96,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       scene,
       orbDesign,
       status,
+      phase,
+      remainingSeconds,
+      totalSeconds,
       progress,
       audioReactive,
       reducedMotion,
@@ -66,6 +108,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     scene,
     orbDesign,
     status,
+    phase,
+    remainingSeconds,
+    totalSeconds,
     progress,
     audioReactive,
     reducedMotion,
@@ -77,6 +122,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     if (!container) return;
 
     let renderer: THREE.WebGLRenderer | null = null;
+    let fluidPipeline: GPUFluidSimulationPipeline | null = null;
+    let neutralFluidTex: THREE.DataTexture | null = null;
+    let webgpuDevice: { destroy?: () => void } | null = null;
+
     try {
       // 1. Software-WebGL Guard (Three.js r160+ standard)
       const isSoftwareGl = (() => {
@@ -89,11 +138,52 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         return /SwiftShader|llvmpipe|softpipe|Software|Basic Render/i.test(gpu);
       })();
 
+      // Optional WebGPU WGSL Compute Verification & Device Loss Guard (when supported on hardware GPU)
+      if (
+        !isSoftwareGl &&
+        typeof navigator !== 'undefined' &&
+        'gpu' in navigator
+      ) {
+        const navGpu = (
+          navigator as unknown as {
+            gpu?: {
+              requestAdapter?: () => Promise<{
+                requestDevice?: () => Promise<{
+                  createShaderModule?: (desc: { code: string }) => unknown;
+                  lost?: Promise<unknown>;
+                  destroy?: () => void;
+                }>;
+              } | null>;
+            };
+          }
+        ).gpu;
+
+        navGpu
+          ?.requestAdapter?.()
+          .then((adapter) => adapter?.requestDevice?.())
+          .then((device) => {
+            if (!device) return;
+            webgpuDevice = device;
+            device.createShaderModule?.({ code: INFINITY_AURORA_WGSL_SOURCE });
+            device.lost?.then(() => {
+              webgpuDevice = null;
+            });
+          })
+          .catch(() => {
+            // Gracefully continue with WebGL2 pipeline
+          });
+      }
+
       const width = container.clientWidth || window.innerWidth;
       const height = container.clientHeight || window.innerHeight;
+      const initialQuality = computeAdaptiveQualityTier(
+        60,
+        isSoftwareGl,
+        liveStateRef.current.reducedMotion
+      );
       const pixelRatio = isSoftwareGl
         ? 1
-        : Math.min(window.devicePixelRatio || 1, 2);
+        : Math.min(window.devicePixelRatio || 1, initialQuality.pixelRatioCap);
 
       renderer = new THREE.WebGLRenderer({
         antialias: !isSoftwareGl,
@@ -102,7 +192,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       });
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
-      renderer.toneMappingExposure = 1.05;
+      renderer.toneMappingExposure = 1.06;
       renderer.setPixelRatio(pixelRatio);
       renderer.setSize(width, height);
       renderer.shadowMap.enabled = !isSoftwareGl;
@@ -132,35 +222,70 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       keyLight.position.set(3.5, 4.2, 3.0);
       threeScene.add(keyLight);
 
-      // Initial spectrum correlated with active Focus Scene & initial Fluid × Nebula mix
-      const initialSpec = interpolateNebulaSpectrum(liveStateRef.current.scene);
+      // 4. Engine C: Real-Time GPU Ping-Pong Navier-Stokes Fluid Pipeline
+      neutralFluidTex = createNeutralFluidDataTexture();
+      if (initialQuality.enableMultiPassFluidFbo) {
+        fluidPipeline = new GPUFluidSimulationPipeline(
+          renderer,
+          initialQuality.fluidGridSize
+        );
+      }
+
+      // Initial scene-calibrated Dual Aurora + Fluid palette
+      const initialPalette = computeSceneAuroraPalette(
+        liveStateRef.current.scene,
+        liveStateRef.current.phase
+      );
       const initialMix = computeBackgroundMixWeights(
         liveStateRef.current.backgroundMix
       );
-      const currentViolet = new THREE.Color(...initialSpec.violet);
-      const currentCyan = new THREE.Color(...initialSpec.cyan);
-      const currentMagenta = new THREE.Color(...initialSpec.magenta);
-      const currentDeep = new THREE.Color(...initialSpec.deepSpace);
 
-      // 4. Layer 1: Full-Viewport Dual-Layer Quantum Nebula × GPU Fluid Dynamics Plane
+      const currentViolet = new THREE.Color(...initialPalette.engineAPrimary);
+      const currentCyan = new THREE.Color(...initialPalette.engineASecondary);
+      const currentMagenta = new THREE.Color(
+        ...initialPalette.engineCMagentaInterference
+      );
+      const currentDeep = new THREE.Color(...initialPalette.deepBackground);
+      const currentZenith = new THREE.Color(...initialPalette.zenithTint);
+      const currentEngineBPrimary = new THREE.Color(
+        ...initialPalette.engineBPrimary
+      );
+      const currentEngineBCoral = new THREE.Color(
+        ...initialPalette.engineBCoralHighlight
+      );
+
+      // 5. Layers 1–5: Unified Dual Volumetric Aurora (Engine A & B) + GPU Fluid Dynamics (Engine C)
       const fluidGeo = new THREE.PlaneGeometry(2, 2);
       const fluidUniforms = {
         uTime: { value: 0 },
+        uTimeB: { value: 17.3 }, // Offset initial phase so Engine A and Engine B never align
+        uTimeC: { value: 41.7 },
         uAspect: { value: width / Math.max(1, height) },
-        uTurbulence: { value: 0.38 },
+        uTurbulence: { value: 0.36 },
         uGravityStrength: { value: 0.25 },
-        uSanctuaryAlpha: { value: 0.75 },
+        uSanctuaryAlpha: { value: 0.85 },
         uAudioAmp: { value: 0 },
         uFluidWeight: { value: initialMix.fluidWeight },
         uNebulaWeight: { value: initialMix.nebulaWeight },
         uOrbMode: {
           value: orbDesignToShaderMode(liveStateRef.current.orbDesign),
         },
+        uConvergencePulse: { value: 0 },
+        uFinalFiveBoost: { value: 0 },
+        uCompletionRelease: { value: 0 },
+        uCurtainSharpness: { value: initialPalette.auroraCurtainSharpness },
+        uSecondaryWaveAmp: { value: initialPalette.secondaryWaveAmplitude },
         uPointer: { value: new THREE.Vector2(0.5, 0.5) },
+        uFluidSimTex: {
+          value: fluidPipeline ? fluidPipeline.getTexture() : neutralFluidTex,
+        },
         uColorViolet: { value: currentViolet.clone() },
         uColorCyan: { value: currentCyan.clone() },
         uColorMagenta: { value: currentMagenta.clone() },
         uColorDeep: { value: currentDeep.clone() },
+        uColorZenith: { value: currentZenith.clone() },
+        uColorEngineBPrimary: { value: currentEngineBPrimary.clone() },
+        uColorEngineBCoral: { value: currentEngineBCoral.clone() },
       };
 
       const fluidMat = new THREE.ShaderMaterial({
@@ -176,8 +301,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       fluidQuad.renderOrder = -10;
       threeScene.add(fluidQuad);
 
-      // 5. Layer 2: Soft GPU-Accelerated Quantum Particle Field (2,800 calm bokeh motes)
-      const particleCount = 2800;
+      // 6. Layer 6: Extremely Subtle 3D Atmospheric Particles & Light Details
+      const particleCount = 2400;
       const positions = new Float32Array(particleCount * 3);
       const phases = new Float32Array(particleCount);
       const speeds = new Float32Array(particleCount);
@@ -187,16 +312,16 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       for (let i = 0; i < particleCount; i++) {
         const frac = i / particleCount;
         const goldenAngle = i * 2.399963229728653;
-        const r = 0.36 + Math.pow(frac, 0.76) * 2.65;
-        const z = ((i * 17) % 100) / 28.0 - 2.3;
+        const r = 0.38 + Math.pow(frac, 0.78) * 2.75;
+        const z = ((i * 17) % 100) / 28.0 - 2.35;
 
         positions[i * 3] = Math.cos(goldenAngle) * r;
         positions[i * 3 + 1] = Math.sin(goldenAngle) * r;
         positions[i * 3 + 2] = z;
 
         phases[i] = ((i * 73) % 1000) / 1000;
-        speeds[i] = (i % 2 === 0 ? 1 : -1) * (0.18 + ((i * 31) % 100) / 180);
-        scales[i] = 0.55 + ((i * 19) % 100) / 85;
+        speeds[i] = (i % 2 === 0 ? 1 : -1) * (0.16 + ((i * 31) % 100) / 190);
+        scales[i] = 0.52 + ((i * 19) % 100) / 90;
         colorMixes[i] = ((i * 43) % 100) / 100;
       }
 
@@ -215,7 +340,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       const particlesUniforms = {
         uTime: { value: 0 },
-        uTurbulence: { value: 0.38 },
+        uTurbulence: { value: 0.36 },
         uAudioAmp: { value: 0 },
         uPixelRatio: { value: pixelRatio },
         uParticleGain: { value: initialMix.particleGain },
@@ -243,7 +368,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         renderer.compile(threeScene, camera);
       }
 
-      // Pointer tracking for subtle interactive fluid drift
+      // Pointer tracking for subtle interactive fluid wake
       let targetPtrX = 0.5;
       let targetPtrY = 0.5;
       let currentPtrX = 0.5;
@@ -266,15 +391,18 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       };
       window.addEventListener('resize', onResize);
 
-      // Handle WebGL context loss gracefully
+      // Handle WebGL context loss & restoration gracefully
       const onContextLost = (e: Event) => {
         e.preventDefault();
       };
       renderer.domElement.addEventListener('webglcontextlost', onContextLost);
 
-      // 6. Continuous Animation Loop with Software-WebGL Fence Pacing & Tab Visibility Pause
+      // 7. Centralized Multi-Timescale Animation Loop with Adaptive FPS & Software-WebGL Fence Pacing
       let lastTimeMs = performance.now();
-      let simTime = 0;
+      let simTimeA = 0;
+      let simTimeB = 17.3;
+      let simTimeC = 41.7;
+      let rollingFps = 60;
       let frameId = 0;
       let isDisposed = false;
 
@@ -303,7 +431,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       function tick() {
         if (isDisposed) return;
 
-        // Pause GPU work when tab is hidden
+        // Visibility-aware rendering: pause GPU work when tab is hidden
         if (document.hidden) {
           lastTimeMs = performance.now();
           frameId = window.setTimeout(tick, 250);
@@ -311,8 +439,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         }
 
         const nowMs = performance.now();
-        const dt = Math.min(0.1, Math.max(0.001, (nowMs - lastTimeMs) / 1000));
+        const rawDt = (nowMs - lastTimeMs) / 1000;
+        const dt = Math.min(0.1, Math.max(0.001, rawDt));
         lastTimeMs = nowMs;
+
+        // Rolling FPS monitor for adaptive quality scaling
+        const instantFps = 1 / Math.max(0.001, rawDt);
+        rollingFps = rollingFps * 0.94 + Math.min(120, instantFps) * 0.06;
+
         const state = liveStateRef.current;
 
         const audioAmp =
@@ -320,49 +454,97 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
             ? soundEngine.getAudioAmplitude()
             : 0;
 
-        const dynamics = computeFluidTurbulenceGain(
-          state.status,
-          state.progress,
-          audioAmp,
-          state.reducedMotion
-        );
+        const secondsSinceStart =
+          sessionStartMsRef.current > 0
+            ? (nowMs - sessionStartMsRef.current) / 1000
+            : 999;
+        const secondsSinceCompletion =
+          sessionCompleteMsRef.current > 0
+            ? (nowMs - sessionCompleteMsRef.current) / 1000
+            : 999;
 
+        const atmosphere = computeTimerAwareAtmosphereState({
+          status: state.status,
+          phase: state.phase,
+          remainingSeconds: state.remainingSeconds,
+          totalSeconds: state.totalSeconds,
+          progress: state.progress,
+          audioAmplitude: audioAmp,
+          reducedMotion: state.reducedMotion,
+          secondsSinceStart,
+          secondsSinceCompletion,
+        });
+
+        const scenePalette = computeSceneAuroraPalette(
+          state.scene,
+          state.phase
+        );
         const mixWeights = computeBackgroundMixWeights(state.backgroundMix);
 
-        simTime += dt * dynamics.flowSpeed * mixWeights.flowVelocityMultiplier;
+        // Advance Engine A, Engine B, and Engine C on independent, incommensurate timescales
+        const flowMult =
+          mixWeights.flowVelocityMultiplier * scenePalette.turbulenceScale;
+        simTimeA += dt * atmosphere.engineATimeScale * flowMult;
+        simTimeB += dt * atmosphere.engineBTimeScale * flowMult;
+        simTimeC += dt * atmosphere.engineCTimeScale * flowMult;
 
-        // Smoothly damp spectrum colors toward active Focus Scene
-        const targetSpec = interpolateNebulaSpectrum(state.scene);
-        _targetViolet.setRGB(...targetSpec.violet);
-        _targetCyan.setRGB(...targetSpec.cyan);
-        _targetMagenta.setRGB(...targetSpec.magenta);
-        _targetDeep.setRGB(...targetSpec.deepSpace);
+        // Smoothly damp colors toward active Focus Scene & Break state
+        _targetViolet.setRGB(...scenePalette.engineAPrimary);
+        _targetCyan.setRGB(...scenePalette.engineASecondary);
+        _targetMagenta.setRGB(...scenePalette.engineCMagentaInterference);
+        _targetDeep.setRGB(...scenePalette.deepBackground);
+        _targetZenith.setRGB(...scenePalette.zenithTint);
+        _targetEngineBPrimary.setRGB(...scenePalette.engineBPrimary);
+        _targetEngineBCoral.setRGB(...scenePalette.engineBCoralHighlight);
 
-        const colorDamp = 1 - Math.exp(-3.2 * dt);
+        const colorDamp = 1 - Math.exp(-2.8 * dt);
         currentViolet.lerp(_targetViolet, colorDamp);
         currentCyan.lerp(_targetCyan, colorDamp);
         currentMagenta.lerp(_targetMagenta, colorDamp);
         currentDeep.lerp(_targetDeep, colorDamp);
+        currentZenith.lerp(_targetZenith, colorDamp);
+        currentEngineBPrimary.lerp(_targetEngineBPrimary, colorDamp);
+        currentEngineBCoral.lerp(_targetEngineBCoral, colorDamp);
 
         currentPtrX = THREE.MathUtils.damp(currentPtrX, targetPtrX, 3.5, dt);
         currentPtrY = THREE.MathUtils.damp(currentPtrY, targetPtrY, 3.5, dt);
 
-        fluidUniforms.uTime.value = simTime;
+        // Step Engine C Ping-Pong GPU Fluid Simulation when enabled on hardware GPU
+        if (fluidPipeline && !state.reducedMotion && rollingFps >= 26) {
+          const simTex = fluidPipeline.step({
+            timeA: simTimeA,
+            timeB: simTimeB,
+            timeC: simTimeC,
+            dt,
+            turbulence: atmosphere.turbulence * scenePalette.turbulenceScale,
+            vorticityGain: scenePalette.fluidVorticityGain,
+            convergencePulse: atmosphere.convergencePulse,
+            completionRelease: atmosphere.completionRelease,
+            pointerX: currentPtrX,
+            pointerY: currentPtrY,
+          });
+          fluidUniforms.uFluidSimTex.value = simTex;
+        }
+
+        // Update Master Volumetric Shader Uniforms
+        fluidUniforms.uTime.value = simTimeA;
+        fluidUniforms.uTimeB.value = simTimeB;
+        fluidUniforms.uTimeC.value = simTimeC;
         fluidUniforms.uTurbulence.value = THREE.MathUtils.damp(
           fluidUniforms.uTurbulence.value,
-          dynamics.turbulence,
+          atmosphere.turbulence * scenePalette.turbulenceScale,
           3.5,
           dt
         );
         fluidUniforms.uGravityStrength.value = THREE.MathUtils.damp(
           fluidUniforms.uGravityStrength.value,
-          dynamics.gravitationalStrength,
+          0.25 + atmosphere.convergencePulse * 0.18,
           3.5,
           dt
         );
         fluidUniforms.uSanctuaryAlpha.value = THREE.MathUtils.damp(
           fluidUniforms.uSanctuaryAlpha.value,
-          dynamics.centralSanctuaryAlpha,
+          atmosphere.centralSanctuaryRetention,
           3.5,
           dt
         );
@@ -374,13 +556,13 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         );
         fluidUniforms.uFluidWeight.value = THREE.MathUtils.damp(
           fluidUniforms.uFluidWeight.value,
-          mixWeights.fluidWeight,
+          mixWeights.fluidWeight * atmosphere.fluidEnergyGain,
           5.0,
           dt
         );
         fluidUniforms.uNebulaWeight.value = THREE.MathUtils.damp(
           fluidUniforms.uNebulaWeight.value,
-          mixWeights.nebulaWeight,
+          mixWeights.nebulaWeight * atmosphere.auroraLuminousIntensity,
           5.0,
           dt
         );
@@ -390,13 +572,49 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           4.5,
           dt
         );
+        fluidUniforms.uConvergencePulse.value = THREE.MathUtils.damp(
+          fluidUniforms.uConvergencePulse.value,
+          atmosphere.convergencePulse,
+          6.0,
+          dt
+        );
+        fluidUniforms.uFinalFiveBoost.value = THREE.MathUtils.damp(
+          fluidUniforms.uFinalFiveBoost.value,
+          atmosphere.finalFiveMinBoost,
+          2.5,
+          dt
+        );
+        fluidUniforms.uCompletionRelease.value = THREE.MathUtils.damp(
+          fluidUniforms.uCompletionRelease.value,
+          atmosphere.completionRelease,
+          4.5,
+          dt
+        );
+        fluidUniforms.uCurtainSharpness.value = THREE.MathUtils.damp(
+          fluidUniforms.uCurtainSharpness.value,
+          scenePalette.auroraCurtainSharpness,
+          3.5,
+          dt
+        );
+        fluidUniforms.uSecondaryWaveAmp.value = THREE.MathUtils.damp(
+          fluidUniforms.uSecondaryWaveAmp.value,
+          scenePalette.secondaryWaveAmplitude *
+            atmosphere.secondaryAuroraIntensity,
+          3.5,
+          dt
+        );
+
         fluidUniforms.uPointer.value.set(currentPtrX, currentPtrY);
         fluidUniforms.uColorViolet.value.copy(currentViolet);
         fluidUniforms.uColorCyan.value.copy(currentCyan);
         fluidUniforms.uColorMagenta.value.copy(currentMagenta);
         fluidUniforms.uColorDeep.value.copy(currentDeep);
+        fluidUniforms.uColorZenith.value.copy(currentZenith);
+        fluidUniforms.uColorEngineBPrimary.value.copy(currentEngineBPrimary);
+        fluidUniforms.uColorEngineBCoral.value.copy(currentEngineBCoral);
 
-        particlesUniforms.uTime.value = simTime;
+        // Update Layer 6 Particle Uniforms
+        particlesUniforms.uTime.value = simTimeA;
         particlesUniforms.uTurbulence.value = fluidUniforms.uTurbulence.value;
         particlesUniforms.uAudioAmp.value = fluidUniforms.uAudioAmp.value;
         particlesUniforms.uParticleGain.value = THREE.MathUtils.damp(
@@ -431,6 +649,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           onContextLost
         );
 
+        fluidPipeline?.dispose();
+        neutralFluidTex?.dispose();
+        webgpuDevice?.destroy?.();
         fluidGeo.dispose();
         fluidMat.dispose();
         particlesGeo.dispose();
@@ -453,10 +674,18 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       ref={mountRef}
       data-testid="quantum-nebula-bg"
       data-background-mix={backgroundMix}
+      data-scene-id={scene.id}
+      data-timer-status={status}
+      data-timer-phase={phase}
+      data-engine-architecture="dual-aurora-gpu-fluid"
       style={
         webglFailed
           ? {
-              background: `radial-gradient(circle at 50% 45%, ${scene.colors.primary}22 0%, ${scene.colors.secondary}14 45%, ${scene.colors.baseBg} 100%)`,
+              background: `
+                radial-gradient(ellipse 85% 55% at 50% 22%, ${scene.colors.primary}28 0%, ${scene.colors.secondary}16 48%, transparent 80%),
+                radial-gradient(ellipse 75% 60% at 62% 68%, ${scene.colors.tertiary}22 0%, ${scene.colors.iridescent}12 45%, transparent 75%),
+                radial-gradient(circle at 50% 48%, ${scene.colors.secondary}18 0%, ${scene.colors.baseBg} 100%)
+              `,
             }
           : undefined
       }
