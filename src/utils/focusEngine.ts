@@ -233,22 +233,24 @@ const LEGACY_CHAMBER_MAP: Record<string, ChamberId> = {
   'deep-quiet': 'cosmic-silence',
 };
 
+export const DEFAULT_CHAMBER_ID: ChamberId = 'ocean-drift';
+
 /**
  * Normalizes any persisted or legacy chamber identifier to one of the 6 curated
  * Smart Soundscape Switcher presets (`rain-chamber`, `ocean-drift`, `forest-echo`,
  * `cosmic-silence`, `ember-glow`, `celestial-tone`).
  */
 export function normalizeChamberId(rawId?: string | null): ChamberId {
-  if (!rawId) return 'rain-chamber';
+  if (!rawId) return DEFAULT_CHAMBER_ID;
   if (VALID_CHAMBER_IDS.has(rawId as ChamberId)) {
     return rawId as ChamberId;
   }
-  return LEGACY_CHAMBER_MAP[rawId] || 'rain-chamber';
+  return LEGACY_CHAMBER_MAP[rawId] || DEFAULT_CHAMBER_ID;
 }
 
 export function getChamberById(id?: string | null): ChamberConfig {
   const normalized = normalizeChamberId(id);
-  return CHAMBERS.find((c) => c.id === normalized) || CHAMBERS[0];
+  return CHAMBERS.find((c) => c.id === normalized) || CHAMBERS[1] || CHAMBERS[0];
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
@@ -263,7 +265,8 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   timerTextScale: 'large',
   desktopNotifications: false,
   backgroundMix: 0.52,
-  orbDesign: 'original',
+  orbDesign: 'celestial-jelly',
+  performanceMode: 'auto',
 };
 
 /**

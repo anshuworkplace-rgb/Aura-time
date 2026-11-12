@@ -91,6 +91,9 @@ export interface SessionRecord {
   chamberId: ChamberId;
 }
 
+export type PerformanceMode = 'auto' | 'balanced' | 'ultra';
+export type PerformanceProfileTier = 'ultra' | 'balanced';
+
 export interface UserSettings {
   dailyGoalMinutes: number;
   breakMinutes: number;
@@ -106,4 +109,6 @@ export interface UserSettings {
   backgroundMix: number;
   /** Selected central Living ORB organism design (3 total: original, celestial-jelly, living-bloom) */
   orbDesign: OrbDesignId;
+  /** Intelligent Mobile Performance Engine mode: 'auto' (default), 'balanced', or 'ultra' */
+  performanceMode?: PerformanceMode;
 }

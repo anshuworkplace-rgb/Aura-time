@@ -72,7 +72,7 @@ class AuraSoundEngine {
   private preloadedBuffers: Map<NoiseBufferKind, AudioBuffer> = new Map();
 
   private desiredPlaying = false;
-  private desiredChamberId: ChamberId = 'rain-chamber';
+  private desiredChamberId: ChamberId = 'ocean-drift';
   private desiredVolume = 0.75;
   private autoplayListenerBound = false;
 

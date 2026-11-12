@@ -46,6 +46,7 @@ export interface LivingBloom3DUpdateInput {
   viewportWidth: number;
   viewportHeight: number;
   camera: THREE.PerspectiveCamera;
+  pollenDrawFraction?: number;
 }
 
 // Pre-allocated color targets for zero-GC per-frame damping
@@ -337,14 +338,26 @@ export class LivingBloom3DSceneController {
     parentScene.add(this.rootGroup);
   }
 
+  private lastViewportW = 0;
+  private lastViewportH = 0;
+
   private syncLensContainerBounds(
     nowMs: number,
     viewportWidth: number,
     viewportHeight: number,
     camera: THREE.PerspectiveCamera
   ): void {
-    if (nowMs - this.lastRectQueryMs > 120 || !this.lensElement) {
+    const sizeChanged =
+      viewportWidth !== this.lastViewportW ||
+      viewportHeight !== this.lastViewportH;
+    if (
+      sizeChanged ||
+      nowMs - this.lastRectQueryMs > 600 ||
+      !this.lensElement
+    ) {
       this.lastRectQueryMs = nowMs;
+      this.lastViewportW = viewportWidth;
+      this.lastViewportH = viewportHeight;
       if (!this.lensElement || !this.lensElement.isConnected) {
         this.lensElement = document.querySelector(
           '[data-testid="living-lens-container"]'
@@ -400,6 +413,14 @@ export class LivingBloom3DSceneController {
     }
 
     this.rootGroup.visible = true;
+
+    const totalPollen =
+      this.pollenGeometry.getAttribute('position')?.count || 180;
+    const activePollen = Math.max(
+      36,
+      Math.round(totalPollen * (input.pollenDrawFraction ?? 1.0))
+    );
+    this.pollenGeometry.setDrawRange(0, activePollen);
 
     const stateParams = computeOrbStateParameters(
       input.status,

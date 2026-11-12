@@ -182,6 +182,45 @@ export const MoreControlPanel: React.FC<MoreControlPanelProps> = ({
             ))}
           </div>
         </div>
+
+        {/* Intelligent Mobile Performance Engine Profile */}
+        <div
+          data-testid="dock-performance-mode-group"
+          className="flex items-center justify-between pt-1.5 border-t border-white/8"
+        >
+          <span className="inline-flex items-center gap-2 text-[#F5F6FF]">
+            <Sparkles className="w-3.5 h-3.5 text-[#2FE8FF]" />
+            <span>Render Engine</span>
+          </span>
+          <div className="flex items-center gap-1">
+            {(
+              [
+                { id: 'auto', label: 'Auto' },
+                { id: 'balanced', label: 'Balanced' },
+                { id: 'ultra', label: 'Ultra' },
+              ] as const
+            ).map((mode) => {
+              const active = (settings.performanceMode ?? 'auto') === mode.id;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  data-testid={`perf-mode-${mode.id}`}
+                  onClick={() =>
+                    onUpdateSettings({ performanceMode: mode.id })
+                  }
+                  className={`px-2 py-0.5 rounded-lg text-[10px] border transition-colors cursor-pointer ${
+                    active
+                      ? 'bg-[#2FE8FF]/20 text-[#2FE8FF] border-[#2FE8FF]/50'
+                      : 'bg-white/5 text-[#A3A1BA] border-white/8 hover:text-[#F5F6FF]'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* Studio Navigation: Visual Focus Journal & Command Palette */}

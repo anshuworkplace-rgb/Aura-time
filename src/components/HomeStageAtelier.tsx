@@ -186,7 +186,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
         data-testid="home-orbital-organism-rail"
         role="radiogroup"
         aria-label="Organism Selector"
-        className={`fixed top-5 sm:top-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1 p-1.5 rounded-full aura-glass shadow-2xl transition-all duration-500 ${
+        className={`fixed top-11 sm:top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1.25rem)] transition-all duration-500 ${
           hiddenDuringSession
             ? 'opacity-0 -translate-y-2 pointer-events-none'
             : 'opacity-100'
@@ -205,7 +205,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
               data-testid={`home-orb-node-${design.id}`}
               onClick={() => onSelectOrbDesign(design.id)}
               title={`${displayLabel} — ${design.description}`}
-              className={`group flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+              className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
                 isSelected
                   ? 'text-[#F5F6FF] font-semibold'
                   : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/[0.04]'
@@ -235,13 +235,13 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
       <aside
         data-testid="home-orbital-spectrum-rail"
         aria-label="Colour Theme Spectrum Selector"
-        className={`flex flex-col items-end gap-2.5 fixed right-4 sm:right-6 lg:right-8 top-1/2 -translate-y-1/2 z-30 transition-all duration-700 ${
+        className={`flex flex-col items-end gap-2 fixed right-2.5 sm:right-5 lg:right-8 top-1/2 -translate-y-1/2 z-30 transition-all duration-700 ${
           hiddenDuringSession
             ? 'opacity-0 translate-x-4 pointer-events-none'
             : 'opacity-100 translate-x-0'
         }`}
       >
-        <div className="px-2.5 pb-0.5 flex items-center gap-2">
+        <div className="hidden md:flex px-2.5 pb-0.5 items-center gap-2">
           <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-[#A3A1BA]/85">
             Atmosphere
           </span>
@@ -254,7 +254,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
           />
         </div>
 
-        <div className="flex flex-col gap-1.5 p-2 rounded-2xl aura-glass shadow-2xl">
+        <div className="flex flex-col gap-1.5 p-1.5 md:p-2 rounded-full md:rounded-2xl aura-glass shadow-2xl">
           {SCENE_LIST.map((scene) => {
             const isSelected = activeSceneId === scene.id;
             return (
@@ -264,21 +264,22 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
                 data-testid={`home-theme-node-${scene.id}`}
                 onClick={() => onSelectScene(scene.id)}
                 aria-pressed={isSelected}
+                aria-label={`${scene.name} theme`}
                 title={`${scene.name} — ${scene.tagline}`}
-                className={`group flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-xl text-left transition-all duration-300 cursor-pointer w-[164px] sm:w-[176px] lg:w-[184px] ${
+                className={`group flex items-center justify-center md:justify-between gap-3 w-8 h-8 md:w-[176px] lg:w-[184px] md:h-auto p-0 md:px-3.5 md:py-2.5 rounded-full md:rounded-xl text-left transition-all duration-300 cursor-pointer ${
                   isSelected
-                    ? 'bg-white/[0.09] text-[#F5F6FF] font-semibold'
-                    : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/[0.04]'
+                    ? 'bg-white/[0.12] md:bg-white/[0.09] text-[#F5F6FF] font-semibold'
+                    : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/[0.05]'
                 }`}
                 style={
                   isSelected
                     ? {
-                        boxShadow: `inset 0 0 0 1px ${scene.colors.primary}66`,
+                        boxShadow: `inset 0 0 0 1px ${scene.colors.primary}88`,
                       }
                     : undefined
                 }
               >
-                <span className="text-xs tracking-tight truncate">
+                <span className="hidden md:inline text-xs tracking-tight truncate">
                   {scene.name}
                 </span>
 
@@ -289,7 +290,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
                   style={{
                     background: `linear-gradient(135deg, ${scene.colors.primary}, ${scene.colors.secondary})`,
                     boxShadow: isSelected
-                      ? `0 0 12px ${scene.colors.primary}BB`
+                      ? `0 0 12px ${scene.colors.primary}CC`
                       : 'none',
                   }}
                 />

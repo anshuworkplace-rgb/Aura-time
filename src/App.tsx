@@ -39,10 +39,10 @@ import {
 } from './components/HomeStageAtelier';
 
 const STORAGE_KEYS = {
-  SETTINGS: 'aura_living_lens_settings_v2',
+  SETTINGS: 'aura_living_lens_settings_v3',
   SESSIONS: 'aura_living_lens_sessions_v2',
-  STATE: 'aura_living_lens_state_v2',
-  SOUNDSCAPE: 'aura_selected_soundscape_v1',
+  STATE: 'aura_living_lens_state_v4',
+  SOUNDSCAPE: 'aura_selected_soundscape_v2',
 };
 
 function getTodayIsoDate(): string {
@@ -56,7 +56,7 @@ function getTodayIsoDate(): string {
 export default function App() {
   const todayIsoDate = getTodayIsoDate();
 
-  // 1. User Settings
+  // 1. User Settings (defaults to Celestial Jelly organism)
   const [settings, setSettings] = useState<UserSettings>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
@@ -81,7 +81,7 @@ export default function App() {
     return generateSeedSessions(todayIsoDate);
   });
 
-  // 3. Remembered Defaults for Instant Session Start & Soundscape Persistence
+  // 3. Remembered Defaults (defaults to Electric Quiet theme and Ocean Drift soundscape)
   const [sceneId, setSceneId] = useState<FocusSceneId>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
@@ -94,7 +94,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'deep-current';
+    return 'electric-quiet';
   });
 
   const [chamberId, setChamberId] = useState<ChamberId>(() => {
@@ -111,7 +111,7 @@ export default function App() {
     } catch {
       // ignore
     }
-    return 'rain-chamber';
+    return 'ocean-drift';
   });
 
   const [durationMinutes, setDurationMinutes] = useState<number>(() => {
@@ -513,7 +513,7 @@ export default function App() {
     toggleBrowserFullScreen,
   ]);
 
-  const activeScene = FOCUS_SCENES[sceneId] || FOCUS_SCENES['deep-current'];
+  const activeScene = FOCUS_SCENES[sceneId] || FOCUS_SCENES['electric-quiet'];
   const activeChamber =
     CHAMBERS.find((c) => c.id === chamberId) || CHAMBERS[0];
   const progress = calculateProgress(remainingSeconds, totalSeconds);
@@ -543,7 +543,7 @@ export default function App() {
           ? '#05060E'
           : activeScene.colors.baseBg,
       }}
-      className={`h-screen max-h-screen w-full text-[#F5F6FF] relative overflow-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
+      className={`h-[100dvh] max-h-[100dvh] w-full text-[#F5F6FF] relative overflow-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
         settings.highContrast ? 'high-contrast' : ''
       }`}
     >
@@ -551,7 +551,7 @@ export default function App() {
       <QuantumNebulaBackground
         scene={activeScene}
         chamber={activeChamber}
-        orbDesign={settings.orbDesign ?? 'original'}
+        orbDesign={settings.orbDesign ?? 'celestial-jelly'}
         status={status}
         phase={phase}
         remainingSeconds={remainingSeconds}
@@ -559,12 +559,13 @@ export default function App() {
         progress={progress}
         audioReactive={settings.audioReactive}
         reducedMotion={settings.reducedMotion || activeOverlay !== 'none'}
+        performanceMode={settings.performanceMode ?? 'auto'}
         backgroundMix={settings.backgroundMix ?? 0.52}
       />
 
       {/* Minimal Gallery Top Edge: [AURA TIME] ... [2h 20m today] */}
       <header
-        className={`relative z-30 w-full px-6 sm:px-10 pt-3 sm:pt-4 flex items-center justify-between gap-8 shrink-0 transition-opacity duration-700 ${
+        className={`relative z-30 w-full px-4 sm:px-10 pt-2.5 sm:pt-4 flex items-center justify-between gap-4 sm:gap-8 shrink-0 transition-opacity duration-700 ${
           isRunningOrPaused && !railVisible
             ? 'opacity-0 pointer-events-none'
             : 'opacity-100'
@@ -575,7 +576,7 @@ export default function App() {
           type="button"
           onClick={() => setActiveOverlay('calibration')}
           title="AURA TIME · Command & Calibration (⌘K)"
-          className="font-display text-xs font-semibold tracking-[0.22em] text-[#F5F6FF]/90 hover:text-[#F5F6FF] transition-colors uppercase py-1 cursor-pointer whitespace-nowrap shrink-0"
+          className="font-display text-[11px] sm:text-xs font-semibold tracking-[0.22em] text-[#F5F6FF]/90 hover:text-[#F5F6FF] transition-colors uppercase py-1 cursor-pointer whitespace-nowrap shrink-0"
         >
           AURA TIME
         </button>
@@ -587,7 +588,7 @@ export default function App() {
             data-testid="today-signal-btn"
             onClick={() => setActiveOverlay('insights')}
             title="Open Visual Focus Journal"
-            className="font-mono tabular-nums text-xs text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors py-1 cursor-pointer whitespace-nowrap shrink-0"
+            className="font-mono tabular-nums text-[11px] sm:text-xs text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors py-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
@@ -595,10 +596,10 @@ export default function App() {
       </header>
 
       {/* Main Digital Gallery Stage */}
-      <main className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-center py-1 px-4">
+      <main className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-between sm:justify-center pt-10 sm:pt-2 pb-2 sm:pb-3 px-3 sm:px-4">
         {immersionMode === 'minimal' && isRunningOrPaused ? (
           /* Minimal Focus Option: Only the time and a subtle progress edge */
-          <div className="flex flex-col items-center gap-6 p-12 rounded-3xl aura-glass-elevated relative overflow-hidden">
+          <div className="my-auto flex flex-col items-center gap-6 p-8 sm:p-12 rounded-3xl aura-glass-elevated relative overflow-hidden">
             <div
               className="absolute top-0 left-0 h-[3px] transition-all duration-500"
               style={{
@@ -606,7 +607,7 @@ export default function App() {
                 background: `linear-gradient(90deg, ${activeScene.colors.secondary}, ${activeScene.colors.primary})`,
               }}
             />
-            <span className="font-display text-7xl sm:text-8xl font-semibold text-[#F5F6FF] tabular-nums tracking-tight">
+            <span className="font-display text-6xl sm:text-8xl font-semibold text-[#F5F6FF] tabular-nums tracking-tight">
               {formatRemainingTime(remainingSeconds)}
             </span>
             <div className="flex items-center gap-3">
@@ -630,10 +631,10 @@ export default function App() {
           </div>
         ) : (
           /* Central Living Lens + Home Stage Orbital Frame + Single Primary Action + 4-Group Dock */
-          <div className="flex flex-col items-center">
+          <div className="w-full flex-1 min-h-0 flex flex-col items-center justify-between sm:justify-center">
             <HomeStageOrbitalFrame
               stageLayout={stageLayout}
-              orbDesign={settings.orbDesign ?? 'original'}
+              orbDesign={settings.orbDesign ?? 'celestial-jelly'}
               onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
               activeSceneId={sceneId}
               activeScene={activeScene}
@@ -653,35 +654,38 @@ export default function App() {
               railVisible={railVisible}
             />
 
-            <LivingLens
-              scene={activeScene}
-              chamber={activeChamber}
-              orbDesign={settings.orbDesign ?? 'original'}
-              completedSessionsCount={sessions.length}
-              status={status}
-              phase={phase}
-              remainingSeconds={remainingSeconds}
-              totalSeconds={totalSeconds}
-              progress={progress}
-              durationMinutes={durationMinutes}
-              onChangeDurationMinutes={handleChangeDuration}
-              sessionLabel={sessionLabel}
-              onChangeSessionLabel={setSessionLabel}
-              scrubberOpen={scrubberOpen}
-              onToggleScrubber={setScrubberOpen}
-              audioReactive={settings.audioReactive}
-              reducedMotion={settings.reducedMotion || activeOverlay !== 'none'}
-              timerTextScale={settings.timerTextScale}
-              immersionMode={immersionMode}
-              onPrimaryAction={handlePrimaryAction}
-              onStartBreak={handleStartBreak}
-              onStartAgain={handlePrimaryAction}
-            />
+            <div className="my-auto flex flex-col items-center justify-center">
+              <LivingLens
+                scene={activeScene}
+                chamber={activeChamber}
+                orbDesign={settings.orbDesign ?? 'celestial-jelly'}
+                completedSessionsCount={sessions.length}
+                status={status}
+                phase={phase}
+                remainingSeconds={remainingSeconds}
+                totalSeconds={totalSeconds}
+                progress={progress}
+                durationMinutes={durationMinutes}
+                onChangeDurationMinutes={handleChangeDuration}
+                sessionLabel={sessionLabel}
+                onChangeSessionLabel={setSessionLabel}
+                scrubberOpen={scrubberOpen}
+                onToggleScrubber={setScrubberOpen}
+                audioReactive={settings.audioReactive}
+                reducedMotion={settings.reducedMotion || activeOverlay !== 'none'}
+                performanceMode={settings.performanceMode ?? 'auto'}
+                timerTextScale={settings.timerTextScale}
+                immersionMode={immersionMode}
+                onPrimaryAction={handlePrimaryAction}
+                onStartBreak={handleStartBreak}
+                onStartAgain={handlePrimaryAction}
+              />
+            </div>
 
             {/* Unified Compact Control Dock */}
             {status !== 'completed' && (
               <div
-                className={`mt-4 sm:mt-5 flex flex-col items-center transition-opacity duration-500 ${
+                className={`mt-2 sm:mt-4 pb-1 sm:pb-0 flex flex-col items-center shrink-0 transition-opacity duration-500 ${
                   isRunningOrPaused && !railVisible
                     ? 'opacity-0 pointer-events-none'
                     : 'opacity-100'
@@ -720,9 +724,9 @@ export default function App() {
       </main>
 
       {/* Barely Visible Daily-Progress Ambient Glow Near Bottom Screen Edge */}
-      <footer className="relative z-20 w-full flex flex-col items-center pointer-events-none">
+      <footer className="relative z-20 w-full flex flex-col items-center pointer-events-none shrink-0">
         <div
-          className="w-full max-w-xl h-8 blur-2xl opacity-35 transition-all duration-1000"
+          className="w-full max-w-xl h-6 sm:h-8 blur-2xl opacity-35 transition-all duration-1000"
           style={{
             background: `radial-gradient(ellipse at 50% 100%, ${activeScene.colors.primary}, ${activeScene.colors.secondary}, transparent 75%)`,
           }}
@@ -752,7 +756,7 @@ export default function App() {
         onClose={() => setActiveOverlay('none')}
         activeSceneId={sceneId}
         onSelectScene={handleSelectScene}
-        orbDesign={settings.orbDesign ?? 'original'}
+        orbDesign={settings.orbDesign ?? 'celestial-jelly'}
         onChangeOrbDesign={(design) => updateSettings({ orbDesign: design })}
         backgroundMix={settings.backgroundMix ?? 0.52}
         onChangeBackgroundMix={(mix) => updateSettings({ backgroundMix: mix })}

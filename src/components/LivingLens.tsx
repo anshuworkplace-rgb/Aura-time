@@ -4,6 +4,7 @@ import {
   FocusImmersionMode,
   FocusSceneConfig,
   OrbDesignId,
+  PerformanceMode,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
@@ -13,6 +14,10 @@ import {
   minutesToRadialFraction,
   radialFractionToMinutes,
 } from '../utils/focusEngine';
+import {
+  detectDeviceCapabilities,
+  resolveMobilePerformanceProfile,
+} from '../utils/mobilePerformanceEngine';
 import {
   OrbRipple,
   ProceduralPetal,
@@ -45,6 +50,7 @@ interface LivingLensProps {
   onToggleScrubber: (open: boolean) => void;
   audioReactive: boolean;
   reducedMotion: boolean;
+  performanceMode?: PerformanceMode;
   timerTextScale: 'default' | 'large' | 'monumental';
   immersionMode: FocusImmersionMode;
   onPrimaryAction: () => void;
@@ -66,7 +72,7 @@ interface CausticDroplet {
 export const LivingLens: React.FC<LivingLensProps> = ({
   scene,
   chamber,
-  orbDesign = 'original',
+  orbDesign = 'celestial-jelly',
   completedSessionsCount = 10,
   status,
   phase,
@@ -81,6 +87,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
   onToggleScrubber,
   audioReactive,
   reducedMotion,
+  performanceMode = 'auto',
   timerTextScale,
   immersionMode,
   onPrimaryAction,
@@ -124,6 +131,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     progress,
     audioReactive,
     reducedMotion,
+    performanceMode,
   });
 
   useEffect(() => {
@@ -139,6 +147,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       progress,
       audioReactive,
       reducedMotion,
+      performanceMode,
     };
   }, [
     scene,
@@ -152,6 +161,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     progress,
     audioReactive,
     reducedMotion,
+    performanceMode,
   ]);
 
   // Trigger a gentle completion ripple when session finishes
@@ -182,7 +192,21 @@ export const LivingLens: React.FC<LivingLensProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const initialCaps = detectDeviceCapabilities({
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      devicePixelRatio: window.devicePixelRatio || 1,
+      coarsePointer: window.matchMedia?.('(pointer: coarse)')?.matches ?? false,
+      maxTouchPoints: navigator.maxTouchPoints || 0,
+      hardwareConcurrency: navigator.hardwareConcurrency || 4,
+    });
+    const initialPerfProfile = resolveMobilePerformanceProfile({
+      performanceMode: liveRef.current.performanceMode,
+      capabilities: initialCaps,
+      reducedMotion: liveRef.current.reducedMotion,
+    });
+
+    const dpr = Math.min(window.devicePixelRatio || 1, initialPerfProfile.pixelRatioCap);
     const size = 620;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -414,7 +438,19 @@ export const LivingLens: React.FC<LivingLensProps> = ({
       }
 
       const p = liveRef.current;
-      const minDelta = p.reducedMotion ? 500 : 24;
+      const perfProfile = resolveMobilePerformanceProfile({
+        performanceMode: p.performanceMode,
+        capabilities: initialCaps,
+        reducedMotion: p.reducedMotion,
+      });
+      const is3DOrganismIdleOverlay =
+        p.orbDesign !== 'original' && ripplesRef.current.length === 0;
+      const minDelta = p.reducedMotion
+        ? 500
+        : is3DOrganismIdleOverlay
+        ? perfProfile.idle2DOverlayIntervalMs
+        : Math.max(20, perfProfile.minFrameIntervalMs);
+
       if (ts - lastDraw < minDelta) {
         animId = requestAnimationFrame(render);
         return;
@@ -890,15 +926,15 @@ export const LivingLens: React.FC<LivingLensProps> = ({
 
   const scaleClass =
     isRunningOrPaused && immersionMode !== 'minimal'
-      ? 'w-[200px] h-[200px] sm:w-[260px] sm:h-[260px] md:w-[300px] md:h-[300px] lg:w-[325px] lg:h-[325px]'
-      : 'w-[190px] h-[190px] sm:w-[245px] sm:h-[245px] md:w-[285px] md:h-[285px] lg:w-[310px] lg:h-[310px]';
+      ? 'w-[225px] h-[225px] sm:w-[260px] sm:h-[260px] md:w-[300px] md:h-[300px] lg:w-[325px] lg:h-[325px]'
+      : 'w-[215px] h-[215px] sm:w-[245px] sm:h-[245px] md:w-[285px] md:h-[285px] lg:w-[310px] lg:h-[310px]';
 
   const numeralSizeClass =
     timerTextScale === 'monumental'
       ? 'text-5xl sm:text-6xl md:text-7xl'
       : timerTextScale === 'large'
       ? 'text-4xl sm:text-5xl md:text-6xl'
-      : 'text-3xl sm:text-4xl md:text-5xl';
+      : 'text-4xl sm:text-4xl md:text-5xl';
 
   return (
     <div className="flex flex-col items-center">

@@ -54,6 +54,8 @@ export interface CelestialJelly3DUpdateInput {
   viewportWidth: number;
   viewportHeight: number;
   camera: THREE.PerspectiveCamera;
+  planktonDrawFraction?: number;
+  jellyBiolumeNodeFraction?: number;
 }
 
 // Pre-allocated color targets for zero-GC per-frame damping
@@ -442,7 +444,7 @@ export class CelestialJelly3DSceneController {
       viewportHeight !== this.lastViewportH;
     if (
       sizeChanged ||
-      nowMs - this.lastRectQueryMs > 120 ||
+      nowMs - this.lastRectQueryMs > 600 ||
       !this.lensElement
     ) {
       this.lastRectQueryMs = nowMs;
@@ -503,6 +505,23 @@ export class CelestialJelly3DSceneController {
     }
 
     this.rootGroup.visible = true;
+
+    // Apply adaptive particle draw ranges without reallocating buffers
+    const totalPlankton =
+      this.planktonGeometry.getAttribute('position')?.count || 150;
+    const activePlankton = Math.max(
+      32,
+      Math.round(totalPlankton * (input.planktonDrawFraction ?? 1.0))
+    );
+    this.planktonGeometry.setDrawRange(0, activePlankton);
+
+    const activeBiolume = Math.max(
+      64,
+      Math.round(
+        this.rig.biolumeNodeCount * (input.jellyBiolumeNodeFraction ?? 1.0)
+      )
+    );
+    this.rig.biolumeNodesGeometry.setDrawRange(0, activeBiolume);
 
     const stateParams = computeOrbStateParameters(
       input.status,

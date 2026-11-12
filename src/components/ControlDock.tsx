@@ -109,7 +109,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   const activeChamber =
     CHAMBERS.find((c) => c.id === primaryChamberId) || CHAMBERS[0];
   const activeScene =
-    FOCUS_SCENES[activeSceneId] || FOCUS_SCENES['deep-current'];
+    FOCUS_SCENES[activeSceneId] || FOCUS_SCENES['electric-quiet'];
 
   const toggleGroup = (group: Exclude<DockGroupId, null>) => {
     setOpenGroup((prev) => (prev === group ? null : group));
@@ -151,7 +151,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               duration: 0.18,
               ease: [0.16, 1, 0.3, 1],
             }}
-            className={`fixed z-50 bottom-20 left-1/2 -translate-x-1/2 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:translate-x-0 max-w-[calc(100vw-1.5rem)] ${
+            className={`fixed z-50 bottom-16 sm:bottom-20 left-1/2 -translate-x-1/2 lg:bottom-auto lg:top-1/2 lg:-translate-y-1/2 lg:translate-x-0 max-w-[calc(100vw-1.25rem)] max-h-[calc(100dvh-5.5rem)] overflow-y-auto rounded-3xl ${
               isLeftDrawer
                 ? 'lg:left-6 lg:right-auto'
                 : 'lg:right-6 lg:left-auto'
@@ -186,7 +186,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               <FocusControlPanel
                 immersionMode={immersionMode}
                 onChangeImmersionMode={onChangeImmersionMode}
-                orbDesign={settings.orbDesign ?? 'original'}
+                orbDesign={settings.orbDesign ?? 'celestial-jelly'}
                 onChangeOrbDesign={(design) =>
                   onUpdateSettings({ orbDesign: design })
                 }
@@ -335,7 +335,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           <span className="hidden sm:inline tracking-wide max-w-[124px] truncate">
             {activeChamber.name}
           </span>
-          <span className="sm:hidden">Soundscape</span>
+          <span className="sm:hidden">{activeChamber.name.split(' ')[0]}</span>
         </button>
 
         <span
@@ -366,7 +366,7 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           <span className="hidden sm:inline tracking-wide max-w-[116px] truncate">
             {activeScene.name}
           </span>
-          <span className="sm:hidden">Scene</span>
+          <span className="sm:hidden">{activeScene.name.split(' ')[0]}</span>
         </button>
 
         <span

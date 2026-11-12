@@ -28,6 +28,18 @@
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     background-color: var(--aura-bg-midnight);
     color: var(--aura-text-primary);
+    overscroll-behavior: none;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button,
+  [role="button"],
+  [role="radio"],
+  [role="switch"],
+  input {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
   }
 
   h1, h2, h3, .font-display {
@@ -51,6 +63,8 @@
   box-shadow:
     0 16px 40px -12px rgba(4, 5, 12, 0.78),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .aura-glass-elevated {
@@ -59,6 +73,8 @@
   box-shadow:
     0 24px 56px -12px rgba(4, 5, 12, 0.88),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.16);
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .aura-grain {

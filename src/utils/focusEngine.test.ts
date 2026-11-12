@@ -145,7 +145,10 @@ test('all 5 Focus Scenes and 6 Curated Smart Soundscapes are defined with backwa
     ]
   );
 
-  // Verify legacy persisted IDs normalize cleanly
+  // Verify default soundscape is Ocean Drift and legacy persisted IDs normalize cleanly
+  const { DEFAULT_CHAMBER_ID } = await import('./focusEngine');
+  assert.equal(DEFAULT_CHAMBER_ID, 'ocean-drift');
+  assert.equal(normalizeChamberId(undefined), 'ocean-drift');
   assert.equal(normalizeChamberId('coastal-static'), 'ocean-drift');
   assert.equal(normalizeChamberId('forest-2am'), 'forest-echo');
   assert.equal(normalizeChamberId('low-orbit'), 'cosmic-silence');
@@ -244,6 +247,11 @@ test('strictly 3 ORB designs (Original, Celestial Jelly, Living Bloom) and organ
     computeBloomGrowthStage,
     generateBloomPetals,
   } = await import('./organicOrbEngine');
+  const { DEFAULT_USER_SETTINGS } = await import('./focusEngine');
+
+  // Default organism is Celestial Jelly and Electric Quiet theme exists
+  assert.equal(DEFAULT_USER_SETTINGS.orbDesign, 'celestial-jelly');
+  assert.equal(FOCUS_SCENES['electric-quiet'].name, 'Electric Quiet');
 
   // Strictly 3 ORB designs and 5 colour themes
   assert.equal(ORB_DESIGNS.length, 3);
@@ -573,6 +581,99 @@ test('Phase 2: 3D Living Bloom 44-petal 4-whorl corolla, branching vascular vein
   }
 });
 
+test('Intelligent Mobile Performance Engine detects smartphone vs desktop capabilities, resolves Ultra and Balanced profiles, and paces frames accurately', async () => {
+  const {
+    detectDeviceCapabilities,
+    buildPerformanceProfile,
+    resolveMobilePerformanceProfile,
+    AdaptivePerformanceGovernor,
+  } = await import('./mobilePerformanceEngine');
 
+  // 1. Smartphone detection (iPhone/Android viewport 390x844)
+  const mobileCaps = detectDeviceCapabilities({
+    viewportWidth: 390,
+    viewportHeight: 844,
+    devicePixelRatio: 3,
+    coarsePointer: true,
+    maxTouchPoints: 5,
+    hardwareConcurrency: 6,
+    deviceMemoryGb: 4,
+    saveData: false,
+    isSoftwareGl: false,
+  });
+  assert.equal(mobileCaps.isMobileDevice, true);
+  assert.equal(mobileCaps.isPowerfulMobile, false);
 
+  // Default 'auto' on smartphone selects 'balanced' profile targeting 30-45 FPS
+  const autoMobileProfile = resolveMobilePerformanceProfile({
+    performanceMode: 'auto',
+    capabilities: mobileCaps,
+  });
+  assert.equal(autoMobileProfile.profileId, 'balanced');
+  assert.equal(autoMobileProfile.targetFps >= 30 && autoMobileProfile.targetFps <= 45, true);
+  assert.equal(autoMobileProfile.pixelRatioCap, 1.25);
+  assert.equal(autoMobileProfile.primaryAuroraSteps, 5);
+  assert.equal(autoMobileProfile.secondaryAuroraSteps, 4);
+  assert.equal(autoMobileProfile.particleDrawFraction, 0.65);
+  assert.equal(autoMobileProfile.pointSizeCompensation > 1.0, true);
 
+  // Explicit 'ultra' on smartphone selects 'ultra' profile
+  const forcedUltraMobile = resolveMobilePerformanceProfile({
+    performanceMode: 'ultra',
+    capabilities: mobileCaps,
+  });
+  assert.equal(forcedUltraMobile.profileId, 'ultra');
+  assert.equal(forcedUltraMobile.primaryAuroraSteps, 8);
+  assert.equal(forcedUltraMobile.secondaryAuroraSteps, 6);
+  assert.equal(forcedUltraMobile.particleDrawFraction, 1.0);
+
+  // Flagship mobile with >=8 cores, >=8GB RAM, and >=54 rolling FPS upgrades to 'ultra'
+  const flagshipMobileCaps = detectDeviceCapabilities({
+    viewportWidth: 430,
+    viewportHeight: 932,
+    devicePixelRatio: 3,
+    coarsePointer: true,
+    maxTouchPoints: 5,
+    hardwareConcurrency: 8,
+    deviceMemoryGb: 8,
+    saveData: false,
+    isSoftwareGl: false,
+  });
+  assert.equal(flagshipMobileCaps.isPowerfulMobile, true);
+  const flagshipPromoted = resolveMobilePerformanceProfile({
+    performanceMode: 'auto',
+    capabilities: flagshipMobileCaps,
+    rollingFps: 58,
+  });
+  assert.equal(flagshipPromoted.profileId, 'ultra');
+
+  // 2. Desktop detection (1440x900) defaults to 'ultra'
+  const desktopCaps = detectDeviceCapabilities({
+    viewportWidth: 1440,
+    viewportHeight: 900,
+    devicePixelRatio: 2,
+    coarsePointer: false,
+    maxTouchPoints: 0,
+    hardwareConcurrency: 8,
+    deviceMemoryGb: 16,
+    saveData: false,
+    isSoftwareGl: false,
+  });
+  assert.equal(desktopCaps.isMobileDevice, false);
+  const autoDesktopProfile = resolveMobilePerformanceProfile({
+    performanceMode: 'auto',
+    capabilities: desktopCaps,
+  });
+  assert.equal(autoDesktopProfile.profileId, 'ultra');
+  assert.equal(autoDesktopProfile.targetFps, 60);
+
+  // 3. AdaptivePerformanceGovernor tracks FPS and schedules fluid FBO steps
+  const governor = new AdaptivePerformanceGovernor();
+  const sample1 = governor.recordFrame(0.025); // 40 FPS
+  assert.equal(sample1.shouldStepFluid(2), false);
+  const sample2 = governor.recordFrame(0.025);
+  assert.equal(sample2.shouldStepFluid(2), true);
+  assert.equal(sample2.dynamicResolutionMultiplier, 1.0);
+  assert.equal(sample2.rollingFps > 35 && sample2.rollingFps <= 60, true);
+  assert.equal(buildPerformanceProfile('balanced', mobileCaps).profileId, 'balanced');
+});

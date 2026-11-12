@@ -5,6 +5,8 @@ import {
   ChamberConfig,
   FocusSceneConfig,
   OrbDesignId,
+  PerformanceMode,
+  PerformanceProfileTier,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
@@ -26,6 +28,11 @@ import {
   computeTimerAwareAtmosphereState,
   createNeutralFluidDataTexture,
 } from '../utils/infinityAuroraEngine';
+import {
+  AdaptivePerformanceGovernor,
+  detectDeviceCapabilities,
+  resolveMobilePerformanceProfile,
+} from '../utils/mobilePerformanceEngine';
 import { CelestialJelly3DSceneController } from './CelestialJelly3DScene';
 import { LivingBloom3DSceneController } from './LivingBloom3DScene';
 
@@ -41,6 +48,7 @@ interface QuantumNebulaBackgroundProps {
   audioReactive: boolean;
   reducedMotion: boolean;
   backgroundMix?: number;
+  performanceMode?: PerformanceMode;
 }
 
 // Pre-allocated module-scope helpers for zero GC in the 60fps animation loop
@@ -55,7 +63,7 @@ const _targetEngineBCoral = new THREE.Color();
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
   chamber,
-  orbDesign = 'original',
+  orbDesign = 'celestial-jelly',
   status,
   phase = 'focus',
   remainingSeconds = 2700,
@@ -64,6 +72,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   audioReactive,
   reducedMotion,
   backgroundMix = 0.52,
+  performanceMode = 'auto',
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
@@ -96,6 +105,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     audioReactive,
     reducedMotion,
     backgroundMix,
+    performanceMode,
   });
 
   useEffect(() => {
@@ -111,7 +121,24 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       audioReactive,
       reducedMotion,
       backgroundMix,
+      performanceMode,
     };
+    if (mountRef.current) {
+      const caps = detectDeviceCapabilities({
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        isSoftwareGl: true,
+      });
+      const resolved = resolveMobilePerformanceProfile({
+        performanceMode,
+        capabilities: caps,
+        reducedMotion,
+      });
+      mountRef.current.setAttribute(
+        'data-performance-profile',
+        resolved.profileId
+      );
+    }
   }, [
     scene,
     chamber,
@@ -124,6 +151,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     audioReactive,
     reducedMotion,
     backgroundMix,
+    performanceMode,
   ]);
 
   useEffect(() => {
@@ -185,14 +213,33 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       const width = container.clientWidth || window.innerWidth;
       const height = container.clientHeight || window.innerHeight;
+      let capabilities = detectDeviceCapabilities({
+        viewportWidth: width,
+        viewportHeight: height,
+        isSoftwareGl,
+      });
+      let currentProfile = resolveMobilePerformanceProfile({
+        performanceMode: liveStateRef.current.performanceMode,
+        capabilities,
+        reducedMotion: liveStateRef.current.reducedMotion,
+        rollingFps: 60,
+      });
+      container.setAttribute(
+        'data-performance-profile',
+        currentProfile.profileId
+      );
+
       const initialQuality = computeAdaptiveQualityTier(
         60,
         isSoftwareGl,
         liveStateRef.current.reducedMotion
       );
-      const pixelRatio = isSoftwareGl
-        ? 1
-        : Math.min(window.devicePixelRatio || 1, initialQuality.pixelRatioCap);
+      let appliedPixelRatio = Number(
+        (
+          currentProfile.pixelRatioCap *
+          currentProfile.internalResolutionScale
+        ).toFixed(2)
+      );
 
       renderer = new THREE.WebGLRenderer({
         antialias: !isSoftwareGl,
@@ -202,7 +249,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.06;
-      renderer.setPixelRatio(pixelRatio);
+      renderer.setPixelRatio(appliedPixelRatio);
       renderer.setSize(width, height);
       renderer.shadowMap.enabled = !isSoftwareGl;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -233,10 +280,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       // 4. Engine C: Real-Time GPU Ping-Pong Navier-Stokes Fluid Pipeline
       neutralFluidTex = createNeutralFluidDataTexture();
-      if (initialQuality.enableMultiPassFluidFbo) {
+      if (initialQuality.enableMultiPassFluidFbo && currentProfile.enableMultiPassFluidFbo) {
         fluidPipeline = new GPUFluidSimulationPipeline(
           renderer,
-          initialQuality.fluidGridSize
+          currentProfile.fluidGridSize
         );
       }
 
@@ -284,6 +331,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         uCompletionRelease: { value: 0 },
         uCurtainSharpness: { value: initialPalette.auroraCurtainSharpness },
         uSecondaryWaveAmp: { value: initialPalette.secondaryWaveAmplitude },
+        uPrimaryAuroraSteps: { value: currentProfile.primaryAuroraSteps },
+        uSecondaryAuroraSteps: { value: currentProfile.secondaryAuroraSteps },
         uPointer: { value: new THREE.Vector2(0.5, 0.5) },
         uFluidSimTex: {
           value: fluidPipeline ? fluidPipeline.getTexture() : neutralFluidTex,
@@ -346,12 +395,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         'aColorMix',
         new THREE.BufferAttribute(colorMixes, 1)
       );
+      particlesGeo.setDrawRange(0, currentProfile.backgroundParticleCount);
 
       const particlesUniforms = {
         uTime: { value: 0 },
         uTurbulence: { value: 0.36 },
         uAudioAmp: { value: 0 },
-        uPixelRatio: { value: pixelRatio },
+        uPixelRatio: { value: appliedPixelRatio },
+        uPointSizeComp: { value: currentProfile.pointSizeCompensation },
         uParticleGain: { value: initialMix.particleGain },
         uColorViolet: { value: currentViolet.clone() },
         uColorCyan: { value: currentCyan.clone() },
@@ -375,7 +426,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       // 6b. Modular 3D Celestial Jellyfish Controller (shares threeScene & renderer)
       const celestialJellyController = new CelestialJelly3DSceneController({
         parentScene: threeScene,
-        pixelRatio,
+        pixelRatio: appliedPixelRatio,
         isSoftwareGl,
         initialScene: liveStateRef.current.scene,
         initialPhase: liveStateRef.current.phase,
@@ -384,7 +435,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       // 6c. Modular 3D Living Bloom Controller (shares threeScene & renderer)
       const livingBloomController = new LivingBloom3DSceneController({
         parentScene: threeScene,
-        pixelRatio,
+        pixelRatio: appliedPixelRatio,
         isSoftwareGl,
         initialScene: liveStateRef.current.scene,
         initialPhase: liveStateRef.current.phase,
@@ -421,10 +472,25 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         const h = container.clientHeight || window.innerHeight;
         currentW = w;
         currentH = h;
+        capabilities = detectDeviceCapabilities({
+          viewportWidth: w,
+          viewportHeight: h,
+          isSoftwareGl,
+        });
+        currentProfile = resolveMobilePerformanceProfile({
+          performanceMode: liveStateRef.current.performanceMode,
+          capabilities,
+          reducedMotion: liveStateRef.current.reducedMotion,
+        });
+        container.setAttribute(
+          'data-performance-profile',
+          currentProfile.profileId
+        );
         camera.aspect = w / Math.max(1, h);
         camera.updateProjectionMatrix();
         renderer.setSize(w, h);
         fluidUniforms.uAspect.value = w / Math.max(1, h);
+        renderer.render(threeScene, camera);
       };
       window.addEventListener('resize', onResize);
 
@@ -434,14 +500,16 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       };
       renderer.domElement.addEventListener('webglcontextlost', onContextLost);
 
-      // 7. Centralized Multi-Timescale Animation Loop with Adaptive FPS & Software-WebGL Fence Pacing
+      // 7. Centralized Multi-Timescale Animation Loop with Intelligent Mobile Performance Governor
+      const perfGovernor = new AdaptivePerformanceGovernor();
       let lastTimeMs = performance.now();
+      let lastRenderMs = 0;
       let simTimeA = 0;
       let simTimeB = 17.3;
       let simTimeC = 41.7;
-      let rollingFps = 60;
       let frameId = 0;
       let isDisposed = false;
+      let lastAppliedProfileId: PerformanceProfileTier = currentProfile.profileId;
 
       const activeRenderer = renderer;
 
@@ -476,15 +544,66 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         }
 
         const nowMs = performance.now();
+
+        // Hardware-only frame pacing for 'balanced' smartphone profile (30–45 FPS sweet spot)
+        if (
+          !isSoftwareGl &&
+          currentProfile.minFrameIntervalMs > 0 &&
+          nowMs - lastRenderMs < currentProfile.minFrameIntervalMs
+        ) {
+          frameId = requestAnimationFrame(tick);
+          return;
+        }
+        lastRenderMs = nowMs;
+
         const rawDt = (nowMs - lastTimeMs) / 1000;
         const dt = Math.min(0.1, Math.max(0.001, rawDt));
         lastTimeMs = nowMs;
 
-        // Rolling FPS monitor for adaptive quality scaling
-        const instantFps = 1 / Math.max(0.001, rawDt);
-        rollingFps = rollingFps * 0.94 + Math.min(120, instantFps) * 0.06;
-
         const state = liveStateRef.current;
+
+        // Update Adaptive Performance Governor & resolve active profile ('ultra' or 'balanced')
+        const gov = perfGovernor.recordFrame(rawDt);
+        currentProfile = resolveMobilePerformanceProfile({
+          performanceMode: state.performanceMode,
+          capabilities,
+          reducedMotion: state.reducedMotion,
+          rollingFps: perfGovernor.getEffectiveRollingFps(),
+        });
+
+        if (currentProfile.profileId !== lastAppliedProfileId && container) {
+          lastAppliedProfileId = currentProfile.profileId;
+          container.setAttribute(
+            'data-performance-profile',
+            currentProfile.profileId
+          );
+        }
+
+        // Dynamically adjust pixel ratio & draw ranges when profile or dynamic scale shifts
+        const targetPixelRatio = isSoftwareGl
+          ? 1
+          : Number(
+              Math.max(
+                0.85,
+                currentProfile.pixelRatioCap *
+                  currentProfile.internalResolutionScale *
+                  gov.dynamicResolutionMultiplier
+              ).toFixed(2)
+            );
+        if (Math.abs(targetPixelRatio - appliedPixelRatio) >= 0.08) {
+          appliedPixelRatio = targetPixelRatio;
+          activeRenderer.setPixelRatio(appliedPixelRatio);
+          activeRenderer.setSize(currentW, currentH);
+          particlesUniforms.uPixelRatio.value = appliedPixelRatio;
+        }
+
+        particlesGeo.setDrawRange(0, currentProfile.backgroundParticleCount);
+        particlesUniforms.uPointSizeComp.value =
+          currentProfile.pointSizeCompensation;
+        fluidUniforms.uPrimaryAuroraSteps.value =
+          currentProfile.primaryAuroraSteps;
+        fluidUniforms.uSecondaryAuroraSteps.value =
+          currentProfile.secondaryAuroraSteps;
 
         const audioBands =
           state.audioReactive && state.status === 'running'
@@ -560,13 +679,18 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         currentPtrX = THREE.MathUtils.damp(currentPtrX, targetPtrX, 3.5, dt);
         currentPtrY = THREE.MathUtils.damp(currentPtrY, targetPtrY, 3.5, dt);
 
-        // Step Engine C Ping-Pong GPU Fluid Simulation when enabled on hardware GPU
-        if (fluidPipeline && !state.reducedMotion && rollingFps >= 26) {
+        // Step Engine C Ping-Pong GPU Fluid Simulation according to profile cadence
+        if (
+          fluidPipeline &&
+          !state.reducedMotion &&
+          gov.rollingFps >= 24 &&
+          gov.shouldStepFluid(currentProfile.fluidStepCadence)
+        ) {
           const simTex = fluidPipeline.step({
             timeA: simTimeA,
             timeB: simTimeB,
             timeC: simTimeC,
-            dt,
+            dt: dt * currentProfile.fluidStepCadence,
             turbulence: atmosphere.turbulence * scenePalette.turbulenceScale,
             vorticityGain: scenePalette.fluidVorticityGain,
             convergencePulse: atmosphere.convergencePulse,
@@ -696,6 +820,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           viewportWidth: currentW,
           viewportHeight: currentH,
           camera,
+          planktonDrawFraction: currentProfile.planktonDrawFraction,
+          jellyBiolumeNodeFraction: currentProfile.jellyBiolumeNodeFraction,
         });
 
         // Update 3D Living Bloom Controller
@@ -715,6 +841,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           viewportWidth: currentW,
           viewportHeight: currentH,
           camera,
+          pollenDrawFraction: currentProfile.pollenDrawFraction,
         });
 
         activeRenderer.render(threeScene, camera);
@@ -766,11 +893,13 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     <div
       ref={mountRef}
       data-testid="quantum-nebula-bg"
+      data-orb-design={orbDesign}
       data-background-mix={backgroundMix}
       data-scene-id={scene.id}
-      data-chamber-id={chamber?.id || 'rain-chamber'}
+      data-chamber-id={chamber?.id || 'ocean-drift'}
       data-timer-status={status}
       data-timer-phase={phase}
+      data-performance-mode={performanceMode}
       data-engine-architecture="dual-aurora-gpu-fluid"
       style={
         webglFailed

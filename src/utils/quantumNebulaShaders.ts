@@ -315,6 +315,8 @@ uniform float uFinalFiveBoost;
 uniform float uCompletionRelease;
 uniform float uCurtainSharpness;
 uniform float uSecondaryWaveAmp;
+uniform int uPrimaryAuroraSteps;
+uniform int uSecondaryAuroraSteps;
 uniform vec2 uPointer;
 
 // Real-time Ping-Pong Navier-Stokes GPU Fluid Simulation Texture (R,G=vel, B=dye, A=vorticity)
@@ -425,10 +427,14 @@ vec4 renderEngineAPrimaryAurora(
 ) {
   vec3 accumulatedLight = vec3(0.0);
   float transmittance = 1.0;
+  int stepsA = uPrimaryAuroraSteps > 0 ? uPrimaryAuroraSteps : 8;
+  float denomA = float(max(1, stepsA - 1));
+  float stepCompensationA = 8.0 / float(stepsA);
 
-  // 8 volumetric ray-marching slices through the 3D atmospheric curtain volume
+  // Adaptive volumetric ray-marching slices through the 3D atmospheric curtain volume
   for (int i = 0; i < 8; i++) {
-    float fi = float(i) / 7.0;
+    if (i >= stepsA) break;
+    float fi = float(i) / denomA;
     float marchDist = 1.05 + fi * 2.25;
     vec3 samplePos = rayOrigin + rayDir * marchDist;
 
@@ -468,7 +474,7 @@ vec4 renderEngineAPrimaryAurora(
     float altitudeNorm = clamp((samplePos.y + 0.58 - arcCurve * 0.25) / 1.48, 0.0, 1.0);
     float altitudeEnvelope = smoothstep(0.02, 0.22, altitudeNorm) * exp(-pow(max(0.0, altitudeNorm - 0.26), 1.75) * 3.1);
 
-    float sliceDensity = curtainFold * fieldStriations * altitudeEnvelope * (0.34 + fluidDye * 0.16);
+    float sliceDensity = curtainFold * fieldStriations * altitudeEnvelope * (0.34 + fluidDye * 0.16) * stepCompensationA;
 
     if (sliceDensity > 0.002) {
       // Vertically stratified auroral emission spectrum
@@ -502,12 +508,16 @@ vec4 renderEngineBSecondaryAurora(
 ) {
   vec3 accumulatedWave = vec3(0.0);
   float transmittance = 1.0;
+  int stepsB = uSecondaryAuroraSteps > 0 ? uSecondaryAuroraSteps : 6;
+  float denomB = float(max(1, stepsB - 1));
+  float stepCompensationB = 6.0 / float(stepsB);
 
   // Oblique 42-degree spatial orientation matrix (distinct from Engine A)
   mat2 obliqueRot = rot2(-0.7330);
 
   for (int j = 0; j < 6; j++) {
-    float fj = float(j) / 5.0;
+    if (j >= stepsB) break;
+    float fj = float(j) / denomB;
     float marchDist = 1.35 + fj * 2.15;
     vec3 samplePos = rayOrigin + rayDir * marchDist;
 
@@ -526,7 +536,8 @@ vec4 renderEngineBSecondaryAurora(
     float waveDensity = (smoothstep(0.24, 0.84, waveFbmB) * 0.65 + pow(waveCrest, 2.2) * 0.55)
       * waveBand
       * uSecondaryWaveAmp
-      * 0.26;
+      * 0.26
+      * stepCompensationB;
 
     if (waveDensity > 0.002) {
       // Subtle magenta, violet, deep blue, and extremely restrained coral highlights
@@ -749,6 +760,7 @@ uniform float uTime;
 uniform float uTurbulence;
 uniform float uAudioAmp;
 uniform float uPixelRatio;
+uniform float uPointSizeComp;
 
 void main() {
   vColorMix = aColorMix;
@@ -784,8 +796,9 @@ void main() {
   float twinkle = 0.5 + 0.5 * sin(uTime * (0.75 + aSpeed * 0.65) + aPhase * 12.566);
   vAlpha = twinkle * centerClearance * peripheralFade * smoothstep(-5.2, -0.9, mvPosition.z);
 
+  float sizeComp = uPointSizeComp > 0.0 ? uPointSizeComp : 1.0;
   gl_PointSize = clamp(
-    (aScale * (9.5 + uAudioAmp * 3.8) * uPixelRatio) / max(0.9, -mvPosition.z),
+    (aScale * (9.5 + uAudioAmp * 3.8) * uPixelRatio * sizeComp) / max(0.9, -mvPosition.z),
     1.2,
     11.5
   );
