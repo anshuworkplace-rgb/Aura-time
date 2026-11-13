@@ -191,7 +191,7 @@ export const Breathe: React.FC<LiquidLensBreatheProps> = ({
       <div
         role="radiogroup"
         aria-label="Breathing Cadence Presets"
-        className="w-full max-w-2xl grid grid-cols-2 sm:grid-cols-4 gap-2"
+        className="w-full max-w-2xl grid grid-cols-1 sm:grid-cols-3 gap-2"
       >
         {availablePresets
           .filter((p) => p.id !== 'custom')
@@ -652,28 +652,14 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
     availableStillnessPresets,
   } = restoreCompatibility;
 
-  const [internalSubMode, setInternalSubMode] = useState<LiquidLensSubMode>(
-    () =>
-      settings.defaultRestoreMode === 'quiet-moment' ? 'stillness' : 'breathe'
-  );
+  const subMode: LiquidLensSubMode = 'breathe';
 
-  const subMode = controlledSubMode ?? internalSubMode;
-  const handleSelectSubMode = useCallback(
-    (next: LiquidLensSubMode) => {
-      setInternalSubMode(next);
-      onSubModeChange?.(next);
-      if (next === 'breathe') {
-        onUpdateSettings({ defaultRestoreMode: 'breathing' });
-      } else if (next === 'stillness') {
-        onUpdateSettings({ defaultRestoreMode: 'quiet-moment' });
-      }
-    },
-    [onSubModeChange, onUpdateSettings]
-  );
-
-  const [selectedEnvId, setSelectedEnvId] = useState<RestoreEnvironmentId>(
-    () => settings.defaultRestoreEnvironmentId ?? 'rain-garden'
-  );
+  const [selectedEnvId, setSelectedEnvId] = useState<RestoreEnvironmentId>(() => {
+    const presetId = settings.defaultBreathingPresetId;
+    if (presetId === 'deep-rest-4-7-8') return 'rain-garden';
+    if (presetId === 'wave-6-2-7') return 'ocean-drift';
+    return 'forest-stillness';
+  });
   const [selectedBreathingId, setSelectedBreathingId] =
     useState<BreathingPresetId>(
       () => settings.defaultBreathingPresetId ?? 'coherent-5-5'
@@ -697,7 +683,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
       holdInSeconds: initialPreset.holdInSeconds,
       exhaleSeconds: initialPreset.exhaleSeconds,
       holdOutSeconds: initialPreset.holdOutSeconds,
-      enableBreathHold: true,
+      enableBreathHold: false,
       stillnessDurationSeconds: initialQuiet.durationSeconds,
       environmentId: settings.defaultRestoreEnvironmentId ?? 'rain-garden',
       ambienceVolume: settings.ambienceVolume,
@@ -749,10 +735,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
     [availableStillnessPresets, selectedQuietId]
   );
 
-  const targetDurationSeconds =
-    subMode === 'stillness'
-      ? tuning.stillnessDurationSeconds
-      : activeBreathingConfig.recommendedDurationSeconds;
+  const targetDurationSeconds = activeBreathingConfig.recommendedDurationSeconds;
 
   const remainingSeconds = Math.max(0, targetDurationSeconds - elapsedSeconds);
 
@@ -794,6 +777,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
         if (nextWhole >= targetDurationSeconds) {
           setSessionState('completed');
           interaction.audio.onPlayGentleBell();
+          interaction.audio.onTogglePlay(false);
           onCompleteRestoreSession({
             mode: subMode === 'stillness' ? 'quiet-moment' : 'breathing',
             presetName:
@@ -980,6 +964,22 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
     (presetId: BreathingPresetId) => {
       setSelectedBreathingId(presetId);
       onUpdateSettings({ defaultBreathingPresetId: presetId });
+      const pairedEnvironmentId: RestoreEnvironmentId =
+        presetId === 'deep-rest-4-7-8'
+          ? 'rain-garden'
+          : presetId === 'wave-6-2-7'
+          ? 'ocean-drift'
+          : 'forest-stillness';
+      const pairedEnvironment = availableEnvironments.find(
+        (environment) => environment.id === pairedEnvironmentId
+      );
+      if (pairedEnvironment) {
+        setSelectedEnvId(pairedEnvironmentId);
+        setTuning((prev) => ({ ...prev, environmentId: pairedEnvironmentId }));
+        onUpdateSettings({ defaultRestoreEnvironmentId: pairedEnvironmentId });
+        interaction.onSelectScene(pairedEnvironment.sceneId);
+        interaction.audio.onSelectChamber(pairedEnvironment.chamberId);
+      }
       const found = availableBreathingPresets.find((p) => p.id === presetId);
       if (found && presetId !== 'custom') {
         setTuning((prev) => ({
@@ -995,7 +995,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
       setElapsedSeconds(0);
       setElapsedFloatSec(0);
     },
-    [availableBreathingPresets, onUpdateSettings]
+    [availableBreathingPresets, availableEnvironments, interaction, onUpdateSettings]
   );
 
   const handleSelectQuietPreset = useCallback(
@@ -1041,6 +1041,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
     const creditSeconds = Math.max(1, elapsedSeconds);
     setSessionState('completed');
     interaction.audio.onPlayGentleBell();
+    interaction.audio.onTogglePlay(false);
     onCompleteRestoreSession({
       mode: subMode === 'stillness' ? 'quiet-moment' : 'breathing',
       presetName:
@@ -1068,59 +1069,14 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
       aria-label="Liquid Lens Restorative Sanctuary"
       className="relative z-20 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-16 sm:pt-14 pb-4 flex flex-col items-center justify-between flex-1"
     >
-      {/* Top Sub-Mode Bar: Breathe | Stillness | Soundscape */}
+      {/* Single restorative path: breathing cadence with paired ambient sound */}
       <div className="w-full flex flex-wrap items-center justify-between gap-2 mb-2">
-        <div
-          role="tablist"
-          aria-label="Liquid Lens Restorative Modes"
-          data-testid="liquid-lens-submode-tabs"
-          className="flex items-center gap-1 p-1 rounded-full aura-glass"
-        >
-          {(
-            [
-              {
-                id: 'breathe',
-                label: 'Breathe',
-                testId: 'restore-mode-breathing',
-                Icon: Wind,
-              },
-              {
-                id: 'stillness',
-                label: 'Stillness',
-                testId: 'restore-mode-quiet',
-                Icon: Sparkles,
-              },
-              {
-                id: 'soundscape',
-                label: 'Soundscape',
-                testId: 'restore-mode-soundscape',
-                Icon: Volume2,
-              },
-            ] as const
-          ).map(({ id, label, testId, Icon }) => {
-            const isSelected = subMode === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={isSelected}
-                data-testid={testId}
-                onClick={() => handleSelectSubMode(id)}
-                className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                  isSelected
-                    ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50 shadow-[0_0_16px_rgba(47,232,255,0.18)]'
-                    : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5 text-[#2FE8FF]" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
+        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full aura-glass text-xs font-medium text-[#F5F6FF]">
+          <Wind className="w-3.5 h-3.5 text-[#2FE8FF]" />
+          <span>Breathe</span>
         </div>
 
-        {/* Restorative Session Count & Optional 3D Refractive Orb Stage Toggle */}
+        {/* Session count, focus return, and one discreet sound control */}
         <div className="flex items-center gap-2">
           {restoreCompatibility.restoreSessions.length > 0 && (
             <span
@@ -1133,6 +1089,16 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
                 : 'pauses'}
             </span>
           )}
+          <button
+            type="button"
+            data-testid="liquid-lens-mute-toggle"
+            aria-label={interaction.audio.muted ? 'Unmute ambient sound' : 'Mute ambient sound'}
+            title={interaction.audio.muted ? 'Unmute ambient sound' : 'Mute ambient sound'}
+            onClick={interaction.audio.onToggleMute}
+            className="p-2 rounded-full aura-glass text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
+          >
+            {interaction.audio.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          </button>
           {onReturnToFocusOrganism && (
             <button
               type="button"
@@ -1234,40 +1200,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
               />
             )}
 
-            {subMode === 'stillness' && (
-              <Stillness
-                activePresetId={selectedQuietId}
-                availablePresets={availableStillnessPresets}
-                durationSeconds={tuning.stillnessDurationSeconds}
-                remainingSeconds={remainingSeconds}
-                elapsedSeconds={elapsedSeconds}
-                isRunning={sessionState === 'running'}
-                environment={activeEnvironment}
-                reducedMotion={interaction.reducedMotion}
-                onSelectPreset={handleSelectQuietPreset}
-                onChangeDurationSeconds={(secs) => {
-                  setTuning((prev) => ({
-                    ...prev,
-                    stillnessDurationSeconds: secs,
-                  }));
-                  handleReset();
-                }}
-                onStart={handleStart}
-                onPause={handlePause}
-                onReset={handleReset}
-                onCompleteSession={handleCompleteEarly}
-              />
-            )}
 
-            {subMode === 'soundscape' && (
-              <Soundscape
-                activeEnvironmentId={selectedEnvId}
-                availableEnvironments={availableEnvironments}
-                audio={interaction.audio}
-                reducedMotion={interaction.reducedMotion}
-                onSelectEnvironment={handleSelectEnvironment}
-              />
-            )}
           </>
         )}
       </div>
