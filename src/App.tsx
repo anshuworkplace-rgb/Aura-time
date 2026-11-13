@@ -686,14 +686,14 @@ export default function App() {
       {/* Sanctuary Top Header: [AURA TIME · Current Environment] | [Focus · Restore · Reflect · Profile] | [Today's Focus] */}
       <header
         data-testid="sanctuary-header"
-        className={`fixed top-0 left-0 right-0 z-40 w-full px-3 sm:px-8 pt-2.5 sm:pt-3.5 flex items-center justify-between gap-2 sm:gap-4 shrink-0 transition-opacity duration-700 ${
+        className={`fixed top-0 left-0 right-0 z-40 w-full px-3 sm:px-8 pt-2 sm:pt-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-1.5 gap-x-2 sm:gap-4 shrink-0 transition-opacity duration-700 ${
           activeNavTab === 'focus' && isRunningOrPaused && !railVisible
-            ? 'opacity-0 pointer-events-none'
+            ? 'opacity-70 hover:opacity-100'
             : 'opacity-100'
         }`}
       >
         {/* Zone 1: Brand Wordmark & Current Environment Pill */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="order-1 flex items-center gap-2.5 shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -726,7 +726,7 @@ export default function App() {
           role="navigation"
           aria-label="Primary Sanctuary Navigation"
           data-testid="primary-sanctuary-nav"
-          className="flex items-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-xl"
+          className="order-3 sm:order-2 w-full sm:w-auto flex items-center justify-between sm:justify-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-xl"
         >
           {(
             [
@@ -744,7 +744,7 @@ export default function App() {
                 data-testid={`nav-tab-${id}`}
                 aria-current={isCurrent ? 'page' : undefined}
                 onClick={() => setActiveNavTab(id)}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap ${
                   isCurrent
                     ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50 shadow-[0_0_16px_rgba(47,232,255,0.2)]'
                     : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
@@ -758,7 +758,7 @@ export default function App() {
         </nav>
 
         {/* Zone 3: Today's Actual Focus Total & Command Calibration */}
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="order-2 sm:order-3 flex items-center gap-2 shrink-0">
           <button
             type="button"
             data-testid="today-signal-btn"
@@ -881,7 +881,7 @@ export default function App() {
                 <div
                   className={`mt-2 sm:mt-3 pb-1 sm:pb-0 flex flex-col items-center shrink-0 transition-opacity duration-500 ${
                     isRunningOrPaused && !railVisible
-                      ? 'opacity-0 pointer-events-none'
+                      ? 'opacity-80 hover:opacity-100'
                       : 'opacity-100'
                   }`}
                 >

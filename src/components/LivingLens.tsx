@@ -1204,9 +1204,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
             </button>
 
             {immersionMode !== 'deep' && (
-              <div className="mt-1.5 min-h-[26px] flex flex-col items-center justify-center">
+              <div className="mt-2 min-h-[26px] flex flex-col items-center justify-center">
                 {isEditingLabel ? (
-                  <div className="flex flex-col items-center gap-2">
+                  <div className="flex flex-col items-center gap-2 p-2.5 rounded-2xl bg-[#070915]/80 backdrop-blur-md border border-white/15 shadow-xl">
                     <input
                       ref={labelInputRef}
                       type="text"
@@ -1236,7 +1236,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                             onChangeSessionLabel(suggestion);
                             setIsEditingLabel(false);
                           }}
-                          className="px-2 py-0.5 rounded-full text-[10px] bg-white/[0.06] hover:bg-[#2FE8FF]/20 text-[#A3A1BA] hover:text-[#F5F6FF] border border-white/10 transition-colors cursor-pointer"
+                          className="px-2.5 py-0.5 rounded-full text-[10px] bg-white/[0.08] hover:bg-[#2FE8FF]/20 text-[#E5E7F8] hover:text-[#F5F6FF] border border-white/15 transition-colors cursor-pointer"
                         >
                           {suggestion}
                         </button>
@@ -1249,7 +1249,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                     data-testid="session-intention-trigger"
                     onClick={() => setIsEditingLabel(true)}
                     title="Click to set your session intention"
-                    className="text-xs sm:text-sm font-normal text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors px-2.5 py-0.5 rounded-lg focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
+                    className="text-xs sm:text-sm font-medium text-[#E5E7F8] hover:text-[#F5F6FF] bg-[#070915]/70 hover:bg-[#070915]/85 backdrop-blur-md border border-white/15 shadow-lg transition-all px-3.5 py-1 rounded-full focus-visible:outline-2 focus-visible:outline-[#2FE8FF] cursor-pointer"
                   >
                     {sessionLabel.trim() || 'Set session intention…'}
                   </button>
@@ -1259,7 +1259,7 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                 {status === 'idle' && !isEditingLabel && (
                   <div
                     data-testid="home-session-presets"
-                    className="mt-2 flex flex-wrap items-center justify-center gap-1"
+                    className="mt-2 p-1 rounded-full bg-[#070915]/68 backdrop-blur-md border border-white/14 shadow-lg flex flex-wrap items-center justify-center gap-1"
                   >
                     {FOCUS_PRESET_MINUTES.map((mins) => {
                       const isCurrent = durationMinutes === mins;
@@ -1269,10 +1269,10 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                           type="button"
                           data-testid={`stage-preset-${mins}m`}
                           onClick={() => onChangeDurationMinutes(mins)}
-                          className={`px-2 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
+                          className={`px-2.5 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
                             isCurrent
-                              ? 'bg-[#2FE8FF]/20 text-[#2FE8FF] border border-[#2FE8FF]/50 font-semibold'
-                              : 'text-[#A3A1BA]/85 hover:text-[#F5F6FF] bg-white/[0.03] hover:bg-white/[0.08] border border-white/8'
+                              ? 'bg-[#2FE8FF]/25 text-[#2FE8FF] border border-[#2FE8FF]/60 font-semibold shadow-[0_0_12px_rgba(47,232,255,0.22)]'
+                              : 'text-[#D6D8EC] hover:text-[#F5F6FF] bg-white/[0.04] hover:bg-white/[0.1] border border-transparent'
                           }`}
                         >
                           {mins}m
@@ -1283,11 +1283,11 @@ export const LivingLens: React.FC<LivingLensProps> = ({
                       type="button"
                       data-testid="stage-preset-custom"
                       onClick={() => onToggleScrubber(!scrubberOpen)}
-                      className={`px-2 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
+                      className={`px-2.5 py-0.5 rounded-full font-mono text-[11px] transition-all cursor-pointer ${
                         scrubberOpen ||
                         !FOCUS_PRESET_MINUTES.includes(durationMinutes)
-                          ? 'bg-[#8A5CFF]/25 text-[#F5F6FF] border border-[#8A5CFF]/55'
-                          : 'text-[#A3A1BA]/85 hover:text-[#F5F6FF] bg-white/[0.03] hover:bg-white/[0.08] border border-white/8'
+                          ? 'bg-[#8A5CFF]/30 text-[#F5F6FF] border border-[#8A5CFF]/60 font-semibold'
+                          : 'text-[#D6D8EC] hover:text-[#F5F6FF] bg-white/[0.04] hover:bg-white/[0.1] border border-transparent'
                       }`}
                     >
                       Custom
