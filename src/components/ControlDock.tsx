@@ -422,16 +422,36 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         <button
           type="button"
           data-testid="dock-group-sound"
-          aria-label={`Soundscape: ${activeChamber.name}`}
-          aria-expanded={openGroup === 'sound'}
-          onClick={() => toggleGroup('sound')}
+          aria-label={
+            isLiquidLensRestore
+              ? settings.soundMuted
+                ? 'Unmute ambient sound'
+                : 'Mute ambient sound'
+              : `Soundscape: ${activeChamber.name}`
+          }
+          aria-expanded={isLiquidLensRestore ? undefined : openGroup === 'sound'}
+          onClick={() => {
+            if (isLiquidLensRestore) {
+              setOpenGroup(null);
+              onUpdateSettings({ soundMuted: !settings.soundMuted });
+            } else {
+              toggleGroup('sound');
+            }
+          }}
           className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             openGroup === 'sound'
               ? 'bg-white/14 text-[#F5F6FF]'
               : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
           }`}
+          title={
+            isLiquidLensRestore
+              ? settings.soundMuted
+                ? 'Unmute ambient sound'
+                : 'Mute ambient sound'
+              : activeChamber.name
+          }
         >
-          {isSoundPlaying ? (
+          {isSoundPlaying && !settings.soundMuted ? (
             <Volume2
               className="w-3.5 h-3.5 shrink-0 transition-colors duration-300"
               style={{ color: activeChamber.primaryHex }}
@@ -439,10 +459,15 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           ) : (
             <VolumeX className="w-3.5 h-3.5 text-[#A3A1BA] shrink-0" />
           )}
-          <span className="hidden sm:inline tracking-wide max-w-[120px] truncate">
-            {activeChamber.name}
-          </span>
-          <span className="sm:hidden">{activeChamber.name.split(' ')[0]}</span>
+          {!isLiquidLensRestore && (
+            <>
+              <span className="hidden sm:inline tracking-wide max-w-[120px] truncate">
+                {activeChamber.name}
+              </span>
+              <span className="sm:hidden">{activeChamber.name.split(' ')[0]}</span>
+            </>
+          )}
+          {isLiquidLensRestore && <span className="hidden sm:inline">Sound</span>}
         </button>
 
         {/* Atmosphere Selector Trigger */}
