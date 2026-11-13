@@ -254,7 +254,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
         <div
           role="tablist"
           aria-label="Reflect sections"
-          className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl aura-glass self-start sm:self-auto"
+          className="flex flex-wrap lg:flex-nowrap items-center gap-1 p-1 rounded-2xl aura-glass self-start sm:self-auto shrink-0"
         >
           <button
             type="button"
@@ -515,9 +515,8 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                   </span>
                   <span className="text-[#F5F6FF] font-medium">
                     {weeklyOverview.mostUsedEnvironment
-                      ? FOCUS_SCENES.find(
-                          (s) => s.id === weeklyOverview.mostUsedEnvironment
-                        )?.name || weeklyOverview.mostUsedEnvironment
+                      ? FOCUS_SCENES[weeklyOverview.mostUsedEnvironment]?.name ||
+                        weeklyOverview.mostUsedEnvironment
                       : 'None yet'}
                   </span>
                 </div>
@@ -593,9 +592,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                       <span className="text-[#F5F6FF] font-medium mt-0.5 block">
                         {patterns.preferredEnvironments
                           .map((env) => {
-                            const found = FOCUS_SCENES.find(
-                              (s) => s.id === env.sceneId
-                            );
+                            const found = FOCUS_SCENES[env.sceneId];
                             return `${found?.name || env.sceneId} (${formatDurationCompact(
                               env.minutes
                             )})`;
@@ -803,8 +800,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                 const planned = item.plannedMinutes ?? item.durationMinutes;
                 const actual = item.actualMinutes ?? item.durationMinutes;
                 const sceneMeta =
-                  FOCUS_SCENES.find((s) => s.id === item.sceneId) ||
-                  FOCUS_SCENES[0];
+                  FOCUS_SCENES[item.sceneId] || FOCUS_SCENES['deep-current'];
                 const dateObj = new Date(item.completedAt);
 
                 return (

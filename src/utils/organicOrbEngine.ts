@@ -9,6 +9,7 @@ export interface OrbDesignConfig {
   id: OrbDesignId;
   name: string;
   subtitle: string;
+  badge: string;
   description: string;
 }
 
@@ -20,6 +21,7 @@ export const ORB_DESIGNS: readonly OrbDesignConfig[] = [
     id: 'original',
     name: 'Original',
     subtitle: 'Liquid Lens',
+    badge: '3D Refractive',
     description:
       'Refractive liquid-glass sculpture with internal caustics and optical Fresnel rim.',
   },
@@ -27,6 +29,7 @@ export const ORB_DESIGNS: readonly OrbDesignConfig[] = [
     id: 'celestial-jelly',
     name: 'Celestial Jelly',
     subtitle: 'Pelagic Organism',
+    badge: '3D Pelagic',
     description:
       'Translucent pelagic life form with pulsating bell membrane, spring-spline tendrils, and internal bioluminescence.',
   },
@@ -34,6 +37,7 @@ export const ORB_DESIGNS: readonly OrbDesignConfig[] = [
     id: 'living-bloom',
     name: 'Living Bloom',
     subtitle: 'Botanical Flora',
+    badge: '3D Botanical',
     description:
       'Evolving multi-layered translucent flower with veined petals, living spores, and session-driven growth.',
   },

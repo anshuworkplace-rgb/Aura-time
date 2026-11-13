@@ -1,23 +1,23 @@
 import {
   BreathingPatternConfig,
-  BreathingPresetId,
   ChamberConfig,
   ChamberId,
   FocusSceneConfig,
   FocusSceneId,
   OrbDesignId,
   QuietMomentConfig,
-  QuietMomentPresetId,
   RestoreEnvironmentConfig,
-  RestoreEnvironmentId,
   SessionCompletionStatus,
   SessionRecord,
   SoundCategory,
   UserSettings,
 } from '../types/aura';
+import { ORB_DESIGNS } from './organicOrbEngine';
+
+export { ORB_DESIGNS };
 
 export const SNAP_PRESET_MINUTES = [25, 45, 60, 90] as const;
-export const FOCUS_PRESET_MINUTES = [15, 25, 45, 50, 60, 90] as const;
+export const FOCUS_PRESET_MINUTES: number[] = [15, 25, 45, 50, 60, 90];
 export const MIN_SCRUB_MINUTES = 15;
 export const MAX_SCRUB_MINUTES = 120;
 
@@ -255,6 +255,7 @@ export interface CategorizedSoundOption {
   category: SoundCategory;
   name: string;
   subtitle: string;
+  description: string;
   chamberId: ChamberId;
   primaryHex: string;
   secondaryHex: string;
@@ -272,6 +273,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'focus',
     name: 'Deep Current',
     subtitle: 'Sub-orbital drone & deep focus current',
+    description: 'Sub-orbital drone & deep focus current',
     chamberId: 'cosmic-silence',
     primaryHex: '#8A5CFF',
     secondaryHex: '#4E33A8',
@@ -281,6 +283,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'focus',
     name: 'Ocean Drift',
     subtitle: 'Long-period pelagic ocean swells',
+    description: 'Long-period pelagic ocean swells',
     chamberId: 'ocean-drift',
     primaryHex: '#38F2FF',
     secondaryHex: '#3B68FF',
@@ -290,6 +293,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'focus',
     name: 'Rain Chamber',
     subtitle: 'Architectural rainfall on dark glass',
+    description: 'Architectural rainfall on dark glass',
     chamberId: 'rain-chamber',
     primaryHex: '#2FE8FF',
     secondaryHex: '#5B8CFF',
@@ -299,6 +303,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'focus',
     name: 'Electric Quiet',
     subtitle: 'Minimal harmonic glass intervals',
+    description: 'Minimal harmonic glass intervals',
     chamberId: 'celestial-tone',
     primaryHex: '#D8FF52',
     secondaryHex: '#2FE8FF',
@@ -309,6 +314,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'restore',
     name: 'Gentle Rain',
     subtitle: 'Soft conservatory rain mist',
+    description: 'Soft conservatory rain mist',
     chamberId: 'rain-chamber',
     primaryHex: '#2FE8FF',
     secondaryHex: '#5EF2C4',
@@ -318,6 +324,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'restore',
     name: 'Forest Atmosphere',
     subtitle: 'High-canopy cedar breeze & stillness',
+    description: 'High-canopy cedar breeze & stillness',
     chamberId: 'forest-echo',
     primaryHex: '#5EF2C4',
     secondaryHex: '#2FE8FF',
@@ -327,6 +334,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'restore',
     name: 'Ocean Waves',
     subtitle: 'Restorative nocturnal shoreline tide',
+    description: 'Restorative nocturnal shoreline tide',
     chamberId: 'ocean-drift',
     primaryHex: '#38F2FF',
     secondaryHex: '#8A5CFF',
@@ -336,6 +344,7 @@ export const CATEGORIZED_SOUND_OPTIONS: CategorizedSoundOption[] = [
     category: 'restore',
     name: 'Soft Night',
     subtitle: 'Warm hearth & nocturnal serenity',
+    description: 'Warm hearth & nocturnal serenity',
     chamberId: 'ember-glow',
     primaryHex: '#FFB08A',
     secondaryHex: '#FF5D88',
@@ -347,10 +356,12 @@ export const RESTORE_ENVIRONMENTS: RestoreEnvironmentConfig[] = [
     id: 'rain-garden',
     name: 'Rain Garden',
     tagline: 'Crystalline rainfall & botanical stillness',
+    soundLabel: 'Gentle Rain',
     description:
       'A quiet conservatory where soft rain settles over translucent leaves and cool cyan water.',
     sceneId: 'night-signal',
     chamberId: 'rain-chamber',
+    accentHex: '#2FE8FF',
     primaryHex: '#2FE8FF',
     secondaryHex: '#5EF2C4',
   },
@@ -358,10 +369,12 @@ export const RESTORE_ENVIRONMENTS: RestoreEnvironmentConfig[] = [
     id: 'ocean-drift',
     name: 'Ocean Drift',
     tagline: 'Slow pelagic swells & horizon breath',
+    soundLabel: 'Ocean Waves',
     description:
       'Weightless midnight waters with gentle tidal rhythm for releasing cognitive tension.',
     sceneId: 'deep-current',
     chamberId: 'ocean-drift',
+    accentHex: '#38F2FF',
     primaryHex: '#38F2FF',
     secondaryHex: '#8A5CFF',
   },
@@ -369,10 +382,12 @@ export const RESTORE_ENVIRONMENTS: RestoreEnvironmentConfig[] = [
     id: 'forest-stillness',
     name: 'Forest Stillness',
     tagline: 'High-canopy breeze & bioluminescent calm',
+    soundLabel: 'Forest Atmosphere',
     description:
       'Ancient cedar stillness bathed in soft turquoise mist and restorative natural acoustics.',
     sceneId: 'electric-quiet',
     chamberId: 'forest-echo',
+    accentHex: '#5EF2C4',
     primaryHex: '#5EF2C4',
     secondaryHex: '#D8FF52',
   },
@@ -380,28 +395,32 @@ export const RESTORE_ENVIRONMENTS: RestoreEnvironmentConfig[] = [
     id: 'celestial-night',
     name: 'Celestial Night',
     tagline: 'Starlit quietude & warm nocturnal glow',
+    soundLabel: 'Soft Night',
     description:
       'Deep nocturnal sanctuary with gentle harmonic resonance and unhurried atmospheric drift.',
     sceneId: 'solar-drift',
     chamberId: 'ember-glow',
+    accentHex: '#FFB08A',
     primaryHex: '#FFB08A',
     secondaryHex: '#8A5CFF',
   },
 ];
 
-export const BREATHING_PRESETS: Record<BreathingPresetId, BreathingPatternConfig> = {
-  'coherent-calm': {
-    id: 'coherent-calm',
+export const BREATHING_PRESETS: BreathingPatternConfig[] = [
+  {
+    id: 'coherent-5-5',
     name: 'Coherent Calm',
-    subtitle: '4s Inhale · 4s Hold · 6s Exhale',
-    description: 'Balances attention and gently slows the rhythm after deep work.',
-    inhaleSeconds: 4,
-    holdInSeconds: 4,
-    exhaleSeconds: 6,
+    subtitle: '5s Inhale · 5s Exhale',
+    description:
+      'Balances attention and gently slows the rhythm after deep work.',
+    inhaleSeconds: 5,
+    holdInSeconds: 0,
+    exhaleSeconds: 5,
     holdOutSeconds: 0,
+    recommendedDurationSeconds: 180,
   },
-  'deep-rest': {
-    id: 'deep-rest',
+  {
+    id: 'deep-rest-4-7-8',
     name: 'Deep Rest (4-7-8)',
     subtitle: '4s Inhale · 7s Hold · 8s Exhale',
     description: 'Longer exhale cadence designed for quiet decompression.',
@@ -409,62 +428,76 @@ export const BREATHING_PRESETS: Record<BreathingPresetId, BreathingPatternConfig
     holdInSeconds: 7,
     exhaleSeconds: 8,
     holdOutSeconds: 0,
+    recommendedDurationSeconds: 240,
   },
-  'box-breath': {
-    id: 'box-breath',
+  {
+    id: 'box-4-4-4-4',
     name: 'Equilibrium Box',
     subtitle: '4s Inhale · 4s Hold · 4s Exhale · 4s Hold',
-    description: 'Four equal phases to steady clarity between study or coding blocks.',
+    description:
+      'Four equal phases to steady clarity between study or coding blocks.',
     inhaleSeconds: 4,
     holdInSeconds: 4,
     exhaleSeconds: 4,
     holdOutSeconds: 4,
+    recommendedDurationSeconds: 240,
   },
-  'simple-flow': {
-    id: 'simple-flow',
+  {
+    id: 'wave-6-2-7',
     name: 'Unhurried Wave',
-    subtitle: '5s Inhale · No Hold · 5s Exhale',
-    description: 'Continuous tidal breathing without breath-hold stages.',
-    inhaleSeconds: 5,
-    holdInSeconds: 0,
-    exhaleSeconds: 5,
+    subtitle: '6s Inhale · 2s Hold · 7s Exhale',
+    description: 'Slow pelagic breathing wave for deep nervous-system calm.',
+    inhaleSeconds: 6,
+    holdInSeconds: 2,
+    exhaleSeconds: 7,
     holdOutSeconds: 0,
+    recommendedDurationSeconds: 300,
   },
-  custom: {
+  {
     id: 'custom',
     name: 'Custom Cadence',
     subtitle: 'Personalized inhale, hold & exhale',
     description: 'Tune each stage to match your natural resting breath.',
     inhaleSeconds: 4,
-    holdInSeconds: 2,
+    holdInSeconds: 4,
     exhaleSeconds: 6,
     holdOutSeconds: 0,
+    recommendedDurationSeconds: 180,
   },
-};
+];
 
 export const QUIET_MOMENT_PRESETS: QuietMomentConfig[] = [
   {
     id: 'reset-2m',
     name: '2-Minute Reset',
     durationMinutes: 2,
+    durationSeconds: 120,
     subtitle: 'Brief visual & acoustic release',
     guidance:
+      'Step back from the screen edge, soften your gaze on the organism, and let your shoulders drop.',
+    guidanceText:
       'Step back from the screen edge, soften your gaze on the organism, and let your shoulders drop.',
   },
   {
     id: 'calm-5m',
     name: '5-Minute Calm Break',
     durationMinutes: 5,
+    durationSeconds: 300,
     subtitle: 'Between-chapter recovery',
     guidance:
+      'Allow thoughts from your previous task to settle without rushing into the next block.',
+    guidanceText:
       'Allow thoughts from your previous task to settle without rushing into the next block.',
   },
   {
     id: 'pause-10m',
     name: '10-Minute Mindful Pause',
     durationMinutes: 10,
+    durationSeconds: 600,
     subtitle: 'Deep restorative sanctuary',
     guidance:
+      'Rest in the ambient soundscape and let mental fatigue dissolve at its own pace.',
+    guidanceText:
       'Rest in the ambient soundscape and let mental fatigue dissolve at its own pace.',
   },
 ];
@@ -517,6 +550,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   secondaryVolume: 0,
   alertVolume: 0.7,
   soundMuted: false,
+  selectedChamberId: 'ocean-drift',
   audioReactive: true,
   reducedMotion: false,
   highContrast: false,
@@ -641,31 +675,43 @@ export function extendTimer(
 
 /**
  * Creates an accurate SessionRecord that NEVER awards planned time when actual
- * focused time was lower.
+ * focused time was lower. Discards accidental stops under 15 seconds.
  */
 export function createActualSessionRecord(params: {
   id?: string;
   label: string;
-  plannedSeconds: number;
-  remainingSeconds: number;
+  plannedTotalSeconds?: number;
+  plannedSeconds?: number;
+  remainingSecondsAtEnd?: number;
+  remainingSeconds?: number;
   endedEarly: boolean;
   sceneId: FocusSceneId;
   chamberId: ChamberId;
   orbDesign?: OrbDesignId;
+  nowDate?: Date;
   now?: Date;
   isoDate?: string;
-}): SessionRecord {
-  const now = params.now || new Date();
+}): SessionRecord | null {
+  const now = params.nowDate || params.now || new Date();
   const y = now.getFullYear();
   const m = String(now.getMonth() + 1).padStart(2, '0');
   const d = String(now.getDate()).padStart(2, '0');
   const isoDate = params.isoDate || `${y}-${m}-${d}`;
 
-  const safePlannedSecs = Math.max(60, Math.round(params.plannedSeconds));
+  const rawPlanned = params.plannedTotalSeconds ?? params.plannedSeconds ?? 2700;
+  const rawRemaining =
+    params.remainingSecondsAtEnd ?? params.remainingSeconds ?? 0;
+
+  const safePlannedSecs = Math.max(60, Math.round(rawPlanned));
   const safeRemainingSecs = params.endedEarly
-    ? Math.max(0, Math.min(safePlannedSecs, Math.round(params.remainingSeconds)))
+    ? Math.max(0, Math.min(safePlannedSecs, Math.round(rawRemaining)))
     : 0;
   const actualFocusedSeconds = Math.max(0, safePlannedSecs - safeRemainingSecs);
+
+  // If ended early with fewer than 15 seconds elapsed, discard accidental click
+  if (params.endedEarly && actualFocusedSeconds < 15) {
+    return null;
+  }
 
   const plannedMinutes = Math.max(1, Math.round(safePlannedSecs / 60));
   const completionStatus: SessionCompletionStatus =
@@ -677,11 +723,13 @@ export function createActualSessionRecord(params: {
       ? plannedMinutes
       : Math.min(
           plannedMinutes,
-          Math.max(0, Math.floor(actualFocusedSeconds / 60))
+          Math.max(1, Math.round(actualFocusedSeconds / 60))
         );
 
   return {
-    id: params.id || `session-${now.getTime()}-${Math.random().toString(36).slice(2, 6)}`,
+    id:
+      params.id ||
+      `session-${now.getTime()}-${Math.random().toString(36).slice(2, 6)}`,
     label: params.label.trim() || 'Deep work',
     durationMinutes: actualMinutes,
     plannedMinutes,
@@ -715,53 +763,72 @@ export function calculateDailyTotal(
  */
 export function calculateTodaySummary(
   sessions: SessionRecord[],
-  todayIsoDate: string,
-  dailyGoalMinutes = 180
+  arg2: number | string = 180,
+  arg3?: string | number
 ): {
+  actualMinutes: number;
   actualFocusedMinutes: number;
+  completedCount: number;
   completedSessionsCount: number;
+  interruptedCount: number;
   interruptedSessionsCount: number;
   dailyGoalMinutes: number;
+  goalProgressPercent: number;
   dailyGoalProgress: number;
-  intentions: Array<{
-    id: string;
-    label: string;
-    actualMinutes: number;
-    plannedMinutes: number;
-    status: SessionCompletionStatus;
-    sceneId: FocusSceneId;
-  }>;
+  intentions: string[];
 } {
+  const now = new Date();
+  const defaultIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const dailyGoalMinutes =
+    typeof arg2 === 'number'
+      ? arg2
+      : typeof arg3 === 'number'
+      ? arg3
+      : 180;
+  const todayIsoDate =
+    typeof arg2 === 'string'
+      ? arg2
+      : typeof arg3 === 'string'
+      ? arg3
+      : defaultIso;
+
   const todaySessions = sessions.filter((s) => s.isoDate === todayIsoDate);
   let actualFocusedMinutes = 0;
   let completedSessionsCount = 0;
   let interruptedSessionsCount = 0;
+  const intentions: string[] = [];
 
-  const intentions = todaySessions.map((s) => {
+  for (const s of todaySessions) {
     const actual = s.actualMinutes ?? s.durationMinutes;
-    const planned = s.plannedMinutes ?? s.durationMinutes;
     const st: SessionCompletionStatus = s.completionStatus || 'completed';
     actualFocusedMinutes += actual;
     if (st === 'completed') completedSessionsCount += 1;
     else interruptedSessionsCount += 1;
-    return {
-      id: s.id,
-      label: s.label,
-      actualMinutes: actual,
-      plannedMinutes: planned,
-      status: st,
-      sceneId: s.sceneId,
-    };
-  });
+    if (s.label && !intentions.includes(s.label)) {
+      intentions.push(s.label);
+    }
+  }
 
   const safeGoal = Math.max(15, dailyGoalMinutes);
   const dailyGoalProgress = Math.min(1, actualFocusedMinutes / safeGoal);
+  const goalProgressPercent = Math.min(
+    100,
+    Math.round((actualFocusedMinutes / safeGoal) * 100)
+  );
 
   return {
+    actualMinutes: actualFocusedMinutes,
     actualFocusedMinutes,
+    completedCount: completedSessionsCount,
     completedSessionsCount,
+    interruptedCount: interruptedSessionsCount,
     interruptedSessionsCount,
     dailyGoalMinutes: safeGoal,
+    goalProgressPercent,
     dailyGoalProgress: Number(dailyGoalProgress.toFixed(4)),
     intentions,
   };
@@ -820,13 +887,18 @@ export function calculateStreak(
     }
   }
 
-  return { currentStreak: activeRun, longestStreak: Math.max(longest, activeRun) };
+  return {
+    currentStreak: activeRun,
+    longestStreak: Math.max(longest, activeRun),
+  };
 }
 
 export interface DailyRhythmCell {
   isoDate: string;
+  dateStr: string;
   dayLabel: string;
   minutes: number;
+  actualMinutes: number;
   sessionsCount: number;
   completedCount: number;
   interruptedCount: number;
@@ -880,8 +952,10 @@ export function calculateWeeklyRhythm(
 
     result.push({
       isoDate,
+      dateStr: isoDate,
       dayLabel,
       minutes,
+      actualMinutes: minutes,
       sessionsCount: daySessions.length,
       completedCount,
       interruptedCount,
@@ -897,18 +971,41 @@ export function calculateWeeklyRhythm(
  */
 export function calculateWeeklyOverview(
   sessions: SessionRecord[],
-  todayIsoDate: string,
-  weeklyGoalMinutes = 900
+  arg2: number | string = 600,
+  arg3?: string | number
 ): {
   days: DailyRhythmCell[];
+  totalActualMinutes: number;
   totalWeeklyMinutes: number;
+  totalCompletedSessions: number;
   completedSessionsCount: number;
   interruptedSessionsCount: number;
   weeklyGoalMinutes: number;
+  weeklyGoalProgressPercent: number;
   weeklyGoalProgress: number;
-  bestFocusDay: { dayLabel: string; isoDate: string; minutes: number } | null;
-  mostUsedEnvironment: { scene: FocusSceneConfig; minutes: number };
+  bestDay: { dayLabel: string; isoDate: string; actualMinutes: number; minutes: number } | null;
+  bestFocusDay: { dayLabel: string; isoDate: string; actualMinutes: number; minutes: number } | null;
+  mostUsedEnvironment: FocusSceneId | null;
 } {
+  const now = new Date();
+  const defaultIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+    2,
+    '0'
+  )}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const weeklyGoalMinutes =
+    typeof arg2 === 'number'
+      ? arg2
+      : typeof arg3 === 'number'
+      ? arg3
+      : 600;
+  const todayIsoDate =
+    typeof arg2 === 'string'
+      ? arg2
+      : typeof arg3 === 'string'
+      ? arg3
+      : defaultIso;
+
   const days = calculateWeeklyRhythm(sessions, todayIsoDate);
   const weekIsoSet = new Set(days.map((d) => d.isoDate));
   const weekSessions = sessions.filter((s) => weekIsoSet.has(s.isoDate));
@@ -923,33 +1020,49 @@ export function calculateWeeklyOverview(
     0
   );
 
-  let bestFocusDay: { dayLabel: string; isoDate: string; minutes: number } | null =
-    null;
+  let bestFocusDay: {
+    dayLabel: string;
+    isoDate: string;
+    actualMinutes: number;
+    minutes: number;
+  } | null = null;
   for (const d of days) {
     if (d.minutes > 0 && (!bestFocusDay || d.minutes > bestFocusDay.minutes)) {
       bestFocusDay = {
         dayLabel: d.dayLabel,
         isoDate: d.isoDate,
+        actualMinutes: d.minutes,
         minutes: d.minutes,
       };
     }
   }
 
-  const favs = calculateFavorites(weekSessions.length > 0 ? weekSessions : sessions);
+  const favs = calculateFavorites(
+    weekSessions.length > 0 ? weekSessions : sessions
+  );
   const safeWeeklyGoal = Math.max(60, weeklyGoalMinutes);
+  const weeklyGoalProgressPercent = Math.min(
+    100,
+    Math.round((totalWeeklyMinutes / safeWeeklyGoal) * 100)
+  );
 
   return {
     days,
+    totalActualMinutes: totalWeeklyMinutes,
     totalWeeklyMinutes,
+    totalCompletedSessions: completedSessionsCount,
     completedSessionsCount,
     interruptedSessionsCount,
     weeklyGoalMinutes: safeWeeklyGoal,
+    weeklyGoalProgressPercent,
     weeklyGoalProgress: Math.min(
       1,
       Number((totalWeeklyMinutes / safeWeeklyGoal).toFixed(4))
     ),
+    bestDay: bestFocusDay,
     bestFocusDay,
-    mostUsedEnvironment: favs.favoriteScene,
+    mostUsedEnvironment:
+      sessions.length > 0 ? favs.favoriteScene.scene.id : null,
   };
 }
 
@@ -1066,31 +1179,46 @@ export function calculateFavorites(sessions: SessionRecord[]): {
 
 /**
  * Computes Personal Focus Patterns for the REFLECT experience.
- * Never fabricates data; returns `hasEnoughData: false` when sessions are empty.
+ * Never fabricates data; returns `hasData: false` when sessions are empty.
  */
 export function calculatePersonalFocusPatterns(
   sessions: SessionRecord[],
-  todayIsoDate: string
+  todayIsoDate?: string
 ): {
+  hasData: boolean;
   hasEnoughData: boolean;
-  frequentSessionLengths: Array<{ durationMinutes: number; count: number }>;
+  frequentLengths: Array<{ minutes: number; durationMinutes: number; count: number }>;
+  frequentSessionLengths: Array<{ minutes: number; durationMinutes: number; count: number }>;
   preferredEnvironments: Array<{
+    sceneId: FocusSceneId;
     scene: FocusSceneConfig;
     minutes: number;
     sessionsCount: number;
   }>;
+  peakTimeOfDay: string;
   timeOfDay: ReturnType<typeof calculateTimeOfDayRhythm>;
   weeklyConsistencyDays: number;
   completionRatePercent: number;
 } {
+  const now = new Date();
+  const iso =
+    todayIsoDate ||
+    `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(
+      2,
+      '0'
+    )}-${String(now.getDate()).padStart(2, '0')}`;
+
   const validSessions = sessions.filter(
     (s) => (s.actualMinutes ?? s.durationMinutes) > 0
   );
   if (validSessions.length === 0) {
     return {
+      hasData: false,
       hasEnoughData: false,
+      frequentLengths: [],
       frequentSessionLengths: [],
       preferredEnvironments: [],
+      peakTimeOfDay: 'No sessions recorded yet',
       timeOfDay: calculateTimeOfDayRhythm([]),
       weeklyConsistencyDays: 0,
       completionRatePercent: 0,
@@ -1104,7 +1232,11 @@ export function calculatePersonalFocusPatterns(
     lengthCounts.set(len, (lengthCounts.get(len) || 0) + 1);
   }
   const frequentSessionLengths = Array.from(lengthCounts.entries())
-    .map(([durationMinutes, count]) => ({ durationMinutes, count }))
+    .map(([durationMinutes, count]) => ({
+      minutes: durationMinutes,
+      durationMinutes,
+      count,
+    }))
     .sort((a, b) => b.count - a.count || b.durationMinutes - a.durationMinutes)
     .slice(0, 4);
 
@@ -1121,17 +1253,26 @@ export function calculatePersonalFocusPatterns(
   }
   const preferredEnvironments = Array.from(envMap.entries())
     .map(([sceneId, stats]) => ({
+      sceneId,
       scene: FOCUS_SCENES[sceneId] || FOCUS_SCENES['deep-current'],
       minutes: stats.minutes,
       sessionsCount: stats.sessionsCount,
     }))
     .sort((a, b) => b.minutes - a.minutes);
 
-  // 3. Weekly consistency (active days out of last 7 days)
-  const weekly = calculateWeeklyRhythm(validSessions, todayIsoDate);
+  // 3. Time of day
+  const tod = calculateTimeOfDayRhythm(validSessions);
+  const topTod = [...tod].sort((a, b) => b.minutes - a.minutes)[0];
+  const peakTimeOfDay =
+    topTod && topTod.minutes > 0
+      ? `${topTod.label} (${topTod.window})`
+      : 'Balanced across day';
+
+  // 4. Weekly consistency (active days out of last 7 days)
+  const weekly = calculateWeeklyRhythm(validSessions, iso);
   const weeklyConsistencyDays = weekly.filter((d) => d.minutes > 0).length;
 
-  // 4. Completion rate
+  // 5. Completion rate
   const completedCount = sessions.filter(
     (s) => (s.completionStatus || 'completed') === 'completed'
   ).length;
@@ -1141,10 +1282,13 @@ export function calculatePersonalFocusPatterns(
       : 0;
 
   return {
+    hasData: true,
     hasEnoughData: true,
+    frequentLengths: frequentSessionLengths,
     frequentSessionLengths,
     preferredEnvironments,
-    timeOfDay: calculateTimeOfDayRhythm(validSessions),
+    peakTimeOfDay,
+    timeOfDay: tod,
     weeklyConsistencyDays,
     completionRatePercent,
   };
@@ -1154,14 +1298,17 @@ export interface AuraGardenFloraNode {
   id: string;
   sessionId: string;
   label: string;
-  species: 'pelagic-jelly' | 'luminous-bloom' | 'refractive-prism';
+  species: OrbDesignId;
   x: number; // normalized 0.12 .. 0.88
   y: number; // normalized 0.22 .. 0.82
   scale: number; // 0.6 .. 1.35
+  colorHex: string;
+  secondaryHex: string;
   primaryColor: string;
   secondaryColor: string;
   minutes: number;
   isoDate: string;
+  completed: boolean;
   isFullBloom: boolean;
 }
 
@@ -1178,8 +1325,12 @@ export interface AuraGardenSpecimen {
 
 export interface AuraGardenState {
   stageLevel: 1 | 2 | 3 | 4 | 5;
+  growthStageIndex: number;
   stageTitle: string;
+  growthStageLabel: string;
   stageDescription: string;
+  growthStageDescription: string;
+  totalCompletedSessions: number;
   completedSessionsCount: number;
   interruptedSessionsCount: number;
   totalFocusedMinutes: number;
@@ -1193,8 +1344,8 @@ export interface AuraGardenState {
 /**
  * Computes the user's personal MY AURA GARDEN state from genuine session records.
  * Rules:
- * - Completed sessions grant full luminous growth and spawn a full-bloom flora node.
- * - Interrupted sessions grant only partial light motes (never full completion rewards).
+ * - Completed sessions grant full luminous growth and spawn a full-bloom flora node (`completed: true`).
+ * - Interrupted sessions grant only partial light motes (`completed: false`, smaller bud scale).
  * - Reaching weekly goals or consistent activity reveals environmental details without punitive streak loss.
  */
 export function computeAuraGardenState(
@@ -1216,7 +1367,6 @@ export function computeAuraGardenState(
     0
   );
 
-  // Full completion reward = 100 energy + actualMinutes; interrupted = partial light mote (max 25% of actualMinutes)
   const completedEnergy = completedSessions.reduce(
     (acc, s) => acc + 100 + (s.actualMinutes ?? s.durationMinutes),
     0
@@ -1232,46 +1382,54 @@ export function computeAuraGardenState(
     todayIsoDate,
     weeklyGoalMinutes
   );
-  const weeklyGoalReached = weekly.totalWeeklyMinutes >= weekly.weeklyGoalMinutes;
+  const weeklyGoalReached =
+    weekly.totalWeeklyMinutes >= weekly.weeklyGoalMinutes;
   const activeDaysThisWeek = weekly.days.filter((d) => d.minutes > 0).length;
 
   const count = completedSessions.length;
   let stageLevel: 1 | 2 | 3 | 4 | 5 = 1;
-  let stageTitle = 'Quiet Seed Sanctuary';
+  let stageTitle = 'Still Waters';
   let stageDescription =
     'Your sanctuary rests in calm stillness. Complete your first focus session to awaken bioluminescent life.';
 
   if (count >= 15) {
     stageLevel = 5;
-    stageTitle = 'Luminous Pelagic Conservatory';
+    stageTitle = 'Luminous Archipelago';
     stageDescription =
       'A thriving ecosystem of bioluminescent flora, pelagic bells, and harmonic light currents nourished by your sustained focus.';
   } else if (count >= 10) {
     stageLevel = 4;
-    stageTitle = 'Harmonic Canopy Sanctuary';
+    stageTitle = 'Botanical Reef';
     stageDescription =
       'Multiple living organisms and refracted light streams resonate across the deep sanctuary floor.';
   } else if (count >= 5) {
     stageLevel = 3;
-    stageTitle = 'Blooming Reef Atelier';
+    stageTitle = 'Pelagic Sanctuary';
     stageDescription =
       'Translucent petals and drifting plankton clusters have taken root from your completed focus blocks.';
   } else if (count >= 1) {
     stageLevel = 2;
-    stageTitle = 'First Bioluminescent Sprouts';
+    stageTitle = 'First Luminescence';
     stageDescription =
       'Gentle filaments of cyan and violet light are unfolding with each completed session.';
   }
 
-  // Generate deterministic flora nodes for up to 18 most recent completed sessions
-  const floraNodes: AuraGardenFloraNode[] = completedSessions
+  // Generate deterministic flora nodes for up to 18 most recent sessions (completed = full bloom, interrupted = small bud)
+  const validSessions = sessions.filter(
+    (s) => (s.actualMinutes ?? s.durationMinutes) > 0
+  );
+  const floraNodes: AuraGardenFloraNode[] = validSessions
     .slice(0, 18)
     .map((s, idx) => {
       const scene = FOCUS_SCENES[s.sceneId] || FOCUS_SCENES['deep-current'];
+      const isCompleted = (s.completionStatus || 'completed') === 'completed';
       const goldenAngle = idx * 2.399963229728653;
       const radius = 0.14 + Math.sqrt((idx + 0.5) / 18) * 0.31;
       const x = Number(
-        Math.max(0.12, Math.min(0.88, 0.5 + Math.cos(goldenAngle) * radius)).toFixed(4)
+        Math.max(
+          0.12,
+          Math.min(0.88, 0.5 + Math.cos(goldenAngle) * radius)
+        ).toFixed(4)
       );
       const y = Number(
         Math.max(
@@ -1280,16 +1438,13 @@ export function computeAuraGardenState(
         ).toFixed(4)
       );
       const mins = s.actualMinutes ?? s.durationMinutes;
-      const species: AuraGardenFloraNode['species'] =
-        s.orbDesign === 'living-bloom'
-          ? 'luminous-bloom'
-          : s.orbDesign === 'original'
-          ? 'refractive-prism'
-          : idx % 3 === 1
-          ? 'luminous-bloom'
+      const species: OrbDesignId =
+        s.orbDesign ||
+        (idx % 3 === 1
+          ? 'living-bloom'
           : idx % 3 === 2
-          ? 'refractive-prism'
-          : 'pelagic-jelly';
+          ? 'original'
+          : 'celestial-jelly');
 
       return {
         id: `flora-${s.id}`,
@@ -1298,12 +1453,17 @@ export function computeAuraGardenState(
         species,
         x,
         y,
-        scale: Number(Math.max(0.68, Math.min(1.32, mins / 55)).toFixed(2)),
+        scale: isCompleted
+          ? Number(Math.max(0.72, Math.min(1.32, mins / 55)).toFixed(2))
+          : 0.48,
+        colorHex: scene.colors.primary,
+        secondaryHex: scene.colors.secondary,
         primaryColor: scene.colors.primary,
         secondaryColor: scene.colors.secondary,
         minutes: mins,
         isoDate: s.isoDate,
-        isFullBloom: true,
+        completed: isCompleted,
+        isFullBloom: isCompleted,
       };
     });
 
@@ -1321,7 +1481,8 @@ export function computeAuraGardenState(
       id: 'spec-celestial-jelly',
       name: 'Celestial Jelly',
       category: 'organism',
-      description: 'Bioluminescent pelagic medusa with 16-lobe crystalline bell.',
+      description:
+        'Bioluminescent pelagic medusa with 16-lobe crystalline bell.',
       unlocked: (orbCounts['celestial-jelly'] || 0) > 0 || count >= 1,
       sessionsCompleted: orbCounts['celestial-jelly'] || Math.min(count, 1),
       primaryColor: '#2FE8FF',
@@ -1331,7 +1492,8 @@ export function computeAuraGardenState(
       id: 'spec-living-bloom',
       name: 'Living Bloom',
       category: 'organism',
-      description: '44-petal translucent botanical life form with golden anthers.',
+      description:
+        '44-petal translucent botanical life form with golden anthers.',
       unlocked: (orbCounts['living-bloom'] || 0) > 0 || count >= 3,
       sessionsCompleted: orbCounts['living-bloom'] || 0,
       primaryColor: '#FF4FA3',
@@ -1347,7 +1509,7 @@ export function computeAuraGardenState(
       primaryColor: '#38F2FF',
       secondaryColor: '#D8FF52',
     },
-    ...(Object.values(FOCUS_SCENES).map((sc) => ({
+    ...Object.values(FOCUS_SCENES).map((sc) => ({
       id: `spec-scene-${sc.id}`,
       name: sc.name,
       category: 'atmosphere' as const,
@@ -1356,13 +1518,17 @@ export function computeAuraGardenState(
       sessionsCompleted: sceneCounts[sc.id] || 0,
       primaryColor: sc.colors.primary,
       secondaryColor: sc.colors.secondary,
-    }))),
+    })),
   ];
 
   return {
     stageLevel,
+    growthStageIndex: stageLevel - 1,
     stageTitle,
+    growthStageLabel: stageTitle,
     stageDescription,
+    growthStageDescription: stageDescription,
+    totalCompletedSessions: count,
     completedSessionsCount: count,
     interruptedSessionsCount: interruptedSessions.length,
     totalFocusedMinutes,
@@ -1378,25 +1544,48 @@ export type BreathingPhaseName = 'inhale' | 'hold-in' | 'exhale' | 'hold-out';
 
 export interface BreathingMomentState {
   phase: BreathingPhaseName;
+  label: string;
   instruction: string;
   phaseRemainingSeconds: number;
   phaseProgress: number; // 0..1 within current phase
+  expansion: number; // 0..1 normalized expansion factor
   orbScale: number; // 0.58 .. 1.15 smooth expansion/contraction factor
   cycleNumber: number;
 }
 
 /**
  * Pure, deterministic breathing guide state calculator for RESTORE -> Breathing Space.
+ * Accepts either `(pattern, elapsedSeconds)` or `(elapsedSeconds, pattern)`.
  */
 export function calculateBreathingPhaseAtTime(
-  elapsedSeconds: number,
-  pattern: {
-    inhaleSeconds: number;
-    holdInSeconds: number;
-    exhaleSeconds: number;
-    holdOutSeconds: number;
-  }
+  arg1:
+    | number
+    | {
+        inhaleSeconds: number;
+        holdInSeconds: number;
+        exhaleSeconds: number;
+        holdOutSeconds: number;
+      },
+  arg2:
+    | number
+    | {
+        inhaleSeconds: number;
+        holdInSeconds: number;
+        exhaleSeconds: number;
+        holdOutSeconds: number;
+      }
 ): BreathingMomentState {
+  const elapsedSeconds = typeof arg1 === 'number' ? arg1 : (arg2 as number);
+  const pattern =
+    typeof arg1 === 'object'
+      ? arg1
+      : (arg2 as {
+          inhaleSeconds: number;
+          holdInSeconds: number;
+          exhaleSeconds: number;
+          holdOutSeconds: number;
+        });
+
   const inhale = Math.max(1, pattern.inhaleSeconds);
   const holdIn = Math.max(0, pattern.holdInSeconds);
   const exhale = Math.max(1, pattern.exhaleSeconds);
@@ -1412,13 +1601,14 @@ export function calculateBreathingPhaseAtTime(
 
   if (inCycle < inhale) {
     const p = inCycle / inhale;
-    // Smooth cosine ease-in-out
-    const eased = 0.5 - 0.5 * Math.cos(p * Math.PI);
+    const eased = Number((0.5 - 0.5 * Math.cos(p * Math.PI)).toFixed(4));
     return {
       phase: 'inhale',
+      label: 'Inhale Gently',
       instruction: 'Inhale gently',
       phaseRemainingSeconds: Math.max(1, Math.ceil(inhale - inCycle)),
       phaseProgress: Number(p.toFixed(4)),
+      expansion: eased,
       orbScale: Number((minScale + (maxScale - minScale) * eased).toFixed(4)),
       cycleNumber,
     };
@@ -1429,9 +1619,11 @@ export function calculateBreathingPhaseAtTime(
     const p = holdIn > 0 ? intoHold / holdIn : 1;
     return {
       phase: 'hold-in',
+      label: 'Hold Softly',
       instruction: 'Hold softly',
       phaseRemainingSeconds: Math.max(1, Math.ceil(holdIn - intoHold)),
       phaseProgress: Number(p.toFixed(4)),
+      expansion: 1,
       orbScale: maxScale,
       cycleNumber,
     };
@@ -1441,11 +1633,14 @@ export function calculateBreathingPhaseAtTime(
     const intoExhale = inCycle - inhale - holdIn;
     const p = intoExhale / exhale;
     const eased = 0.5 - 0.5 * Math.cos(p * Math.PI);
+    const expansion = Number((1 - eased).toFixed(4));
     return {
       phase: 'exhale',
+      label: 'Exhale Slowly',
       instruction: 'Exhale slowly',
       phaseRemainingSeconds: Math.max(1, Math.ceil(exhale - intoExhale)),
       phaseProgress: Number(p.toFixed(4)),
+      expansion,
       orbScale: Number((maxScale - (maxScale - minScale) * eased).toFixed(4)),
       cycleNumber,
     };
@@ -1455,9 +1650,11 @@ export function calculateBreathingPhaseAtTime(
   const p = holdOut > 0 ? intoHoldOut / holdOut : 1;
   return {
     phase: 'hold-out',
+    label: 'Rest in Stillness',
     instruction: 'Rest in stillness',
     phaseRemainingSeconds: Math.max(1, Math.ceil(holdOut - intoHoldOut)),
     phaseProgress: Number(p.toFixed(4)),
+    expansion: 0,
     orbScale: minScale,
     cycleNumber,
   };
