@@ -282,36 +282,11 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         {isLiquidLensRestore ? (
           <div
             data-testid="dock-liquid-lens-modes"
-            className="flex items-center gap-0.5 sm:gap-1"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#F5F6FF]"
+            aria-label="Liquid Lens breathing experience"
           >
-            {(
-              [
-                { id: 'breathe', label: 'Breathe', Icon: Wind },
-                { id: 'stillness', label: 'Stillness', Icon: Moon },
-                { id: 'soundscape', label: 'Soundscape', Icon: Waves },
-              ] as const
-            ).map(({ id, label, Icon }) => {
-              const isSelected = liquidLensSubMode === id;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  data-testid={`dock-liquid-submode-${id}`}
-                  onClick={() => {
-                    setOpenGroup(null);
-                    onSelectLiquidLensSubMode?.(id);
-                  }}
-                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-                    isSelected
-                      ? 'bg-[#38F8A8]/20 text-[#F5F6FF] border border-[#38F8A8]/45'
-                      : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5 text-[#38F8A8] shrink-0" />
-                  <span className="hidden xs:inline sm:inline">{label}</span>
-                </button>
-              );
-            })}
+            <Wind className="w-3.5 h-3.5 text-[#38F8A8] shrink-0" />
+            <span>Breathe</span>
           </div>
         ) : (
           <>
