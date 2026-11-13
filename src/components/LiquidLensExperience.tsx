@@ -687,7 +687,7 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
       exhaleSeconds: initialPreset.exhaleSeconds,
       holdOutSeconds: initialPreset.holdOutSeconds,
       enableBreathHold: false,
-      stillnessDurationSeconds: initialQuiet.durationSeconds,
+      stillnessDurationSeconds: initialPreset.recommendedDurationSeconds,
       environmentId: settings.defaultRestoreEnvironmentId ?? 'rain-garden',
       ambienceVolume: settings.ambienceVolume,
       reducedMotion: settings.reducedMotion,
@@ -984,13 +984,17 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
         interaction.audio.onSelectChamber(pairedEnvironment.chamberId);
       }
       const found = availableBreathingPresets.find((p) => p.id === presetId);
-      if (found && presetId !== 'custom') {
+      if (found) {
         setTuning((prev) => ({
           ...prev,
-          inhaleSeconds: found.inhaleSeconds,
-          holdInSeconds: found.holdInSeconds,
-          exhaleSeconds: found.exhaleSeconds,
-          holdOutSeconds: found.holdOutSeconds,
+          ...(presetId === 'custom'
+            ? {}
+            : {
+                inhaleSeconds: found.inhaleSeconds,
+                holdInSeconds: found.holdInSeconds,
+                exhaleSeconds: found.exhaleSeconds,
+                holdOutSeconds: found.holdOutSeconds,
+              }),
           stillnessDurationSeconds: found.recommendedDurationSeconds,
         }));
       }
