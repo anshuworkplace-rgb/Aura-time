@@ -1,11 +1,16 @@
 import * as THREE from 'three';
 import {
   ChamberConfig,
+  ChamberId,
   FocusSceneConfig,
   OrbDesignId,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
+import {
+  computeJellyResonancePulseState,
+  getResonancePresetByChamberId,
+} from '../utils/auraResonance';
 import {
   CELESTIAL_JELLY_BELL_FRAGMENT_SHADER,
   CELESTIAL_JELLY_BELL_VERTEX_SHADER,
@@ -36,6 +41,8 @@ export interface CelestialJelly3DUpdateInput {
   orbDesign: OrbDesignId;
   scene: FocusSceneConfig;
   chamber?: ChamberConfig;
+  activeChamberId?: ChamberId;
+  resonancePulseTimestamp?: number;
   status: TimerStatus;
   phase: TimerPhase;
   totalSeconds: number;
@@ -164,6 +171,15 @@ export class CelestialJelly3DSceneController {
       isSoftwareGl ? 14 : 18
     );
     this.rig = createCelestialJelly3DRig();
+    stepCelestialJelly3DPhysics(
+      this.rig,
+      computeJellyBellContraction(0),
+      0,
+      0.016,
+      null,
+      null,
+      1.0
+    );
     this.planktonGeometry = buildPelagicPlanktonGeometry(
       isSoftwareGl ? 96 : 150
     );
@@ -545,9 +561,51 @@ export class CelestialJelly3DSceneController {
       input.phase,
       input.chamber
     );
-    _cCyan.setRGB(...targetRig.domeCyan);
+    const soundPreset = getResonancePresetByChamberId(
+      input.activeChamberId || input.chamber?.id || 'rain-chamber'
+    );
+    const pulseElapsedSec =
+      input.resonancePulseTimestamp && input.resonancePulseTimestamp > 0
+        ? (Date.now() - input.resonancePulseTimestamp) / 1000
+        : -1;
+    const pulseState = computeJellyResonancePulseState(pulseElapsedSec);
+
+    const soundTintStrength = 0.28 + pulseState.bellGlowBoost * 0.45;
+    _cCyan.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.domeCyan[0],
+        soundPreset.primaryRgb[0],
+        soundTintStrength
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.domeCyan[1],
+        soundPreset.primaryRgb[1],
+        soundTintStrength
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.domeCyan[2],
+        soundPreset.primaryRgb[2],
+        soundTintStrength
+      )
+    );
     _cBlue.setRGB(...targetRig.domeBlue);
-    _cViolet.setRGB(...targetRig.domeViolet);
+    _cViolet.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.domeViolet[0],
+        soundPreset.secondaryRgb[0],
+        soundTintStrength * 0.85
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.domeViolet[1],
+        soundPreset.secondaryRgb[1],
+        soundTintStrength * 0.85
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.domeViolet[2],
+        soundPreset.secondaryRgb[2],
+        soundTintStrength * 0.85
+      )
+    );
     _cMagenta.setRGB(...targetRig.domeMagenta);
     _cSubPeach.setRGB(...targetRig.subumbrellaPeach);
     _cCoronaRose.setRGB(...targetRig.coronaRose);
@@ -555,8 +613,40 @@ export class CelestialJelly3DSceneController {
     _cCrownPink.setRGB(...targetRig.oralArmCrownPink);
     _cPearl.setRGB(...targetRig.oralArmPearl);
     _cMidLavender.setRGB(...targetRig.oralArmMidLavender);
-    _cTipCyan.setRGB(...targetRig.oralArmTipCyan);
-    _cBiolumeGold.setRGB(...targetRig.biolumeGold);
+    _cTipCyan.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.oralArmTipCyan[0],
+        soundPreset.primaryRgb[0],
+        0.35 + pulseState.tentacleGlowBoost * 0.55
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.oralArmTipCyan[1],
+        soundPreset.primaryRgb[1],
+        0.35 + pulseState.tentacleGlowBoost * 0.55
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.oralArmTipCyan[2],
+        soundPreset.primaryRgb[2],
+        0.35 + pulseState.tentacleGlowBoost * 0.55
+      )
+    );
+    _cBiolumeGold.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.biolumeGold[0],
+        soundPreset.primaryRgb[0],
+        0.25 + pulseState.tentacleGlowBoost * 0.45
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.biolumeGold[1],
+        soundPreset.primaryRgb[1],
+        0.25 + pulseState.tentacleGlowBoost * 0.45
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.biolumeGold[2],
+        soundPreset.primaryRgb[2],
+        0.25 + pulseState.tentacleGlowBoost * 0.45
+      )
+    );
 
     const colorLerp = 1.0 - Math.exp(-3.5 * dt);
     this.currentCyan.lerp(_cCyan, colorLerp);
@@ -688,9 +778,14 @@ export class CelestialJelly3DSceneController {
       );
     }
 
-    // Update Shader Uniforms across all anatomical layers
-    const lumi =
+    // Update Shader Uniforms across all anatomical layers (including traveling Resonance Halo light pulse)
+    const baseLumi =
       stateParams.luminescence * (input.status === 'paused' ? 0.68 : 1.0);
+    const bellLumi = Math.min(1.45, baseLumi + pulseState.bellGlowBoost * 0.48);
+    const tentacleLumi = Math.min(
+      1.5,
+      baseLumi + pulseState.tentacleGlowBoost * 0.55
+    );
 
     const updateBellUniforms = (u: Record<string, THREE.IUniform>) => {
       u.uTime.value = this.simTime;
@@ -698,10 +793,14 @@ export class CelestialJelly3DSceneController {
       u.uRadialScale.value = bellDyn.radialScale;
       u.uVerticalStretch.value = bellDyn.verticalStretch;
       u.uMarginWavePhase.value = bellDyn.marginWavePhase;
-      u.uSubsurfacePulse.value = bellDyn.subsurfacePulse;
-      u.uLuminescence.value = lumi;
+      u.uSubsurfacePulse.value = Math.min(
+        1.35,
+        bellDyn.subsurfacePulse + pulseState.bellGlowBoost * 0.45
+      );
+      u.uLuminescence.value = bellLumi;
       u.uAudioBass.value = input.audioBands.bass;
-      u.uAudioAmp.value = input.audioBands.overall;
+      u.uAudioAmp.value =
+        input.audioBands.overall + pulseState.bellGlowBoost * 0.35;
       u.uPointerWorld.value.set(
         localPtrX !== null ? localPtrX : 10.0,
         localPtrY !== null ? localPtrY : 10.0
@@ -721,7 +820,7 @@ export class CelestialJelly3DSceneController {
     const manU = this.manubriumMaterial.uniforms;
     manU.uTime.value = this.simTime;
     manU.uContraction.value = bellDyn.contraction;
-    manU.uLuminescence.value = lumi;
+    manU.uLuminescence.value = bellLumi;
     manU.uColorSubumbrellaPeach.value.copy(this.currentSubPeach);
     manU.uColorCoronaRose.value.copy(this.currentCoronaRose);
     manU.uColorCoronaChampagne.value.copy(this.currentCoronaChampagne);
@@ -730,8 +829,9 @@ export class CelestialJelly3DSceneController {
 
     const oaU = this.oralArmsMaterial.uniforms;
     oaU.uTime.value = this.simTime;
-    oaU.uLuminescence.value = lumi;
-    oaU.uAudioAmp.value = input.audioBands.overall;
+    oaU.uLuminescence.value = tentacleLumi;
+    oaU.uAudioAmp.value =
+      input.audioBands.overall + pulseState.tentacleGlowBoost * 0.4;
     oaU.uColorCrownPink.value.copy(this.currentCrownPink);
     oaU.uColorPearl.value.copy(this.currentPearl);
     oaU.uColorCoronaChampagne.value.copy(this.currentCoronaChampagne);
@@ -741,7 +841,7 @@ export class CelestialJelly3DSceneController {
 
     const filU = this.filamentsMaterial.uniforms;
     filU.uTime.value = this.simTime;
-    filU.uLuminescence.value = lumi;
+    filU.uLuminescence.value = tentacleLumi;
     filU.uColorCyan.value.copy(this.currentCyan);
     filU.uColorViolet.value.copy(this.currentViolet);
     filU.uColorMagenta.value.copy(this.currentMagenta);
@@ -749,15 +849,16 @@ export class CelestialJelly3DSceneController {
 
     const pinU = this.pinnateMaterial.uniforms;
     pinU.uTime.value = this.simTime;
-    pinU.uLuminescence.value = lumi;
+    pinU.uLuminescence.value = tentacleLumi;
     pinU.uColorCyan.value.copy(this.currentCyan);
     pinU.uColorViolet.value.copy(this.currentViolet);
     pinU.uColorMagenta.value.copy(this.currentMagenta);
 
     const bioU = this.biolumeNodesMaterial.uniforms;
     bioU.uTime.value = this.simTime;
-    bioU.uAudioAmp.value = input.audioBands.overall;
-    bioU.uLuminescence.value = lumi;
+    bioU.uAudioAmp.value =
+      input.audioBands.overall + pulseState.tentacleGlowBoost * 0.5;
+    bioU.uLuminescence.value = tentacleLumi;
     bioU.uColorCyan.value.copy(this.currentCyan);
     bioU.uColorBiolumeGold.value.copy(this.currentBiolumeGold);
     bioU.uColorMagenta.value.copy(this.currentMagenta);
@@ -765,7 +866,7 @@ export class CelestialJelly3DSceneController {
     const plankU = this.planktonMaterial.uniforms;
     plankU.uTime.value = this.simTime;
     plankU.uContraction.value = bellDyn.contraction;
-    plankU.uLuminescence.value = lumi;
+    plankU.uLuminescence.value = baseLumi;
     plankU.uColorCyan.value.copy(this.currentCyan);
     plankU.uColorViolet.value.copy(this.currentViolet);
     plankU.uColorBiolumeGold.value.copy(this.currentBiolumeGold);

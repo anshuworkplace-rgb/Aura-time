@@ -69,7 +69,15 @@ export function rgbaString(
   alpha: number
 ): string {
   const a = Math.max(0, Math.min(1, alpha));
-  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${a.toFixed(3)})`;
+  const isNormalized =
+    rgb[0] <= 1.0 &&
+    rgb[1] <= 1.0 &&
+    rgb[2] <= 1.0 &&
+    (rgb[0] > 0 || rgb[1] > 0 || rgb[2] > 0);
+  const r = isNormalized ? Math.round(rgb[0] * 255) : Math.round(rgb[0]);
+  const g = isNormalized ? Math.round(rgb[1] * 255) : Math.round(rgb[1]);
+  const b = isNormalized ? Math.round(rgb[2] * 255) : Math.round(rgb[2]);
+  return `rgba(${r}, ${g}, ${b}, ${a.toFixed(3)})`;
 }
 
 /**

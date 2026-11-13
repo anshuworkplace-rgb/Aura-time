@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
   ChamberConfig,
+  ChamberId,
   FocusSceneConfig,
   OrbDesignId,
   PerformanceMode,
@@ -40,6 +41,8 @@ import { LiquidLens3DSceneController } from './LiquidLens3DScene';
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
   chamber?: ChamberConfig;
+  activeChamberId?: ChamberId;
+  resonancePulseTimestamp?: number;
   orbDesign?: OrbDesignId;
   status: TimerStatus;
   phase?: TimerPhase;
@@ -64,6 +67,8 @@ const _targetEngineBCoral = new THREE.Color();
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
   chamber,
+  activeChamberId,
+  resonancePulseTimestamp = 0,
   orbDesign = 'celestial-jelly',
   status,
   phase = 'focus',
@@ -97,6 +102,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   const liveStateRef = useRef({
     scene,
     chamber,
+    activeChamberId,
+    resonancePulseTimestamp,
     orbDesign,
     status,
     phase,
@@ -113,6 +120,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     liveStateRef.current = {
       scene,
       chamber,
+      activeChamberId,
+      resonancePulseTimestamp,
       orbDesign,
       status,
       phase,
@@ -143,6 +152,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   }, [
     scene,
     chamber,
+    activeChamberId,
+    resonancePulseTimestamp,
     orbDesign,
     status,
     phase,
@@ -615,10 +626,9 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         fluidUniforms.uSecondaryAuroraSteps.value =
           currentProfile.secondaryAuroraSteps;
 
-        const audioBands =
-          state.audioReactive && state.status === 'running'
-            ? soundEngine.getAudioBands()
-            : { bass: 0, mid: 0, treble: 0, overall: 0 };
+        const audioBands = state.audioReactive
+          ? soundEngine.getAudioBands()
+          : { bass: 0, mid: 0, treble: 0, overall: 0 };
         const audioAmp = audioBands.overall;
 
         const secondsSinceStart =
@@ -817,6 +827,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           orbDesign: state.orbDesign,
           scene: state.scene,
           chamber: state.chamber,
+          activeChamberId: state.activeChamberId || state.chamber?.id,
+          resonancePulseTimestamp: state.resonancePulseTimestamp,
           status: state.status,
           phase: state.phase,
           totalSeconds: state.totalSeconds || 2700,
@@ -838,6 +850,8 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         livingBloomController.update({
           orbDesign: state.orbDesign,
           scene: state.scene,
+          activeChamberId: state.activeChamberId || state.chamber?.id,
+          resonancePulseTimestamp: state.resonancePulseTimestamp,
           status: state.status,
           phase: state.phase,
           totalSeconds: state.totalSeconds || 2700,

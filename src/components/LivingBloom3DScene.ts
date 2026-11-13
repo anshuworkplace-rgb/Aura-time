@@ -1,10 +1,15 @@
 import * as THREE from 'three';
 import {
+  ChamberId,
   FocusSceneConfig,
   OrbDesignId,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
+import {
+  computeBloomResonanceBurstState,
+  getResonancePresetByChamberId,
+} from '../utils/auraResonance';
 import {
   LIVING_BLOOM_ANTHER_FRAGMENT_SHADER,
   LIVING_BLOOM_ANTHER_VERTEX_SHADER,
@@ -28,6 +33,8 @@ import {
 export interface LivingBloom3DUpdateInput {
   orbDesign: OrbDesignId;
   scene: FocusSceneConfig;
+  activeChamberId?: ChamberId;
+  resonancePulseTimestamp?: number;
   status: TimerStatus;
   phase: TimerPhase;
   totalSeconds: number;
@@ -443,14 +450,121 @@ export class LivingBloom3DSceneController {
     );
 
     // STAGE 3: Maintain permanent intrinsic Living Bloom colour identity
+    // while subtly tinting petal reflections and lighting to reflect the selected sound
     const targetRig = computeLivingBloomColorRig(input.scene, input.phase);
-    _cPearlPink.setRGB(...targetRig.pearlPink);
-    _cCoralRose.setRGB(...targetRig.coralRose);
-    _cLavender.setRGB(...targetRig.lavender);
+    const soundPreset = getResonancePresetByChamberId(
+      input.activeChamberId || 'rain-chamber'
+    );
+    const burstElapsedSec =
+      input.resonancePulseTimestamp && input.resonancePulseTimestamp > 0
+        ? (Date.now() - input.resonancePulseTimestamp) / 1000
+        : -1;
+    const bloomBurst = computeBloomResonanceBurstState(burstElapsedSec);
+
+    const petalTintBlend = 0.24 + bloomBurst.opennessBoost * 0.6;
+    _cPearlPink.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.pearlPink[0],
+        soundPreset.primaryRgb[0],
+        petalTintBlend * 0.45
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.pearlPink[1],
+        soundPreset.primaryRgb[1],
+        petalTintBlend * 0.45
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.pearlPink[2],
+        soundPreset.primaryRgb[2],
+        petalTintBlend * 0.45
+      )
+    );
+    _cCoralRose.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.coralRose[0],
+        soundPreset.secondaryRgb[0],
+        petalTintBlend * 0.42
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.coralRose[1],
+        soundPreset.secondaryRgb[1],
+        petalTintBlend * 0.42
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.coralRose[2],
+        soundPreset.secondaryRgb[2],
+        petalTintBlend * 0.42
+      )
+    );
+    _cLavender.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.lavender[0],
+        soundPreset.primaryRgb[0],
+        petalTintBlend * 0.55
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.lavender[1],
+        soundPreset.primaryRgb[1],
+        petalTintBlend * 0.55
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.lavender[2],
+        soundPreset.primaryRgb[2],
+        petalTintBlend * 0.55
+      )
+    );
     _cTranslucentWhite.setRGB(...targetRig.translucentWhite);
-    _cIridescentViolet.setRGB(...targetRig.iridescentViolet);
-    _cGoldenPollen.setRGB(...targetRig.goldenPollen);
-    _cCyanReflection.setRGB(...targetRig.cyanReflection);
+    _cIridescentViolet.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.iridescentViolet[0],
+        soundPreset.secondaryRgb[0],
+        0.34
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.iridescentViolet[1],
+        soundPreset.secondaryRgb[1],
+        0.34
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.iridescentViolet[2],
+        soundPreset.secondaryRgb[2],
+        0.34
+      )
+    );
+    _cGoldenPollen.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.goldenPollen[0],
+        soundPreset.primaryRgb[0],
+        0.18 + bloomBurst.nectaryBoost * 0.35
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.goldenPollen[1],
+        soundPreset.primaryRgb[1],
+        0.18 + bloomBurst.nectaryBoost * 0.35
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.goldenPollen[2],
+        soundPreset.primaryRgb[2],
+        0.18 + bloomBurst.nectaryBoost * 0.35
+      )
+    );
+    _cCyanReflection.setRGB(
+      THREE.MathUtils.lerp(
+        targetRig.cyanReflection[0],
+        soundPreset.primaryRgb[0],
+        0.48
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.cyanReflection[1],
+        soundPreset.primaryRgb[1],
+        0.48
+      ),
+      THREE.MathUtils.lerp(
+        targetRig.cyanReflection[2],
+        soundPreset.primaryRgb[2],
+        0.48
+      )
+    );
     _cVeinChampagne.setRGB(...targetRig.veinChampagne);
     _cCarpelMagenta.setRGB(...targetRig.carpelMagenta);
     _cStemRoseOlive.setRGB(...targetRig.stemRoseOlive);
@@ -467,9 +581,36 @@ export class LivingBloom3DSceneController {
     this.currentCarpelMagenta.lerp(_cCarpelMagenta, colorLerp);
     this.currentStemRoseOlive.lerp(_cStemRoseOlive, colorLerp);
 
+    // Controlled blooming expansion during Sound Blossom selection + gentle audio-reactive petal breath
+    const outerOpen = Math.min(
+      1.06,
+      bloomCycle.outerOpenness +
+        bloomBurst.opennessBoost +
+        input.audioBands.bass * 0.05
+    );
+    const midOpen = Math.min(
+      1.04,
+      bloomCycle.midOpenness +
+        bloomBurst.opennessBoost * 0.9 +
+        input.audioBands.mid * 0.04
+    );
+    const innerOpen = Math.min(
+      1.02,
+      bloomCycle.innerOpenness +
+        bloomBurst.opennessBoost * 0.8 +
+        input.audioBands.treble * 0.04
+    );
+    const nectaryPulse = Math.min(
+      1.35,
+      bloomCycle.nectaryPulse + bloomBurst.nectaryBoost
+    );
+
     // Scale and position the 3D blossom inside the central lens sanctuary
     const baseScale =
-      this.cachedLensDiameterWorld * 0.355 * stateParams.expansionScale;
+      this.cachedLensDiameterWorld *
+      0.355 *
+      stateParams.expansionScale *
+      (1.0 + bloomBurst.opennessBoost * 0.14);
 
     // Gentle organic buoyant drift responding to imaginary environmental currents
     const driftX =
@@ -477,7 +618,7 @@ export class LivingBloom3DSceneController {
       Math.cos(this.simTime * 0.19) * 0.012;
     const driftY =
       Math.cos(this.simTime * 0.37) * 0.021 +
-      (bloomCycle.outerOpenness - 0.68) * 0.028;
+      (outerOpen - 0.68) * 0.028;
     const driftZ = Math.sin(this.simTime * 0.23) * 0.028;
 
     this.rootGroup.position.set(
@@ -545,18 +686,22 @@ export class LivingBloom3DSceneController {
         -(worldPtrY - this.rootGroup.position.y) / Math.max(0.1, baseScale);
     }
 
-    const lumi =
-      stateParams.luminescence * (input.status === 'paused' ? 0.68 : 1.0);
+    const lumi = Math.min(
+      1.35,
+      stateParams.luminescence * (input.status === 'paused' ? 0.68 : 1.0) +
+        bloomBurst.nectaryBoost * 0.35
+    );
 
     const updatePetalUniforms = (u: Record<string, THREE.IUniform>) => {
       u.uTime.value = this.simTime;
-      u.uOuterOpenness.value = bloomCycle.outerOpenness;
-      u.uMidOpenness.value = bloomCycle.midOpenness;
-      u.uInnerOpenness.value = bloomCycle.innerOpenness;
-      u.uNectaryPulse.value = bloomCycle.nectaryPulse;
+      u.uOuterOpenness.value = outerOpen;
+      u.uMidOpenness.value = midOpen;
+      u.uInnerOpenness.value = innerOpen;
+      u.uNectaryPulse.value = nectaryPulse;
       u.uLuminescence.value = lumi;
       u.uAudioBass.value = input.audioBands.bass;
-      u.uAudioAmp.value = input.audioBands.overall;
+      u.uAudioAmp.value =
+        input.audioBands.overall + bloomBurst.opennessBoost * 0.5;
       u.uPointerLocal.value.set(localPtrX, localPtrZ);
       u.uColorPearlPink.value.copy(this.currentPearlPink);
       u.uColorCoralRose.value.copy(this.currentCoralRose);
@@ -573,8 +718,8 @@ export class LivingBloom3DSceneController {
 
     const stU = this.stamenMaterial.uniforms;
     stU.uTime.value = this.simTime;
-    stU.uInnerOpenness.value = bloomCycle.innerOpenness;
-    stU.uNectaryPulse.value = bloomCycle.nectaryPulse;
+    stU.uInnerOpenness.value = innerOpen;
+    stU.uNectaryPulse.value = nectaryPulse;
     stU.uLuminescence.value = lumi;
     stU.uAudioTreble.value = input.audioBands.treble;
     stU.uPointerLocal.value.set(localPtrX, localPtrZ);
@@ -587,8 +732,8 @@ export class LivingBloom3DSceneController {
 
     const anU = this.antherMaterial.uniforms;
     anU.uTime.value = this.simTime;
-    anU.uInnerOpenness.value = bloomCycle.innerOpenness;
-    anU.uNectaryPulse.value = bloomCycle.nectaryPulse;
+    anU.uInnerOpenness.value = innerOpen;
+    anU.uNectaryPulse.value = nectaryPulse;
     anU.uLuminescence.value = lumi;
     anU.uAudioTreble.value = input.audioBands.treble;
     anU.uPointerLocal.value.set(localPtrX, localPtrZ);
@@ -598,7 +743,7 @@ export class LivingBloom3DSceneController {
 
     const calU = this.calyxMaterial.uniforms;
     calU.uTime.value = this.simTime;
-    calU.uOuterOpenness.value = bloomCycle.outerOpenness;
+    calU.uOuterOpenness.value = outerOpen;
     calU.uLuminescence.value = lumi;
     calU.uColorStemRoseOlive.value.copy(this.currentStemRoseOlive);
     calU.uColorCoralRose.value.copy(this.currentCoralRose);
@@ -608,8 +753,14 @@ export class LivingBloom3DSceneController {
 
     const polU = this.pollenMaterial.uniforms;
     polU.uTime.value = this.simTime;
-    polU.uOuterOpenness.value = bloomCycle.outerOpenness;
-    polU.uLuminescence.value = lumi;
+    polU.uOuterOpenness.value = Math.min(
+      1.2,
+      outerOpen + bloomBurst.opennessBoost * 0.65
+    );
+    polU.uLuminescence.value = Math.min(
+      1.45,
+      lumi + bloomBurst.nectaryBoost * 0.45
+    );
     polU.uPointerLocal.value.set(localPtrX, localPtrZ);
     polU.uColorGoldenPollen.value.copy(this.currentGoldenPollen);
     polU.uColorPearlPink.value.copy(this.currentPearlPink);

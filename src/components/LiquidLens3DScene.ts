@@ -49,8 +49,8 @@ export class LiquidLens3DSceneController {
   private causticRings: THREE.Mesh[] = [];
   private suspendedMotes: THREE.Points;
 
-  private outerMat: THREE.MeshPhysicalMaterial;
-  private innerMat: THREE.MeshPhysicalMaterial;
+  private outerMat: THREE.MeshBasicMaterial;
+  private innerMat: THREE.MeshBasicMaterial;
   private ringMats: THREE.MeshBasicMaterial[] = [];
   private motesMat: THREE.PointsMaterial;
   private geometries: THREE.BufferGeometry[] = [];
@@ -73,40 +73,26 @@ export class LiquidLens3DSceneController {
     this.currentTertiary.set(options.initialScene.colors.tertiary);
 
     // 1. Outer Refractive Liquid Torus Meniscus
-    const torusGeo = new THREE.TorusGeometry(0.92, 0.16, 28, 96);
+    const torusGeo = new THREE.TorusGeometry(0.92, 0.14, 20, 64);
     this.geometries.push(torusGeo);
-    this.outerMat = new THREE.MeshPhysicalMaterial({
+    this.outerMat = new THREE.MeshBasicMaterial({
       color: this.currentPrimary,
-      emissive: this.currentSecondary,
-      emissiveIntensity: 0.28,
-      roughness: 0.12,
-      metalness: 0.05,
-      transmission: options.isSoftwareGl ? 0.2 : 0.78,
-      thickness: 0.65,
-      ior: 1.42,
-      iridescence: 0.85,
-      iridescenceIOR: 1.33,
       transparent: true,
-      opacity: 0.55,
+      opacity: 0.22,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
     this.outerMeniscus = new THREE.Mesh(torusGeo, this.outerMat);
     this.rootGroup.add(this.outerMeniscus);
 
     // 2. Inner Fluid Core Sphere
-    const sphereGeo = new THREE.IcosahedronGeometry(0.76, 4);
+    const sphereGeo = new THREE.IcosahedronGeometry(0.76, 2);
     this.geometries.push(sphereGeo);
-    this.innerMat = new THREE.MeshPhysicalMaterial({
+    this.innerMat = new THREE.MeshBasicMaterial({
       color: this.currentSecondary,
-      emissive: this.currentPrimary,
-      emissiveIntensity: 0.22,
-      roughness: 0.16,
-      metalness: 0.02,
-      transmission: options.isSoftwareGl ? 0.15 : 0.68,
-      thickness: 0.45,
-      ior: 1.36,
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.14,
+      blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
     this.innerRefractor = new THREE.Mesh(sphereGeo, this.innerMat);
@@ -189,24 +175,28 @@ export class LiquidLens3DSceneController {
 
     this.simTime += params.dt * speedMult;
 
-    // Smooth color transitions
+    // Smooth color transitions reflecting scene + selected Aura Resonance sound
     const colorDamp = 1 - Math.exp(-3.0 * params.dt);
     this.targetColor.set(params.scene.colors.primary);
+    if (params.chamber?.primaryHex) {
+      this.targetColor.lerp(new THREE.Color(params.chamber.primaryHex), 0.45);
+    }
     this.currentPrimary.lerp(this.targetColor, colorDamp);
 
     this.targetColor.set(params.scene.colors.secondary);
+    if (params.chamber?.secondaryHex) {
+      this.targetColor.lerp(new THREE.Color(params.chamber.secondaryHex), 0.45);
+    }
     this.currentSecondary.lerp(this.targetColor, colorDamp);
 
     this.targetColor.set(params.scene.colors.tertiary);
     this.currentTertiary.lerp(this.targetColor, colorDamp);
 
     this.outerMat.color.copy(this.currentPrimary);
-    this.outerMat.emissive.copy(this.currentSecondary);
-    this.outerMat.opacity = 0.48 * this.currentOpacity;
+    this.outerMat.opacity = 0.24 * this.currentOpacity;
 
     this.innerMat.color.copy(this.currentSecondary);
-    this.innerMat.emissive.copy(this.currentPrimary);
-    this.innerMat.opacity = 0.32 * this.currentOpacity;
+    this.innerMat.opacity = 0.16 * this.currentOpacity;
 
     // Gentle breathing and audio-reactive pulse
     const breathScale =

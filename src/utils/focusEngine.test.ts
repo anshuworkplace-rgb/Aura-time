@@ -16,6 +16,16 @@ import {
   FOCUS_SCENES,
   CHAMBERS,
 } from './focusEngine';
+import {
+  RESONANCE_SOUND_PRESETS,
+  buildEqualPowerCrossfadeCurves,
+  computeBloomResonanceBurstState,
+  computeDropletMergeState,
+  computeEqualPowerCrossfadeGains,
+  computeJellyResonancePulseState,
+  computeResonanceNodesLayout,
+  getResonancePresetByChamberId,
+} from './auraResonance';
 import { SessionRecord } from '../types/aura';
 
 test('formatRemainingTime and formatTodaySignal format durations cleanly', () => {
@@ -831,4 +841,67 @@ test('Stage 2: Reflect TodaySummary, WeeklyOverview, PersonalFocusPatterns (incl
     1
   );
 });
+
+test('AURA RESONANCE 6 shared sound presets, equal-power crossfades, and theme-specific kinematics work accurately', () => {
+  assert.equal(RESONANCE_SOUND_PRESETS.length, 6);
+  const expectedNames = [
+    'Rain Chamber',
+    'Ocean Drift',
+    'Forest Echo',
+    'Cosmic Silence',
+    'Ember Glow',
+    'Celestial Tone',
+  ];
+  assert.deepEqual(
+    RESONANCE_SOUND_PRESETS.map((p) => p.name),
+    expectedNames
+  );
+
+  // Verify canonical and legacy resolution
+  assert.equal(getResonancePresetByChamberId('ocean-drift').name, 'Ocean Drift');
+  assert.equal(getResonancePresetByChamberId('coastal-static').name, 'Ocean Drift');
+  assert.equal(getResonancePresetByChamberId('ember-glow').name, 'Ember Glow');
+
+  // Verify equal-power crossfade energy conservation (fadeOut^2 + fadeIn^2 = 1)
+  const mid = computeEqualPowerCrossfadeGains(0.5);
+  assert.equal(
+    Math.abs(mid.fadeOutGain ** 2 + mid.fadeInGain ** 2 - 1.0) < 0.001,
+    true
+  );
+  const curves = buildEqualPowerCrossfadeCurves(16, 0.8, 0.8);
+  assert.equal(curves.fadeInCurve.length, 16);
+  assert.equal(curves.fadeOutCurve.length, 16);
+
+  // Verify 6 orbital nodes across all 3 visual themes
+  for (const orb of ['original', 'celestial-jelly', 'living-bloom'] as const) {
+    const layout = computeResonanceNodesLayout({
+      orbDesign: orb,
+      timeSec: 1.5,
+      revealProgress: 1.0,
+      hoveredIndex: 1,
+      activeChamberId: 'ocean-drift',
+    });
+    assert.equal(layout.length, 6);
+    assert.equal(layout[1].interactionFactor, 1.0);
+  }
+
+  // Verify droplet merge, jellyfish pulse, and flower bloom burst states
+  const mergeEnd = computeDropletMergeState({
+    startX: 480,
+    startY: 160,
+    progress: 1.0,
+  });
+  assert.equal(Math.abs(mergeEnd.x - 310) < 0.01, true);
+  assert.equal(Math.abs(mergeEnd.y - 310) < 0.01, true);
+
+  const jellyPulse = computeJellyResonancePulseState(0.5);
+  assert.equal(jellyPulse.active, true);
+  assert.equal(jellyPulse.bellGlowBoost > 0, true);
+
+  const bloomBurst = computeBloomResonanceBurstState(0.6);
+  assert.equal(bloomBurst.active, true);
+  assert.equal(bloomBurst.opennessBoost > 0, true);
+  assert.equal(bloomBurst.pollenAlpha > 0, true);
+});
+
 

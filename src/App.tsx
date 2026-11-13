@@ -194,6 +194,8 @@ export default function App() {
   const [stageLayout] = useState<HomeStageLayout>('atelier');
   const [isFloatingOpen, setIsFloatingOpen] = useState<boolean>(false);
   const [railVisible, setRailVisible] = useState<boolean>(true);
+  const [resonancePulseTimestamp, setResonancePulseTimestamp] =
+    useState<number>(0);
 
   const targetEndTimestampRef = useRef<number | null>(null);
 
@@ -667,6 +669,8 @@ export default function App() {
       <QuantumNebulaBackground
         scene={activeScene}
         chamber={activeChamber}
+        activeChamberId={chamberId}
+        resonancePulseTimestamp={resonancePulseTimestamp}
         orbDesign={settings.orbDesign ?? 'celestial-jelly'}
         status={status}
         phase={phase}
@@ -844,6 +848,12 @@ export default function App() {
                 <LivingLens
                   scene={activeScene}
                   chamber={activeChamber}
+                  onSelectChamber={handleSelectSoundscape}
+                  isSoundPlaying={isSoundPlaying}
+                  onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
+                  onTriggerResonancePulse={() =>
+                    setResonancePulseTimestamp(Date.now())
+                  }
                   orbDesign={settings.orbDesign ?? 'celestial-jelly'}
                   completedSessionsCount={
                     sessions.filter(
