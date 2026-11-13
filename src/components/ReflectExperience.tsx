@@ -6,14 +6,18 @@ import {
   Target,
   CheckCircle2,
   AlertCircle,
-  Sparkles,
   Trash2,
-  RotateCcw,
   Calendar,
+  Award,
+  Layers,
 } from 'lucide-react';
 import {
+  FocusRoutine,
   FocusSceneConfig,
+  FocusSceneId,
   SessionRecord,
+  SmartRecommendation,
+  TaskBreakdownStep,
   UserSettings,
 } from '../types/aura';
 import {
@@ -24,29 +28,62 @@ import {
   calculateWeeklyOverview,
   computeAuraGardenState,
   formatDurationCompact,
+  getLocalIsoDate,
 } from '../utils/focusEngine';
+import {
+  calculateMonthlyAnalytics,
+  computeAuraGardenAchievements,
+  computePreferredSoundscapes,
+  computeSmartRecommendations,
+  filterVerifiedSessions,
+  generateLocalWeeklyReflection,
+} from '../utils/auraIntelligence';
 import { AuraButton } from './AuraButton';
+import { AuraIntelligencePanel } from './AuraIntelligencePanel';
 
 interface ReflectExperienceProps {
   sessions: SessionRecord[];
   scene: FocusSceneConfig;
   settings: UserSettings;
+  routines: FocusRoutine[];
+  currentDurationMinutes: number;
+  currentSceneId: FocusSceneId;
   onUpdateSettings: (partial: Partial<UserSettings>) => void;
   onClearSeedSessions: () => void;
   onRestoreSeedSessions: () => void;
   onNavigateToFocus: () => void;
+  onApplyRecommendation: (rec: SmartRecommendation) => void;
+  onApplyRoutine: (routine: FocusRoutine) => void;
+  onSaveRoutine: (routine: FocusRoutine) => void;
+  onDuplicateRoutine: (routine: FocusRoutine) => void;
+  onDeleteRoutine: (routineId: string) => void;
+  onApplyTaskStep: (step: TaskBreakdownStep) => void;
 }
 
-type ReflectSubTab = 'overview' | 'garden' | 'history' | 'goals';
+type ReflectSubTab =
+  | 'overview'
+  | 'intelligence'
+  | 'garden'
+  | 'history'
+  | 'goals';
 
 export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
   sessions,
   scene,
   settings,
+  routines,
+  currentDurationMinutes,
+  currentSceneId,
   onUpdateSettings,
   onClearSeedSessions,
   onRestoreSeedSessions,
   onNavigateToFocus,
+  onApplyRecommendation,
+  onApplyRoutine,
+  onSaveRoutine,
+  onDuplicateRoutine,
+  onDeleteRoutine,
+  onApplyTaskStep,
 }) => {
   const [subTab, setSubTab] = useState<ReflectSubTab>('overview');
   const [historyFilter, setHistoryFilter] = useState<
@@ -54,37 +91,166 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
   >('all');
   const gardenCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
+  const todayIso = useMemo(() => getLocalIsoDate(), []);
+  const excludeSeed = Boolean(settings.excludeSampleDataInInsights);
+
+  const activeSessions = useMemo(
+    () => filterVerifiedSessions(sessions, excludeSeed),
+    [sessions, excludeSeed]
+  );
+
   const todaySummary = useMemo(
-    () => calculateTodaySummary(sessions, settings.dailyGoalMinutes),
-    [sessions, settings.dailyGoalMinutes]
+    () => calculateTodaySummary(activeSessions, settings.dailyGoalMinutes),
+    [activeSessions, settings.dailyGoalMinutes]
   );
 
   const weeklyOverview = useMemo(
-    () => calculateWeeklyOverview(sessions, settings.weeklyGoalMinutes || 600),
-    [sessions, settings.weeklyGoalMinutes]
+    () =>
+      calculateWeeklyOverview(
+        activeSessions,
+        settings.weeklyGoalMinutes || 600
+      ),
+    [activeSessions, settings.weeklyGoalMinutes]
+  );
+
+  const monthlyAnalytics = useMemo(
+    () =>
+      calculateMonthlyAnalytics(
+        activeSessions,
+        todayIso,
+        settings.dailyGoalMinutes,
+        false
+      ),
+    [activeSessions, todayIso, settings.dailyGoalMinutes]
   );
 
   const patterns = useMemo(
-    () => calculatePersonalFocusPatterns(sessions),
-    [sessions]
+    () => calculatePersonalFocusPatterns(activeSessions),
+    [activeSessions]
+  );
+
+  const preferredSoundscapes = useMemo(
+    () => computePreferredSoundscapes(activeSessions, false),
+    [activeSessions]
   );
 
   const gardenState = useMemo(
     () =>
       computeAuraGardenState(
-        sessions,
+        activeSessions,
         settings.weeklyGoalMinutes || 600
       ),
-    [sessions, settings.weeklyGoalMinutes]
+    [activeSessions, settings.weeklyGoalMinutes]
+  );
+
+  const gardenAchievements = useMemo(
+    () =>
+      computeAuraGardenAchievements(
+        activeSessions,
+        settings.weeklyGoalMinutes || 600,
+        false
+      ),
+    [activeSessions, settings.weeklyGoalMinutes]
+  );
+
+  const recommendations = useMemo(
+    () =>
+      computeSmartRecommendations({
+        sessions: activeSessions,
+        todayIsoDate: todayIso,
+        currentDurationMinutes,
+        currentSceneId,
+        settings,
+      }),
+    [activeSessions, todayIso, currentDurationMinutes, currentSceneId, settings]
   );
 
   const hasSeedSessions = useMemo(
-    () => sessions.some((s) => s.isSeed),
+    () => sessions.some((s) => s.isSeed || s.id.startsWith('seed-')),
     [sessions]
   );
 
+  // Average actual session duration this week
+  const weeklyAverageMinutes = useMemo(() => {
+    const totalCount =
+      weeklyOverview.totalCompletedSessions +
+      weeklyOverview.days.reduce((acc, d) => acc + d.interruptedCount, 0);
+    if (totalCount <= 0) return 0;
+    return Math.round(weeklyOverview.totalActualMinutes / totalCount);
+  }, [weeklyOverview]);
+
+  const weeklyInterruptedCount = useMemo(
+    () => weeklyOverview.days.reduce((acc, d) => acc + d.interruptedCount, 0),
+    [weeklyOverview]
+  );
+
+  const defaultReflection = useMemo(() => {
+    const envName = weeklyOverview.mostUsedEnvironment
+      ? FOCUS_SCENES[weeklyOverview.mostUsedEnvironment]?.name ||
+        weeklyOverview.mostUsedEnvironment
+      : 'Deep Current';
+    return generateLocalWeeklyReflection({
+      completedSessions: weeklyOverview.totalCompletedSessions,
+      interruptedSessions: weeklyInterruptedCount,
+      totalActualMinutes: weeklyOverview.totalActualMinutes,
+      mostUsedEnvironment: envName,
+      bestDayLabel: weeklyOverview.bestDay?.dayLabel || 'this week',
+      averageMinutes: weeklyAverageMinutes,
+    });
+  }, [weeklyOverview, weeklyInterruptedCount, weeklyAverageMinutes]);
+
+  const [aiReflection, setAiReflection] = useState<{
+    summary: string;
+    highlights: string[];
+    source: 'gemini' | 'deterministic_rule_engine';
+  } | null>(null);
+  const [isGeneratingReflection, setIsGeneratingReflection] = useState(false);
+
+  const handleRequestAiReflection = async () => {
+    setIsGeneratingReflection(true);
+    try {
+      const envName = weeklyOverview.mostUsedEnvironment
+        ? FOCUS_SCENES[weeklyOverview.mostUsedEnvironment]?.name ||
+          weeklyOverview.mostUsedEnvironment
+        : 'Deep Current';
+      const res = await fetch('/api/ai/weekly-reflection', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aiConsent: Boolean(settings.aiProcessingConsent),
+          stats: {
+            completedSessions: weeklyOverview.totalCompletedSessions,
+            interruptedSessions: weeklyInterruptedCount,
+            totalActualMinutes: weeklyOverview.totalActualMinutes,
+            mostUsedEnvironment: envName,
+            bestDayLabel: weeklyOverview.bestDay?.dayLabel || 'None',
+            averageMinutes: weeklyAverageMinutes,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiReflection({
+          summary: data.summary || defaultReflection.summary,
+          highlights: Array.isArray(data.highlights)
+            ? data.highlights
+            : defaultReflection.highlights,
+          source:
+            data.source === 'gemini' ? 'gemini' : 'deterministic_rule_engine',
+        });
+      }
+    } catch {
+      setAiReflection({
+        ...defaultReflection,
+        source: 'deterministic_rule_engine',
+      });
+    } finally {
+      setIsGeneratingReflection(false);
+    }
+  };
+
   const filteredHistory = useMemo(() => {
-    const sorted = [...sessions].sort(
+    const sorted = [...activeSessions].sort(
       (a, b) =>
         new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime()
     );
@@ -92,7 +258,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
     return sorted.filter(
       (s) => (s.completionStatus ?? 'completed') === historyFilter
     );
-  }, [sessions, historyFilter]);
+  }, [activeSessions, historyFilter]);
 
   // Interactive Bioluminescent Canvas Renderer for MY AURA GARDEN
   useEffect(() => {
@@ -227,26 +393,29 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
     return () => cancelAnimationFrame(animId);
   }, [subTab, gardenState, scene, settings.reducedMotion]);
 
+  const activeReflection = aiReflection || {
+    ...defaultReflection,
+    source: 'deterministic_rule_engine' as const,
+  };
+
   return (
     <section
       data-testid="reflect-experience-view"
       aria-label="Reflect Focus Journal and Aura Garden"
-      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-20 pb-24 flex flex-col"
+      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-24 sm:pt-20 pb-24 flex flex-col"
     >
       {/* Header & Sub-navigation */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#8A5CFF]" />
-            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#2FE8FF]">
-              REFLECT · PERSONAL FOCUS JOURNAL
-            </span>
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="max-w-3xl">
+          <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#2FE8FF]">
+            REFLECT · PERSONAL FOCUS JOURNAL & AURA INTELLIGENCE
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] tracking-tight mt-1">
-            Focus Patterns & My Aura Garden
+            Focus Patterns, Routines & My Aura Garden
           </h1>
           <p className="text-xs sm:text-sm text-[#A3A1BA] mt-0.5">
-            Calm, honest reflection built strictly from your actual focused time.
+            Calm, honest reflection and deterministic session recommendations
+            built strictly from your actual focused time.
           </p>
         </div>
 
@@ -254,7 +423,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
         <div
           role="tablist"
           aria-label="Reflect sections"
-          className="flex flex-wrap lg:flex-nowrap items-center gap-1 p-1 rounded-2xl aura-glass self-start sm:self-auto shrink-0"
+          className="flex flex-wrap items-center gap-1 p-1 rounded-2xl aura-glass self-start"
         >
           <button
             type="button"
@@ -262,14 +431,30 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             aria-selected={subTab === 'overview'}
             data-testid="reflect-tab-overview"
             onClick={() => setSubTab('overview')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               subTab === 'overview'
                 ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border border-[#2FE8FF]/45'
                 : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
             }`}
           >
             <Compass className="w-3.5 h-3.5 text-[#2FE8FF]" />
-            <span>Overview & Patterns</span>
+            <span>Overview & Analytics</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={subTab === 'intelligence'}
+            data-testid="reflect-tab-intelligence"
+            onClick={() => setSubTab('intelligence')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+              subTab === 'intelligence'
+                ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border border-[#2FE8FF]/45'
+                : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5 text-[#38F8A8]" />
+            <span>Routines & Planner</span>
           </button>
 
           <button
@@ -278,7 +463,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             aria-selected={subTab === 'garden'}
             data-testid="reflect-tab-garden"
             onClick={() => setSubTab('garden')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               subTab === 'garden'
                 ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border border-[#2FE8FF]/45'
                 : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
@@ -294,7 +479,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             aria-selected={subTab === 'history'}
             data-testid="reflect-tab-history"
             onClick={() => setSubTab('history')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               subTab === 'history'
                 ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border border-[#2FE8FF]/45'
                 : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
@@ -310,7 +495,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             aria-selected={subTab === 'goals'}
             data-testid="reflect-tab-goals"
             onClick={() => setSubTab('goals')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
               subTab === 'goals'
                 ? 'bg-[#2FE8FF]/18 text-[#F5F6FF] border border-[#2FE8FF]/45'
                 : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
@@ -328,12 +513,23 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
           data-testid="reflect-seed-banner"
           className="mb-5 px-4 py-2.5 rounded-2xl aura-glass flex flex-wrap items-center justify-between gap-3 border border-[#2FE8FF]/25"
         >
-          <div className="flex items-center gap-2 text-xs text-[#A3A1BA]">
-            <Sparkles className="w-4 h-4 text-[#2FE8FF] shrink-0" />
+          <div className="flex items-center gap-3 text-xs text-[#A3A1BA]">
             <span>
               Viewing sample sanctuary history alongside your real sessions.
-              Clear sample data anytime for a fresh journal.
             </span>
+            <label className="inline-flex items-center gap-1.5 text-[#D6D8EC] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={excludeSeed}
+                onChange={(e) =>
+                  onUpdateSettings({
+                    excludeSampleDataInInsights: e.target.checked,
+                  })
+                }
+                className="rounded border-white/20 bg-white/10 text-[#2FE8FF]"
+              />
+              <span>Hide sample data in charts</span>
+            </label>
           </div>
           <button
             type="button"
@@ -348,7 +544,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* TAB 1: OVERVIEW & PATTERNS                                           */}
+      {/* TAB 1: OVERVIEW & ANALYTICS                                          */}
       {/* ==================================================================== */}
       {subTab === 'overview' && (
         <div className="space-y-6">
@@ -429,7 +625,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                       key={idx}
                       className="text-xs text-[#F5F6FF] truncate flex items-center gap-1.5"
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#2FE8FF] shrink-0" />
+                      <span className="text-[#2FE8FF]">·</span>
                       <span className="truncate">{intent}</span>
                     </li>
                   ))}
@@ -443,7 +639,94 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             </div>
           </div>
 
-          {/* Weekly Overview Chart & Highlights */}
+          {/* Weekly Focus Reflection & Smart Recommendations Row */}
+          <div className="aura-glass rounded-3xl p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xs font-mono uppercase tracking-[0.16em] text-[#2FE8FF]">
+                  WEEKLY FOCUS REFLECTION · AURA INTELLIGENCE
+                </h2>
+                <p className="text-xs text-[#A3A1BA] mt-0.5">
+                  Source:{' '}
+                  {activeReflection.source === 'gemini'
+                    ? 'Server-Side Gemini AI (Opt-In Consent Active)'
+                    : 'Deterministic Rule Engine (100% Local Data)'}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 self-start sm:self-auto">
+                <label className="inline-flex items-center gap-1.5 text-xs text-[#D6D8EC] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings.aiProcessingConsent)}
+                    onChange={(e) =>
+                      onUpdateSettings({
+                        aiProcessingConsent: e.target.checked,
+                      })
+                    }
+                    className="rounded border-white/20 bg-white/10 text-[#2FE8FF]"
+                  />
+                  <span>AI Consent</span>
+                </label>
+
+                {settings.aiProcessingConsent && (
+                  <button
+                    type="button"
+                    data-testid="refresh-ai-reflection-btn"
+                    onClick={handleRequestAiReflection}
+                    disabled={isGeneratingReflection}
+                    className="px-3 py-1.5 rounded-xl bg-[#2FE8FF]/18 hover:bg-[#2FE8FF]/28 border border-[#2FE8FF]/45 text-xs font-medium text-[#F5F6FF] transition-colors cursor-pointer whitespace-nowrap"
+                  >
+                    {isGeneratingReflection
+                      ? 'Synthesizing…'
+                      : 'Generate AI Summary'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <p
+              data-testid="weekly-reflection-summary"
+              className="text-xs sm:text-sm text-[#F5F6FF] leading-relaxed"
+            >
+              {activeReflection.summary}
+            </p>
+
+            {/* Quick Smart Recommendations Strip */}
+            {recommendations.length > 0 && (
+              <div className="pt-3 border-t border-white/10 grid grid-cols-1 md:grid-cols-3 gap-3">
+                {recommendations.map((rec) => (
+                  <div
+                    key={rec.id}
+                    className="p-3.5 rounded-2xl bg-white/[0.03] border border-white/8 flex flex-col justify-between gap-2.5"
+                  >
+                    <div>
+                      <div className="text-xs font-semibold text-[#F5F6FF]">
+                        {rec.title}
+                      </div>
+                      <p className="text-[11px] text-[#A3A1BA] mt-1 leading-relaxed">
+                        {rec.explanation}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="text-[10px] text-[#A3A1BA]">
+                        {rec.confidenceNote}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => onApplyRecommendation(rec)}
+                        className="text-xs font-medium text-[#2FE8FF] hover:underline cursor-pointer whitespace-nowrap"
+                      >
+                        {rec.actionLabel} →
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Weekly Overview Chart & Personal Focus Patterns */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
             <div className="lg:col-span-7 aura-glass rounded-3xl p-6">
               <div className="flex items-center justify-between mb-4">
@@ -455,7 +738,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                     Actual focused minutes across the past 7 days
                   </p>
                 </div>
-                <span className="text-xs font-mono text-[#F5F6FF]">
+                <span className="text-xs font-mono text-[#F5F6FF] tabular-nums">
                   {weeklyOverview.totalCompletedSessions} completed sessions
                 </span>
               </div>
@@ -498,7 +781,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                 })}
               </div>
 
-              <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-2 gap-4 text-xs">
+              <div className="mt-4 pt-4 border-t border-white/10 grid grid-cols-3 gap-3 text-xs">
                 <div>
                   <span className="text-[#A3A1BA] block">Best Focus Day</span>
                   <span className="text-[#F5F6FF] font-medium">
@@ -506,7 +789,15 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                       ? `${weeklyOverview.bestDay.dayLabel} (${formatDurationCompact(
                           weeklyOverview.bestDay.actualMinutes
                         )})`
-                      : 'No sessions yet this week'}
+                      : 'No sessions yet'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-[#A3A1BA] block">
+                    Avg Actual Session
+                  </span>
+                  <span className="text-[#F5F6FF] font-mono font-medium tabular-nums">
+                    {weeklyAverageMinutes > 0 ? `${weeklyAverageMinutes}m` : '—'}
                   </span>
                 </div>
                 <div>
@@ -568,7 +859,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div className="mt-4 space-y-3.5 text-xs">
+                  <div className="mt-4 space-y-3 text-xs">
                     <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/8">
                       <span className="text-[#A3A1BA] block">
                         Frequently Used Session Lengths
@@ -603,6 +894,25 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
 
                     <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/8">
                       <span className="text-[#A3A1BA] block">
+                        Preferred Soundscapes
+                      </span>
+                      <span className="text-[#F5F6FF] font-medium mt-0.5 block">
+                        {preferredSoundscapes.length > 0
+                          ? preferredSoundscapes
+                              .slice(0, 3)
+                              .map(
+                                (c) =>
+                                  `${c.name} (${formatDurationCompact(
+                                    c.minutes
+                                  )})`
+                              )
+                              .join(' · ')
+                          : 'None recorded yet'}
+                      </span>
+                    </div>
+
+                    <div className="p-3 rounded-2xl bg-white/[0.03] border border-white/8">
+                      <span className="text-[#A3A1BA] block">
                         Peak Focus Time of Day
                       </span>
                       <span className="text-[#F5F6FF] font-medium mt-0.5 block">
@@ -623,7 +933,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                         <span className="text-[#A3A1BA] block">
                           Completion Rate
                         </span>
-                        <span className="text-[#2FE8FF] font-mono font-semibold mt-0.5 block">
+                        <span className="text-[#2FE8FF] font-mono font-semibold mt-0.5 block tabular-nums">
                           {patterns.completionRatePercent}%
                         </span>
                       </div>
@@ -633,11 +943,152 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
               </div>
             </div>
           </div>
+
+          {/* 30-DAY MONTHLY ANALYTICS & WEEKLY TRENDS */}
+          <div
+            data-testid="monthly-analytics-card"
+            className="aura-glass rounded-3xl p-6"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+              <div>
+                <h2 className="text-xs font-mono uppercase tracking-[0.16em] text-[#38F8A8]">
+                  30-DAY MONTHLY ANALYTICS & WEEKLY TRENDS
+                </h2>
+                <p className="text-xs text-[#A3A1BA] mt-0.5">
+                  Long-horizon focus totals, 4-week trend progression, and
+                  comparison with the prior 30-day period
+                </p>
+              </div>
+
+              <div className="text-xs text-[#A3A1BA] font-mono tabular-nums">
+                {monthlyAnalytics.activeDaysCount} active days in last 30 days
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-6">
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+                <span className="text-[11px] text-[#A3A1BA] block">
+                  30-Day Actual Focus
+                </span>
+                <span className="font-display text-xl font-semibold text-[#F5F6FF] mt-1 block tabular-nums">
+                  {formatDurationCompact(monthlyAnalytics.totalActualMinutes)}
+                </span>
+                <span className="text-[11px] text-[#A3A1BA] mt-1 block">
+                  {Math.round(monthlyAnalytics.monthlyGoalProgressRatio * 100)}%
+                  of {formatDurationCompact(monthlyAnalytics.monthlyGoalMinutes)}{' '}
+                  monthly target
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+                <span className="text-[11px] text-[#A3A1BA] block">
+                  30-Day Session Completion
+                </span>
+                <span className="font-display text-xl font-semibold text-[#F5F6FF] mt-1 block tabular-nums">
+                  {monthlyAnalytics.completedSessionsCount} completed
+                </span>
+                <span className="text-[11px] text-[#A3A1BA] mt-1 block">
+                  {monthlyAnalytics.interruptedSessionsCount} interrupted
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+                <span className="text-[11px] text-[#A3A1BA] block">
+                  vs Previous 30 Days
+                </span>
+                <span className="font-display text-xl font-semibold text-[#2FE8FF] mt-1 block tabular-nums">
+                  {monthlyAnalytics.periodDeltaPercent !== null
+                    ? `${
+                        monthlyAnalytics.periodDeltaPercent >= 0 ? '+' : ''
+                      }${monthlyAnalytics.periodDeltaPercent}%`
+                    : 'Baseline Period'}
+                </span>
+                <span className="text-[11px] text-[#A3A1BA] mt-1 block">
+                  Prior 30d:{' '}
+                  {formatDurationCompact(
+                    monthlyAnalytics.previousPeriodActualMinutes
+                  )}
+                </span>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-white/[0.03] border border-white/8">
+                <span className="text-[11px] text-[#A3A1BA] block">
+                  Top Monthly Atmosphere
+                </span>
+                <span className="font-display text-xl font-semibold text-[#F5F6FF] mt-1 block truncate">
+                  {monthlyAnalytics.mostUsedSceneId
+                    ? FOCUS_SCENES[monthlyAnalytics.mostUsedSceneId]?.name ||
+                      monthlyAnalytics.mostUsedSceneId
+                    : 'None yet'}
+                </span>
+                <span className="text-[11px] text-[#A3A1BA] mt-1 block">
+                  Verified from completed sessions
+                </span>
+              </div>
+            </div>
+
+            {/* 4-Week Trend Bars */}
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              {monthlyAnalytics.weeklyTrends.map((wb) => {
+                const maxWeekMins = Math.max(
+                  120,
+                  ...monthlyAnalytics.weeklyTrends.map((w) => w.actualMinutes)
+                );
+                const pct = Math.min(
+                  100,
+                  Math.round((wb.actualMinutes / maxWeekMins) * 100)
+                );
+                return (
+                  <div
+                    key={wb.weekLabel}
+                    className="p-3.5 rounded-2xl bg-white/[0.02] border border-white/8"
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-medium text-[#F5F6FF]">
+                        {wb.weekLabel}
+                      </span>
+                      <span className="font-mono text-[#2FE8FF] tabular-nums">
+                        {formatDurationCompact(wb.actualMinutes)}
+                      </span>
+                    </div>
+                    <div className="mt-2 w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#2FE8FF] to-[#38F8A8]"
+                        style={{ width: `${Math.max(4, pct)}%` }}
+                      />
+                    </div>
+                    <div className="mt-1.5 text-[11px] text-[#A3A1BA] tabular-nums">
+                      {wb.completedSessions} completed ·{' '}
+                      {wb.interruptedSessions} interrupted
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* TAB 2: MY AURA GARDEN                                                */}
+      {/* TAB 2: ROUTINES & PLANNER (AURA INTELLIGENCE)                        */}
+      {/* ==================================================================== */}
+      {subTab === 'intelligence' && (
+        <AuraIntelligencePanel
+          recommendations={recommendations}
+          routines={routines}
+          settings={settings}
+          onUpdateSettings={onUpdateSettings}
+          onApplyRecommendation={onApplyRecommendation}
+          onApplyRoutine={onApplyRoutine}
+          onSaveRoutine={onSaveRoutine}
+          onDuplicateRoutine={onDuplicateRoutine}
+          onDeleteRoutine={onDeleteRoutine}
+          onApplyTaskStep={onApplyTaskStep}
+        />
+      )}
+
+      {/* ==================================================================== */}
+      {/* TAB 3: MY AURA GARDEN                                                */}
       {/* ==================================================================== */}
       {subTab === 'garden' && (
         <div data-testid="my-aura-garden-view" className="space-y-6">
@@ -670,7 +1121,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                   </span>
                   <span
                     data-testid="garden-completed-count"
-                    className="font-display text-2xl font-semibold text-[#F5F6FF]"
+                    className="font-display text-2xl font-semibold text-[#F5F6FF] tabular-nums"
                   >
                     {gardenState.totalCompletedSessions}
                   </span>
@@ -679,7 +1130,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                   <span className="text-[10px] font-mono uppercase tracking-wider text-[#A3A1BA] block">
                     LUMINOUS ENERGY
                   </span>
-                  <span className="font-display text-2xl font-semibold text-[#2FE8FF]">
+                  <span className="font-display text-2xl font-semibold text-[#2FE8FF] tabular-nums">
                     {gardenState.luminousEnergy}
                   </span>
                 </div>
@@ -707,7 +1158,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
             </div>
           </div>
 
-          {/* Sanctuary Specimen & Atmosphere Milestones */}
+          {/* Sanctuary Specimen Cards */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {ORB_DESIGNS.map((orb, idx) => {
               const requiredSessions = idx === 0 ? 0 : idx === 1 ? 1 : 3;
@@ -719,20 +1170,18 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                   className="aura-glass rounded-3xl p-5 flex flex-col justify-between"
                 >
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-mono uppercase tracking-[0.16em] text-[#2FE8FF]">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-mono text-[#2FE8FF]">
                         {orb.badge}
                       </span>
                       <span
-                        className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
-                          unlocked
-                            ? 'bg-[#38F8A8]/15 text-[#38F8A8]'
-                            : 'bg-white/10 text-[#A3A1BA]'
-                        }`}
+                        className={
+                          unlocked ? 'text-[#38F8A8]' : 'text-[#A3A1BA]'
+                        }
                       >
                         {unlocked
                           ? 'Cultivated'
-                          : `${requiredSessions} sessions`}
+                          : `Unlocks at ${requiredSessions} sessions`}
                       </span>
                     </div>
                     <h3 className="text-sm font-semibold text-[#F5F6FF] mt-1.5">
@@ -746,14 +1195,71 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
               );
             })}
           </div>
+
+          {/* Verified Sanctuary Milestones & Achievements (Optional Progression) */}
+          {(settings.gardenProgressionEnabled ?? true) && (
+            <div
+              data-testid="garden-achievements-card"
+              className="aura-glass rounded-3xl p-6"
+            >
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div className="flex items-center gap-2">
+                  <Award className="w-4 h-4 text-[#2FE8FF]" />
+                  <h3 className="text-xs font-mono uppercase tracking-[0.16em] text-[#2FE8FF]">
+                    SANCTUARY MILESTONES & COLLECTION
+                  </h3>
+                </div>
+                <span className="text-xs text-[#A3A1BA]">
+                  Verified strictly from unique completed sessions · No streak
+                  penalties
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {gardenAchievements.map((ach) => (
+                  <div
+                    key={ach.id}
+                    data-testid={`garden-achievement-${ach.id}`}
+                    className={`p-4 rounded-2xl border transition-all ${
+                      ach.unlocked
+                        ? 'bg-[#38F8A8]/[0.07] border-[#38F8A8]/40'
+                        : 'bg-white/[0.02] border-white/8 opacity-80'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-[#F5F6FF]">
+                        {ach.title}
+                      </span>
+                      <span
+                        className={`font-mono text-[11px] tabular-nums ${
+                          ach.unlocked ? 'text-[#38F8A8]' : 'text-[#A3A1BA]'
+                        }`}
+                      >
+                        {ach.progressText}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#A3A1BA] mt-1 leading-relaxed">
+                      {ach.description}
+                    </p>
+                    <div className="mt-2 pt-2 border-t border-white/8 text-[11px] text-[#2FE8FF]">
+                      Effect: {ach.rewardEffect}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ==================================================================== */}
-      {/* TAB 3: SESSION HISTORY                                               */}
+      {/* TAB 4: SESSION HISTORY                                               */}
       {/* ==================================================================== */}
       {subTab === 'history' && (
-        <div data-testid="reflect-history-view" className="aura-glass rounded-3xl p-6">
+        <div
+          data-testid="reflect-history-view"
+          className="aura-glass rounded-3xl p-6"
+        >
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
             <div>
               <h2 className="text-xs font-mono uppercase tracking-[0.16em] text-[#2FE8FF]">
@@ -818,25 +1324,27 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                         )}
                       </div>
                       <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-xs font-semibold text-[#F5F6FF]">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <span className="font-semibold text-[#F5F6FF]">
                             {item.label || 'Deep work'}
                           </span>
+                          <span className="text-[#A3A1BA]">·</span>
                           <span
-                            className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${
+                            className={
                               status === 'completed'
-                                ? 'bg-[#38F8A8]/15 text-[#38F8A8]'
-                                : 'bg-[#FFB08A]/15 text-[#FFB08A]'
-                            }`}
+                                ? 'text-[#38F8A8]'
+                                : 'text-[#FFB08A]'
+                            }
                           >
                             {status === 'completed'
                               ? 'Completed'
                               : 'Interrupted'}
                           </span>
                           {item.isSeed && (
-                            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-white/8 text-[#A3A1BA]">
-                              Sample
-                            </span>
+                            <>
+                              <span className="text-[#A3A1BA]">·</span>
+                              <span className="text-[#A3A1BA]">Sample</span>
+                            </>
                           )}
                         </div>
                         <div className="text-[11px] text-[#A3A1BA] mt-0.5 flex flex-wrap items-center gap-2">
@@ -857,7 +1365,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-4 sm:text-right pl-7 sm:pl-0">
+                    <div className="flex items-center gap-4 sm:text-right pl-7 sm:pl-0 tabular-nums">
                       <div>
                         <span className="text-[10px] font-mono uppercase text-[#A3A1BA] block">
                           PLANNED
@@ -884,7 +1392,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
       )}
 
       {/* ==================================================================== */}
-      {/* TAB 4: PERSONAL GOALS                                                */}
+      {/* TAB 5: PERSONAL GOALS                                                */}
       {/* ==================================================================== */}
       {subTab === 'goals' && (
         <div
@@ -906,7 +1414,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                 <span className="font-medium text-[#F5F6FF]">
                   Daily Focus Target
                 </span>
-                <span className="font-mono text-[#2FE8FF]">
+                <span className="font-mono text-[#2FE8FF] tabular-nums">
                   {formatDurationCompact(settings.dailyGoalMinutes)} (
                   {settings.dailyGoalMinutes} min)
                 </span>
@@ -939,7 +1447,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                 <span className="font-medium text-[#F5F6FF]">
                   Weekly Focus Target
                 </span>
-                <span className="font-mono text-[#2FE8FF]">
+                <span className="font-mono text-[#2FE8FF] tabular-nums">
                   {formatDurationCompact(settings.weeklyGoalMinutes || 600)} (
                   {settings.weeklyGoalMinutes || 600} min)
                 </span>
@@ -972,7 +1480,7 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
                 <span className="font-medium text-[#F5F6FF]">
                   Desired Daily Completed Sessions
                 </span>
-                <span className="font-mono text-[#2FE8FF]">
+                <span className="font-mono text-[#2FE8FF] tabular-nums">
                   {settings.dailySessionsGoal || 4} sessions / day
                 </span>
               </div>

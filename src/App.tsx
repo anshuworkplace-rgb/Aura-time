@@ -1,19 +1,24 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Compass,
   Wind,
   BarChart3,
   User,
   Sparkles,
+  BookOpen,
+  Play,
 } from 'lucide-react';
 import {
   ActiveOverlay,
   ChamberId,
   FocusImmersionMode,
+  FocusRoutine,
   FocusSceneId,
   NavigationTab,
   RestoreSessionRecord,
   SessionRecord,
+  SmartRecommendation,
+  TaskBreakdownStep,
   TimerPhase,
   TimerStatus,
   UserSettings,
@@ -32,8 +37,14 @@ import {
   formatRemainingTime,
   formatTodaySignal,
   generateSeedSessions,
+  getLocalIsoDate,
   normalizeChamberId,
 } from './utils/focusEngine';
+import {
+  DEFAULT_FOCUS_ROUTINES,
+  computeSmartRecommendations,
+} from './utils/auraIntelligence';
+import { trackProductEvent } from './utils/productAnalytics';
 import { soundEngine } from './utils/soundSynthesizer';
 import { LivingLens } from './components/LivingLens';
 import { SceneSelectorOverlay } from './components/SceneSelectorOverlay';
@@ -51,25 +62,21 @@ import {
 import { RestoreExperience } from './components/RestoreExperience';
 import { ReflectExperience } from './components/ReflectExperience';
 import { ProfileSettingsView } from './components/ProfileSettingsView';
+import { OnboardingModal } from './components/OnboardingModal';
+import { LandingPageOverlay } from './components/LandingPageOverlay';
+import { OfflineIndicator, PWAInstallButton } from './components/PWAInstallButton';
 
 const STORAGE_KEYS = {
   SETTINGS: 'aura_living_lens_settings_v3',
   SESSIONS: 'aura_living_lens_sessions_v2',
   RESTORE_SESSIONS: 'aura_restore_sessions_v1',
+  ROUTINES: 'aura_focus_routines_v1',
   STATE: 'aura_living_lens_state_v4',
   SOUNDSCAPE: 'aura_selected_soundscape_v2',
 };
 
-function getTodayIsoDate(): string {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = String(now.getMonth() + 1).padStart(2, '0');
-  const d = String(now.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 export default function App() {
-  const todayIsoDate = getTodayIsoDate();
+  const todayIsoDate = getLocalIsoDate();
 
   // 0. Primary Navigation State (Focus | Restore | Reflect | Profile)
   const [activeNavTab, setActiveNavTab] = useState<NavigationTab>('focus');
@@ -113,6 +120,20 @@ export default function App() {
       // ignore
     }
     return [];
+  });
+
+  // 2c. Personalized Focus Routines
+  const [routines, setRoutines] = useState<FocusRoutine[]>(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEYS.ROUTINES);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_FOCUS_ROUTINES;
   });
 
   const [lastCompletedSession, setLastCompletedSession] =
@@ -197,7 +218,15 @@ export default function App() {
 
   const targetEndTimestampRef = useRef<number | null>(null);
 
-  // Persist user settings, sessions, restore sessions, and remembered defaults
+  // Track initial visit once per mount
+  useEffect(() => {
+    trackProductEvent('first_visit', settings.productAnalyticsConsent !== false, {
+      nav: activeNavTab,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist user settings, sessions, restore sessions, routines, and remembered defaults
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
@@ -224,6 +253,14 @@ export default function App() {
       // ignore
     }
   }, [restoreSessions]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.ROUTINES, JSON.stringify(routines));
+    } catch {
+      // ignore
+    }
+  }, [routines]);
 
   useEffect(() => {
     try {
@@ -322,7 +359,6 @@ export default function App() {
   // Credits strictly actual focused time and distinguishes completed vs interrupted
   const handleFinalizeSession = useCallback(
     (endedEarly: boolean) => {
-      // Calculate accurate remaining seconds if running
       let currentRem = remainingSeconds;
       if (status === 'running' && targetEndTimestampRef.current) {
         currentRem = Math.max(
@@ -349,6 +385,15 @@ export default function App() {
 
         if (record !== null) {
           setSessions((prev) => [record, ...prev]);
+          trackProductEvent(
+            endedEarly ? 'session_interrupted' : 'session_completed',
+            settings.productAnalyticsConsent !== false,
+            {
+              plannedMinutes: record.plannedMinutes ?? record.durationMinutes,
+              actualMinutes: record.actualMinutes ?? record.durationMinutes,
+              sceneId: record.sceneId,
+            }
+          );
         }
       }
 
@@ -378,18 +423,20 @@ export default function App() {
       settings.alertVolume,
       settings.desktopNotifications,
       settings.orbDesign,
+      settings.productAnalyticsConsent,
       status,
       totalSeconds,
     ]
   );
 
-  // Wall-clock accurate countdown loop
+  const finalizeSessionRef = useRef(handleFinalizeSession);
+  useEffect(() => {
+    finalizeSessionRef.current = handleFinalizeSession;
+  }, [handleFinalizeSession]);
+
+  // Wall-clock accurate countdown loop (stable interval — does not recreate every second)
   useEffect(() => {
     if (status !== 'running') return;
-
-    if (!targetEndTimestampRef.current) {
-      targetEndTimestampRef.current = Date.now() + remainingSeconds * 1000;
-    }
 
     const interval = window.setInterval(() => {
       if (!targetEndTimestampRef.current) return;
@@ -399,12 +446,12 @@ export default function App() {
 
       if (nextSecs <= 0) {
         window.clearInterval(interval);
-        handleFinalizeSession(false);
+        finalizeSessionRef.current(false);
       }
     }, 250);
 
     return () => window.clearInterval(interval);
-  }, [status, remainingSeconds, handleFinalizeSession]);
+  }, [status]);
 
   // Strict One Primary Action Per State:
   // Idle -> Begin | Running -> Pause | Paused -> Resume | Completed -> Start again
@@ -418,6 +465,11 @@ export default function App() {
       setScrubberOpen(false);
       targetEndTimestampRef.current = Date.now() + startSecs * 1000;
       setStatus('running');
+      trackProductEvent(
+        'first_session_started',
+        settings.productAnalyticsConsent !== false,
+        { durationMinutes, sceneId, chamberId }
+      );
       if (settings.ambienceVolume > 0 && !settings.soundMuted) {
         setIsSoundPlaying(true);
       }
@@ -451,9 +503,12 @@ export default function App() {
       }
     }
   }, [
+    chamberId,
     durationMinutes,
     remainingSeconds,
+    sceneId,
     settings.ambienceVolume,
+    settings.productAnalyticsConsent,
     settings.soundMuted,
     status,
   ]);
@@ -516,9 +571,117 @@ export default function App() {
     setStatus('idle');
   }, []);
 
-  const handleSelectScene = useCallback((nextSceneId: FocusSceneId) => {
-    setSceneId(nextSceneId);
+  const handleSelectScene = useCallback(
+    (nextSceneId: FocusSceneId) => {
+      setSceneId(nextSceneId);
+      trackProductEvent(
+        'environment_selected',
+        settings.productAnalyticsConsent !== false,
+        { sceneId: nextSceneId }
+      );
+    },
+    [settings.productAnalyticsConsent]
+  );
+
+  // Stage 3: Smart Recommendations, Personalized Routines & Task Breakdown handlers
+  const handleApplyRecommendation = useCallback(
+    (rec: SmartRecommendation) => {
+      if (rec.applyPayload.openRestore) {
+        setActiveNavTab('restore');
+        return;
+      }
+      targetEndTimestampRef.current = null;
+      setPhase('focus');
+      if (typeof rec.applyPayload.durationMinutes === 'number') {
+        const mins = rec.applyPayload.durationMinutes;
+        setDurationMinutes(mins);
+        setTotalSeconds(mins * 60);
+        setRemainingSeconds(mins * 60);
+      }
+      if (rec.applyPayload.sceneId) {
+        setSceneId(rec.applyPayload.sceneId);
+      }
+      if (rec.applyPayload.chamberId) {
+        handleSelectSoundscape(rec.applyPayload.chamberId);
+      }
+      setStatus('idle');
+      setActiveNavTab('focus');
+    },
+    [handleSelectSoundscape]
+  );
+
+  const handleApplyRoutine = useCallback(
+    (routine: FocusRoutine) => {
+      targetEndTimestampRef.current = null;
+      setPhase('focus');
+      const mins = routine.focusDurationMinutes;
+      setDurationMinutes(mins);
+      setTotalSeconds(mins * 60);
+      setRemainingSeconds(mins * 60);
+      setSceneId(routine.sceneId);
+      handleSelectSoundscape(routine.chamberId);
+      updateSettings({
+        orbDesign: routine.orbDesign ?? 'celestial-jelly',
+        breakMinutes: routine.breakDurationMinutes,
+      });
+      setSessionLabel(routine.name);
+      setStatus('idle');
+      setActiveNavTab('focus');
+    },
+    [handleSelectSoundscape, updateSettings]
+  );
+
+  const handleSaveRoutine = useCallback(
+    (routine: FocusRoutine) => {
+      setRoutines((prev) => {
+        const exists = prev.some((r) => r.id === routine.id);
+        if (exists) {
+          return prev.map((r) => (r.id === routine.id ? routine : r));
+        }
+        return [routine, ...prev];
+      });
+      trackProductEvent(
+        'routine_saved',
+        settings.productAnalyticsConsent !== false,
+        {
+          durationMinutes: routine.focusDurationMinutes,
+          sceneId: routine.sceneId,
+        }
+      );
+    },
+    [settings.productAnalyticsConsent]
+  );
+
+  const handleDuplicateRoutine = useCallback((routine: FocusRoutine) => {
+    const copy: FocusRoutine = {
+      ...routine,
+      id: `routine-copy-${Date.now()}`,
+      name: `${routine.name} (Copy)`,
+      isCustom: true,
+    };
+    setRoutines((prev) => [copy, ...prev]);
   }, []);
+
+  const handleDeleteRoutine = useCallback((routineId: string) => {
+    setRoutines((prev) => prev.filter((r) => r.id !== routineId));
+  }, []);
+
+  const handleApplyTaskStep = useCallback(
+    (step: TaskBreakdownStep) => {
+      targetEndTimestampRef.current = null;
+      setPhase('focus');
+      const mins = step.durationMinutes;
+      setDurationMinutes(mins);
+      setTotalSeconds(mins * 60);
+      setRemainingSeconds(mins * 60);
+      setSceneId(step.recommendedSceneId);
+      handleSelectSoundscape(step.recommendedChamberId);
+      setSessionLabel(step.title);
+      setStatus('idle');
+      setActiveNavTab('focus');
+    },
+    [handleSelectSoundscape]
+  );
 
   const handleClearSeedSessions = useCallback(() => {
     setSessions((prev) => prev.filter((s) => !s.isSeed));
@@ -534,10 +697,12 @@ export default function App() {
   const handleResetAllData = useCallback(() => {
     setSessions([]);
     setRestoreSessions([]);
+    setRoutines(DEFAULT_FOCUS_ROUTINES);
     setSettings(DEFAULT_USER_SETTINGS);
     try {
       localStorage.removeItem(STORAGE_KEYS.SESSIONS);
       localStorage.removeItem(STORAGE_KEYS.RESTORE_SESSIONS);
+      localStorage.removeItem(STORAGE_KEYS.ROUTINES);
       localStorage.removeItem(STORAGE_KEYS.SETTINGS);
     } catch {
       // ignore
@@ -630,8 +795,9 @@ export default function App() {
   const activeChamber =
     CHAMBERS.find((c) => c.id === chamberId) || CHAMBERS[0];
   const activeOrbMeta =
-    ORB_DESIGNS.find((o) => o.id === (settings.orbDesign ?? 'celestial-jelly')) ||
-    ORB_DESIGNS[1];
+    ORB_DESIGNS.find(
+      (o) => o.id === (settings.orbDesign ?? 'celestial-jelly')
+    ) || ORB_DESIGNS[1];
   const progress = calculateProgress(remainingSeconds, totalSeconds);
   const todayMinutes = calculateDailyTotal(sessions, todayIsoDate);
   const dailyGoalRatio = Math.min(
@@ -640,6 +806,18 @@ export default function App() {
       ? todayMinutes / settings.dailyGoalMinutes
       : 0
   );
+
+  // Compute top smart recommendation for subtle idle Focus stage pill
+  const topRecommendation = useMemo(() => {
+    const recs = computeSmartRecommendations({
+      sessions,
+      todayIsoDate,
+      currentDurationMinutes: durationMinutes,
+      currentSceneId: sceneId,
+      settings,
+    });
+    return recs[0] || null;
+  }, [durationMinutes, sceneId, sessions, settings, todayIsoDate]);
 
   const isRunningOrPaused = status === 'running' || status === 'paused';
 
@@ -676,6 +854,7 @@ export default function App() {
         audioReactive={settings.audioReactive}
         reducedMotion={
           settings.reducedMotion ||
+          settings.animationIntensity === 'calm' ||
           activeOverlay !== 'none' ||
           activeNavTab !== 'focus'
         }
@@ -683,7 +862,7 @@ export default function App() {
         backgroundMix={settings.backgroundMix ?? 0.52}
       />
 
-      {/* Sanctuary Top Header: [AURA TIME · Current Environment] | [Focus · Restore · Reflect · Profile] | [Today's Focus] */}
+      {/* Sanctuary Top Header: [AURA TIME · Current Environment] | [Focus · Restore · Reflect · Profile] | [Today's Focus · About] */}
       <header
         data-testid="sanctuary-header"
         className={`fixed top-0 left-0 right-0 z-40 w-full px-3 sm:px-8 pt-2 sm:pt-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-1.5 gap-x-2 sm:gap-4 shrink-0 transition-opacity duration-700 ${
@@ -693,7 +872,7 @@ export default function App() {
         }`}
       >
         {/* Zone 1: Brand Wordmark & Current Environment Pill */}
-        <div className="order-1 flex items-center gap-2.5 shrink-0">
+        <div className="order-1 flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => {
@@ -719,6 +898,8 @@ export default function App() {
               {activeScene.name}
             </span>
           </button>
+
+          <OfflineIndicator />
         </div>
 
         {/* Zone 2: Four-Destination Primary Navigation (Focus | Restore | Reflect | Profile) */}
@@ -757,8 +938,21 @@ export default function App() {
           })}
         </nav>
 
-        {/* Zone 3: Today's Actual Focus Total & Command Calibration */}
-        <div className="order-2 sm:order-3 flex items-center gap-2 shrink-0">
+        {/* Zone 3: Today's Actual Focus Total, PWA Install & About / Aura Plus */}
+        <div className="order-2 sm:order-3 flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <PWAInstallButton compact />
+
+          <button
+            type="button"
+            data-testid="header-about-btn"
+            onClick={() => setActiveOverlay('landing')}
+            title="About Aura Time & Aura Plus"
+            className="hidden md:inline-flex items-center gap-1.5 py-1 px-2.5 rounded-full aura-glass text-[11px] text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
+          >
+            <BookOpen className="w-3 h-3 text-[#2FE8FF]" />
+            <span>About</span>
+          </button>
+
           <button
             type="button"
             data-testid="today-signal-btn"
@@ -863,7 +1057,9 @@ export default function App() {
                   onToggleScrubber={setScrubberOpen}
                   audioReactive={settings.audioReactive}
                   reducedMotion={
-                    settings.reducedMotion || activeOverlay !== 'none'
+                    settings.reducedMotion ||
+                    settings.animationIntensity === 'calm' ||
+                    activeOverlay !== 'none'
                   }
                   performanceMode={settings.performanceMode ?? 'auto'}
                   timerTextScale={settings.timerTextScale}
@@ -874,6 +1070,27 @@ export default function App() {
                   onOpenRestore={() => setActiveNavTab('restore')}
                   onStartAgain={handlePrimaryAction}
                 />
+
+                {/* Subtle Aura Intelligence Smart Recommendation Pill when Idle */}
+                {status === 'idle' && topRecommendation && (
+                  <div
+                    data-testid="focus-stage-recommendation-pill"
+                    className="hidden sm:inline-flex items-center gap-2 mt-1.5 px-3 py-1 rounded-full bg-white/[0.03] hover:bg-white/[0.06] border border-white/10 text-[11px] text-[#A3A1BA] transition-colors"
+                  >
+                    <Sparkles className="w-3 h-3 text-[#2FE8FF] shrink-0" />
+                    <span className="truncate max-w-xs">
+                      {topRecommendation.title}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyRecommendation(topRecommendation)}
+                      className="inline-flex items-center gap-1 font-mono text-[10px] text-[#2FE8FF] hover:underline cursor-pointer"
+                    >
+                      <Play className="w-2.5 h-2.5 fill-current" />
+                      <span>Apply</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Unified Compact Control Dock */}
@@ -930,9 +1147,17 @@ export default function App() {
               handleSelectSoundscape(nextChamberId);
             }}
             onReturnToFocus={() => setActiveNavTab('focus')}
-            onRecordRestoreSession={(rec) =>
-              setRestoreSessions((prev) => [rec, ...prev])
-            }
+            onRecordRestoreSession={(rec) => {
+              setRestoreSessions((prev) => [rec, ...prev]);
+              trackProductEvent(
+                'restore_session_completed',
+                settings.productAnalyticsConsent !== false,
+                {
+                  mode: rec.mode,
+                  elapsedSeconds: rec.elapsedSeconds ?? rec.durationSeconds ?? 0,
+                }
+              );
+            }}
             restoreSessionsCount={restoreSessions.length}
           />
         </main>
@@ -944,10 +1169,19 @@ export default function App() {
             sessions={sessions}
             scene={activeScene}
             settings={settings}
+            routines={routines}
+            currentDurationMinutes={durationMinutes}
+            currentSceneId={sceneId}
             onUpdateSettings={updateSettings}
             onClearSeedSessions={handleClearSeedSessions}
             onRestoreSeedSessions={handleRestoreSeedSessions}
             onNavigateToFocus={() => setActiveNavTab('focus')}
+            onApplyRecommendation={handleApplyRecommendation}
+            onApplyRoutine={handleApplyRoutine}
+            onSaveRoutine={handleSaveRoutine}
+            onDuplicateRoutine={handleDuplicateRoutine}
+            onDeleteRoutine={handleDeleteRoutine}
+            onApplyTaskStep={handleApplyTaskStep}
           />
         </main>
       )}
@@ -958,11 +1192,24 @@ export default function App() {
             settings={settings}
             onUpdateSettings={updateSettings}
             sessions={sessions}
+            restoreSessions={restoreSessions}
+            routines={routines}
+            onSyncSessionsAndRoutines={(
+              nextSessions,
+              nextRestore,
+              nextRoutines
+            ) => {
+              setSessions(nextSessions);
+              setRestoreSessions(nextRestore);
+              setRoutines(nextRoutines);
+            }}
             soundscapePlaying={isSoundPlaying}
             onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
             onClearSeedSessions={handleClearSeedSessions}
             onRestoreSeedSessions={handleRestoreSeedSessions}
             onResetAllData={handleResetAllData}
+            onOpenLandingPage={() => setActiveOverlay('landing')}
+            onOpenOnboarding={() => setActiveOverlay('onboarding')}
           />
         </main>
       )}
@@ -1036,6 +1283,70 @@ export default function App() {
         isFloatingOpen={isFloatingOpen}
         onToggleFloating={() => setIsFloatingOpen((prev) => !prev)}
         onToggleFullScreen={toggleBrowserFullScreen}
+      />
+
+      {/* Progressive First-Session Onboarding Modal */}
+      <OnboardingModal
+        isOpen={activeOverlay === 'onboarding'}
+        sceneId={sceneId}
+        durationMinutes={durationMinutes}
+        settings={settings}
+        onSelectScene={handleSelectScene}
+        onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+        onChangeDuration={handleChangeDuration}
+        onSelectSoundscape={handleSelectSoundscape}
+        onDismiss={() => {
+          updateSettings({ onboardingCompleted: true });
+          setActiveOverlay('none');
+        }}
+        onCompleteOnboarding={(startFirstSessionNow) => {
+          updateSettings({
+            onboardingCompleted: true,
+            preferredDurationMinutes: durationMinutes,
+            preferredSceneId: sceneId,
+          });
+          setActiveOverlay('none');
+          setActiveNavTab('focus');
+          if (startFirstSessionNow) {
+            const startSecs = durationMinutes * 60;
+            setTotalSeconds(startSecs);
+            setRemainingSeconds(startSecs);
+            targetEndTimestampRef.current = Date.now() + startSecs * 1000;
+            setPhase('focus');
+            setStatus('running');
+            setIsSoundPlaying(true);
+          }
+        }}
+      />
+
+      {/* Public Launch & Product Story Overlay */}
+      <LandingPageOverlay
+        isOpen={activeOverlay === 'landing'}
+        activeSceneId={sceneId}
+        activeOrbDesign={settings.orbDesign ?? 'celestial-jelly'}
+        onSelectScene={handleSelectScene}
+        onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+        onEnterSanctuary={(targetTab) => {
+          setActiveOverlay('none');
+          if (targetTab) {
+            setActiveNavTab(targetTab);
+          }
+        }}
+        onStartQuickSession={(mins, nextScene) => {
+          setDurationMinutes(mins);
+          setTotalSeconds(mins * 60);
+          setRemainingSeconds(mins * 60);
+          setSceneId(nextScene);
+          setActiveOverlay('none');
+          setActiveNavTab('focus');
+        }}
+        onRecordPremiumInterest={(plan) => {
+          trackProductEvent(
+            'premium_interest',
+            settings.productAnalyticsConsent !== false,
+            { plan }
+          );
+        }}
       />
 
       {/* Always-on-Top Glowing Liquid Droplet Mini Widget */}
