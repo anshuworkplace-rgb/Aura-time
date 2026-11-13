@@ -1,13 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Wind,
-  BarChart3,
-  Sliders,
-  ShieldCheck,
   Sparkles,
   BookOpen,
   Play,
-  X,
   SlidersHorizontal,
 } from 'lucide-react';
 import {
@@ -18,7 +14,6 @@ import {
   FocusRoutine,
   FocusSceneId,
   LiquidLensSubMode,
-  OrbDesignId,
   RestorePreferenceCompatibility,
   RestoreSessionRecord,
   SanctuaryExperienceMode,
@@ -57,6 +52,13 @@ import {
   DEFAULT_FOCUS_ROUTINES,
   computeSmartRecommendations,
 } from './utils/auraIntelligence';
+import {
+  STORAGE_KEYS,
+  loadAndMigrateRestoreSessions,
+  loadAndMigrateRoutines,
+  loadAndMigrateSessions,
+  loadAndMigrateSettings,
+} from './utils/storageMigration';
 import { trackProductEvent } from './utils/productAnalytics';
 import { soundEngine } from './utils/soundSynthesizer';
 import { LivingLens } from './components/LivingLens';
@@ -73,82 +75,11 @@ import {
   HomeStageOrbitalFrame,
   SanctuaryOrganismSelector,
 } from './components/HomeStageAtelier';
-import { RestoreExperience } from './components/RestoreExperience';
-import { ReflectExperience } from './components/ReflectExperience';
-import { ProfileSettingsView } from './components/ProfileSettingsView';
+import { LiquidLensExperience } from './components/LiquidLensExperience';
+import { AuraConsole } from './components/AuraConsole';
 import { OnboardingModal } from './components/OnboardingModal';
 import { LandingPageOverlay } from './components/LandingPageOverlay';
 import { OfflineIndicator, PWAInstallButton } from './components/PWAInstallButton';
-
-const STORAGE_KEYS = {
-  SETTINGS: 'aura_living_lens_settings_v3',
-  SESSIONS: 'aura_living_lens_sessions_v2',
-  RESTORE_SESSIONS: 'aura_restore_sessions_v1',
-  ROUTINES: 'aura_focus_routines_v1',
-  STATE: 'aura_living_lens_state_v4',
-  SOUNDSCAPE: 'aura_selected_soundscape_v2',
-};
-
-const VALID_ORB_DESIGNS: readonly OrbDesignId[] = [
-  'original',
-  'celestial-jelly',
-  'living-bloom',
-];
-
-function sanitizeSettings(raw: unknown): UserSettings {
-  if (!raw || typeof raw !== 'object') return DEFAULT_USER_SETTINGS;
-  const candidate = raw as Partial<UserSettings>;
-  const orbDesign: OrbDesignId =
-    candidate.orbDesign && VALID_ORB_DESIGNS.includes(candidate.orbDesign)
-      ? candidate.orbDesign
-      : DEFAULT_USER_SETTINGS.orbDesign;
-
-  return {
-    ...DEFAULT_USER_SETTINGS,
-    ...candidate,
-    orbDesign,
-    dailyGoalMinutes:
-      typeof candidate.dailyGoalMinutes === 'number' &&
-      Number.isFinite(candidate.dailyGoalMinutes) &&
-      candidate.dailyGoalMinutes > 0
-        ? candidate.dailyGoalMinutes
-        : DEFAULT_USER_SETTINGS.dailyGoalMinutes,
-    breakMinutes:
-      typeof candidate.breakMinutes === 'number' &&
-      Number.isFinite(candidate.breakMinutes) &&
-      candidate.breakMinutes > 0
-        ? candidate.breakMinutes
-        : DEFAULT_USER_SETTINGS.breakMinutes,
-    ambienceVolume:
-      typeof candidate.ambienceVolume === 'number' &&
-      Number.isFinite(candidate.ambienceVolume)
-        ? Math.max(0, Math.min(1, candidate.ambienceVolume))
-        : DEFAULT_USER_SETTINGS.ambienceVolume,
-    alertVolume:
-      typeof candidate.alertVolume === 'number' &&
-      Number.isFinite(candidate.alertVolume)
-        ? Math.max(0, Math.min(1, candidate.alertVolume))
-        : DEFAULT_USER_SETTINGS.alertVolume,
-    backgroundMix:
-      typeof candidate.backgroundMix === 'number' &&
-      Number.isFinite(candidate.backgroundMix)
-        ? Math.max(0, Math.min(1, candidate.backgroundMix))
-        : DEFAULT_USER_SETTINGS.backgroundMix,
-  };
-}
-
-function sanitizeSessions(raw: unknown, fallbackIsoDate: string): SessionRecord[] {
-  if (!Array.isArray(raw)) return generateSeedSessions(fallbackIsoDate);
-  const valid = raw.filter(
-    (item): item is SessionRecord =>
-      Boolean(item) &&
-      typeof item === 'object' &&
-      typeof (item as SessionRecord).id === 'string' &&
-      typeof (item as SessionRecord).isoDate === 'string' &&
-      typeof (item as SessionRecord).durationMinutes === 'number'
-  );
-  return valid;
-}
 
 export default function App() {
   const todayIsoDate = getLocalIsoDate();
@@ -164,28 +95,22 @@ export default function App() {
   const [liquidLensSubMode, setLiquidLensSubMode] =
     useState<LiquidLensSubMode>('breathe');
 
-  // 1. User Settings (defaults to Celestial Jelly organism)
+  // 1. User Settings (migrated across v1/v2/v3 keys)
   const [settings, setSettings] = useState<UserSettings>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (raw) return sanitizeSettings(JSON.parse(raw));
+      return loadAndMigrateSettings(localStorage);
     } catch {
-      // ignore
+      return DEFAULT_USER_SETTINGS;
     }
-    return DEFAULT_USER_SETTINGS;
   });
 
-  // 2. Session History
+  // 2. Session History (migrated across v1/v2 keys with seed-cleared protection)
   const [sessions, setSessions] = useState<SessionRecord[]>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
-      if (raw) {
-        return sanitizeSessions(JSON.parse(raw), todayIsoDate);
-      }
+      return loadAndMigrateSessions(todayIsoDate, localStorage);
     } catch {
-      // ignore
+      return generateSeedSessions(todayIsoDate);
     }
-    return generateSeedSessions(todayIsoDate);
   });
 
   // 2b. Separate Restorative Session History (never mixed into focus totals)
@@ -193,29 +118,19 @@ export default function App() {
     RestoreSessionRecord[]
   >(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.RESTORE_SESSIONS);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
-      }
+      return loadAndMigrateRestoreSessions(localStorage);
     } catch {
-      // ignore
+      return [];
     }
-    return [];
   });
 
   // 2c. Personalized Focus Routines
   const [routines, setRoutines] = useState<FocusRoutine[]>(() => {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.ROUTINES);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
+      return loadAndMigrateRoutines(localStorage);
     } catch {
-      // ignore
+      return DEFAULT_FOCUS_ROUTINES;
     }
-    return DEFAULT_FOCUS_ROUTINES;
   });
 
   const [lastCompletedSession, setLastCompletedSession] =
@@ -799,10 +714,20 @@ export default function App() {
   );
 
   const handleClearSeedSessions = useCallback(() => {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SEED_CLEARED, 'true');
+    } catch {
+      // ignore
+    }
     setSessions((prev) => prev.filter((s) => !s.isSeed));
   }, []);
 
   const handleRestoreSeedSessions = useCallback(() => {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SEED_CLEARED);
+    } catch {
+      // ignore
+    }
     setSessions((prev) => {
       const nonSeed = prev.filter((s) => !s.isSeed);
       return [...nonSeed, ...generateSeedSessions(todayIsoDate)];
@@ -815,8 +740,9 @@ export default function App() {
     setRoutines(DEFAULT_FOCUS_ROUTINES);
     setSettings(DEFAULT_USER_SETTINGS);
     try {
-      localStorage.removeItem(STORAGE_KEYS.SESSIONS);
-      localStorage.removeItem(STORAGE_KEYS.RESTORE_SESSIONS);
+      localStorage.setItem(STORAGE_KEYS.SEED_CLEARED, 'true');
+      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify([]));
+      localStorage.setItem(STORAGE_KEYS.RESTORE_SESSIONS, JSON.stringify([]));
       localStorage.removeItem(STORAGE_KEYS.ROUTINES);
       localStorage.removeItem(STORAGE_KEYS.SETTINGS);
     } catch {
@@ -1096,10 +1022,6 @@ export default function App() {
       [restoreSessions, settings, updateSettings]
     );
 
-  void liquidLensSubMode;
-  void sanctuaryInteractionContract;
-  void restoreCompatibilityContract;
-
   const isRunningOrPaused = status === 'running' || status === 'paused';
 
   const primaryActionText =
@@ -1254,137 +1176,64 @@ export default function App() {
       {/* ==================================================================== */}
       {/* PERSONAL CONTROL CENTER: AURA CONSOLE (My Rhythm · Preferences · Personal Data) */}
       {/* ==================================================================== */}
-      {isAuraConsoleOpen && (
-        <main
-          data-testid="aura-console-view"
-          aria-label="Aura Console Personal Control Center"
-          className="relative z-20 flex-1 overflow-y-auto pt-24 sm:pt-20 pb-12"
-        >
-          {/* Aura Console Unified Sub-Header Bar */}
-          <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 mb-4">
-            <div className="aura-glass rounded-3xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2.5">
-                <span className="w-2 h-2 rounded-full bg-[#2FE8FF] shadow-[0_0_8px_#2FE8FF]" />
-                <div>
-                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#2FE8FF] block">
-                    PERSONAL CONTROL CENTER
-                  </span>
-                  <h2 className="font-display text-sm sm:text-base font-semibold text-[#F5F6FF]">
-                    Aura Console
-                  </h2>
-                </div>
-              </div>
-
-              {/* 3 Canonical Sections: My Rhythm | Preferences | Personal Data */}
-              <div
-                role="tablist"
-                aria-label="Aura Console Sections"
-                data-testid="aura-console-tabs"
-                className="flex items-center gap-1 p-1 rounded-full bg-white/[0.04] border border-white/10"
-              >
-                {(
-                  [
-                    {
-                      id: 'my-rhythm',
-                      label: 'My Rhythm',
-                      Icon: BarChart3,
-                    },
-                    {
-                      id: 'preferences',
-                      label: 'Preferences',
-                      Icon: Sliders,
-                    },
-                    {
-                      id: 'personal-data',
-                      label: 'Personal Data',
-                      Icon: ShieldCheck,
-                    },
-                  ] as const
-                ).map(({ id, label, Icon }) => {
-                  const isSelected = activeConsoleSection === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      role="tab"
-                      aria-selected={isSelected}
-                      data-testid={`aura-console-tab-${id}`}
-                      onClick={() => setActiveConsoleSection(id)}
-                      className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
-                        isSelected
-                          ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50 shadow-[0_0_14px_rgba(47,232,255,0.18)]'
-                          : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
-                      }`}
-                    >
-                      <Icon className="w-3.5 h-3.5 text-[#2FE8FF] shrink-0" />
-                      <span>{label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <button
-                type="button"
-                data-testid="aura-console-close-btn"
-                onClick={() => setIsAuraConsoleOpen(false)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.05] hover:bg-white/[0.1] text-[#A3A1BA] hover:text-[#F5F6FF] border border-white/10 cursor-pointer"
-              >
-                <X className="w-3.5 h-3.5" />
-                <span>Return to Sanctuary</span>
-              </button>
-            </div>
-          </div>
-
-          {activeConsoleSection === 'my-rhythm' && (
-            <ReflectExperience
-              sessions={sessions}
-              scene={activeScene}
-              settings={settings}
-              routines={routines}
-              currentDurationMinutes={durationMinutes}
-              currentSceneId={sceneId}
-              onUpdateSettings={updateSettings}
-              onClearSeedSessions={handleClearSeedSessions}
-              onRestoreSeedSessions={handleRestoreSeedSessions}
-              onNavigateToFocus={() => setIsAuraConsoleOpen(false)}
-              onApplyRecommendation={handleApplyRecommendation}
-              onApplyRoutine={handleApplyRoutine}
-              onSaveRoutine={handleSaveRoutine}
-              onDuplicateRoutine={handleDuplicateRoutine}
-              onDeleteRoutine={handleDeleteRoutine}
-              onApplyTaskStep={handleApplyTaskStep}
-            />
-          )}
-
-          {(activeConsoleSection === 'preferences' ||
-            activeConsoleSection === 'personal-data') && (
-            <ProfileSettingsView
-              consoleSection={activeConsoleSection}
-              settings={settings}
-              onUpdateSettings={updateSettings}
-              sessions={sessions}
-              restoreSessions={restoreSessions}
-              routines={routines}
-              onSyncSessionsAndRoutines={(
-                nextSessions,
-                nextRestore,
-                nextRoutines
-              ) => {
-                setSessions(nextSessions);
-                setRestoreSessions(nextRestore);
-                setRoutines(nextRoutines);
-              }}
-              soundscapePlaying={isSoundPlaying}
-              onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
-              onClearSeedSessions={handleClearSeedSessions}
-              onRestoreSeedSessions={handleRestoreSeedSessions}
-              onResetAllData={handleResetAllData}
-              onOpenLandingPage={() => setActiveOverlay('landing')}
-              onOpenOnboarding={() => setActiveOverlay('onboarding')}
-            />
-          )}
-        </main>
-      )}
+      <AuraConsole
+        isOpen={isAuraConsoleOpen}
+        activeSection={activeConsoleSection}
+        onSelectSection={setActiveConsoleSection}
+        onClose={() => setIsAuraConsoleOpen(false)}
+        interaction={sanctuaryInteractionContract}
+        myRhythmProps={{
+          sessions,
+          restoreSessions,
+          routines,
+          settings,
+          scene: activeScene,
+          currentDurationMinutes: durationMinutes,
+          currentSceneId: sceneId,
+          onUpdateSettings: updateSettings,
+          onApplyRecommendation: handleApplyRecommendation,
+          onApplyRoutine: handleApplyRoutine,
+          onSaveRoutine: handleSaveRoutine,
+          onDuplicateRoutine: handleDuplicateRoutine,
+          onDeleteRoutine: handleDeleteRoutine,
+          onApplyTaskStep: handleApplyTaskStep,
+          onClearSeedSessions: handleClearSeedSessions,
+          onRestoreSeedSessions: handleRestoreSeedSessions,
+          onReturnToSanctuary: () => setIsAuraConsoleOpen(false),
+        }}
+        preferencesProps={{
+          settings,
+          onUpdateSettings: updateSettings,
+          audio: sharedAudioContract,
+          onOpenOnboarding: () => {
+            setIsAuraConsoleOpen(false);
+            setActiveOverlay('onboarding');
+          },
+          onOpenLandingPage: () => {
+            setIsAuraConsoleOpen(false);
+            setActiveOverlay('landing');
+          },
+        }}
+        personalDataProps={{
+          settings,
+          onUpdateSettings: updateSettings,
+          sessions,
+          restoreSessions,
+          routines,
+          onSyncSessionsAndRoutines: (
+            nextSessions,
+            nextRestore,
+            nextRoutines
+          ) => {
+            setSessions(nextSessions);
+            setRestoreSessions(nextRestore);
+            setRoutines(nextRoutines);
+          },
+          onClearSeedSessions: handleClearSeedSessions,
+          onRestoreSeedSessions: handleRestoreSeedSessions,
+          onResetAllData: handleResetAllData,
+        }}
+      />
 
       {/* ==================================================================== */}
       {/* ORGANISM 1: LIQUID LENS — RESTORATIVE EXPERIENCE BOUNDARY            */}
@@ -1394,57 +1243,34 @@ export default function App() {
           data-testid="liquid-lens-sanctuary-view"
           className="relative z-20 flex-1 overflow-y-auto pb-6"
         >
-          {/* Discreet Liquid Lens Experience Mode Switcher (Restorative Experience <-> 3D Refractive Orb Stage) */}
-          <div className="relative z-30 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 sm:pt-16 -mb-14 flex items-center justify-between gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full aura-glass text-[11px] text-[#A3A1BA]">
-              <Wind className="w-3.5 h-3.5 text-[#38F8A8]" />
-              <span className="font-mono uppercase tracking-wider text-[#F5F6FF]">
-                Liquid Lens · Restorative Sanctuary
-              </span>
-            </div>
-            <button
-              type="button"
-              data-testid="liquid-lens-stage-mode-toggle"
-              onClick={() => setLiquidLensMode('focus')}
-              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full aura-glass text-[11px] text-[#2FE8FF] hover:text-[#F5F6FF] transition-colors cursor-pointer"
-            >
-              <Sparkles className="w-3 h-3" />
-              <span>View 3D Liquid Lens Stage</span>
-            </button>
-          </div>
-
-          <RestoreExperience
-            settings={settings}
-            onUpdateSettings={updateSettings}
-            soundscapePlaying={isSoundPlaying}
-            onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
-            onSelectEnvironment={(nextSceneId, nextChamberId) => {
-              setSceneId(nextSceneId);
-              handleSelectSoundscape(nextChamberId);
+          <LiquidLensExperience
+            interaction={sanctuaryInteractionContract}
+            restoreCompatibility={restoreCompatibilityContract}
+            activeSubMode={liquidLensSubMode}
+            onSubModeChange={setLiquidLensSubMode}
+            onReturnToFocusOrganism={(targetOrganism) => {
+              if (targetOrganism === 'original') {
+                setLiquidLensMode('focus');
+              } else {
+                handleSelectOrganism(targetOrganism ?? 'celestial-jelly', {
+                  experienceMode: 'focus',
+                });
+              }
             }}
-            onReturnToFocus={() =>
-              handleSelectOrganism('celestial-jelly', {
-                experienceMode: 'focus',
-              })
-            }
-            onRecordRestoreSession={(rec) => {
-              setRestoreSessions((prev) => [rec, ...prev]);
-              trackProductEvent(
-                'restore_session_completed',
-                settings.productAnalyticsConsent !== false,
-                {
-                  mode: rec.mode,
-                  elapsedSeconds:
-                    rec.elapsedSeconds ?? rec.durationSeconds ?? 0,
-                }
-              );
-            }}
-            restoreSessionsCount={restoreSessions.length}
           />
 
           {/* Persistent Control Center Dock */}
-          <div className="w-full flex justify-center px-3 mt-2">
+          <div className="w-full flex justify-center px-3 mt-1">
             <ControlDock
+              activeOrganism={activeOrganism}
+              experienceMode={experienceMode}
+              remainingSeconds={remainingSeconds}
+              liquidLensSubMode={liquidLensSubMode}
+              onSelectLiquidLensSubMode={setLiquidLensSubMode}
+              onOpenAuraConsole={() =>
+                handleOpenAuraConsole(activeConsoleSection)
+              }
+              isAuraConsoleOpen={isAuraConsoleOpen}
               status={status}
               primaryActionText={primaryActionText}
               onPrimaryAction={handlePrimaryAction}
@@ -1641,6 +1467,15 @@ export default function App() {
                   }`}
                 >
                   <ControlDock
+                    activeOrganism={activeOrganism}
+                    experienceMode={experienceMode}
+                    remainingSeconds={remainingSeconds}
+                    liquidLensSubMode={liquidLensSubMode}
+                    onSelectLiquidLensSubMode={setLiquidLensSubMode}
+                    onOpenAuraConsole={() =>
+                      handleOpenAuraConsole(activeConsoleSection)
+                    }
+                    isAuraConsoleOpen={isAuraConsoleOpen}
                     status={status}
                     primaryActionText={primaryActionText}
                     onPrimaryAction={handlePrimaryAction}

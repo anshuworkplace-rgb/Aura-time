@@ -1043,4 +1043,105 @@ test('AURA RESONANCE 6 shared sound presets, equal-power crossfades, and theme-s
   assert.equal(bloomBurst.pollenAlpha > 0, true);
 });
 
+test('Final Integration: versioned storage migration preserves legacy settings/sessions, respects SEED_CLEARED empty state, and keeps restorative sessions separate from focus totals', async () => {
+  const {
+    STORAGE_KEYS,
+    loadAndMigrateSettings,
+    loadAndMigrateSessions,
+    loadAndMigrateRestoreSessions,
+  } = await import('./storageMigration');
+  const { calculateTodaySummary } = await import('./focusEngine');
+
+  // Create an in-memory mock Storage
+  const createMockStorage = (initial: Record<string, string> = {}) => {
+    const store = new Map<string, string>(Object.entries(initial));
+    return {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => {
+        store.set(k, v);
+      },
+      removeItem: (k: string) => {
+        store.delete(k);
+      },
+    };
+  };
+
+  // 1. Legacy v2 settings migrate to v3 without resetting user preferences
+  const legacySettingsStorage = createMockStorage({
+    [STORAGE_KEYS.LEGACY_SETTINGS_V2]: JSON.stringify({
+      dailyGoalMinutes: 210,
+      orbDesign: 'living-bloom',
+      reducedMotion: true,
+      selectedChamberId: 'coastal-static', // legacy ID -> ocean-drift
+    }),
+  });
+  const migratedSettings = loadAndMigrateSettings(legacySettingsStorage);
+  assert.equal(migratedSettings.dailyGoalMinutes, 210);
+  assert.equal(migratedSettings.orbDesign, 'living-bloom');
+  assert.equal(migratedSettings.reducedMotion, true);
+  assert.equal(migratedSettings.selectedChamberId, 'ocean-drift');
+  assert.notEqual(
+    legacySettingsStorage.getItem(STORAGE_KEYS.SETTINGS),
+    null
+  );
+
+  // 2. Legacy v1 sessions migrate to v2 and preserve actual user records
+  const legacySession: SessionRecord = {
+    id: 'legacy-1',
+    label: 'Architecture review',
+    durationMinutes: 50,
+    completedAt: '2026-11-12T10:00:00Z',
+    isoDate: '2026-11-12',
+    hourOfDay: 10,
+    sceneId: 'electric-quiet',
+    chamberId: 'rain-chamber',
+  };
+  const legacySessionStorage = createMockStorage({
+    [STORAGE_KEYS.LEGACY_SESSIONS_V1]: JSON.stringify([legacySession]),
+  });
+  const migratedSessions = loadAndMigrateSessions(
+    '2026-11-12',
+    legacySessionStorage
+  );
+  assert.equal(migratedSessions.length, 1);
+  assert.equal(migratedSessions[0].id, 'legacy-1');
+  assert.equal(migratedSessions[0].actualMinutes, 50);
+
+  // 3. When user clears sample data (SEED_CLEARED === 'true'), empty array is preserved on reload
+  const clearedStorage = createMockStorage({
+    [STORAGE_KEYS.SEED_CLEARED]: 'true',
+    [STORAGE_KEYS.SESSIONS]: JSON.stringify([]),
+  });
+  const afterClearReload = loadAndMigrateSessions('2026-11-12', clearedStorage);
+  assert.equal(afterClearReload.length, 0);
+
+  // 4. Restorative sessions never inflate actual focus totals
+  const restoreStorage = createMockStorage({
+    [STORAGE_KEYS.RESTORE_SESSIONS]: JSON.stringify([
+      {
+        id: 'rest-1',
+        mode: 'breathing',
+        presetName: '4-6 Calm Breathing',
+        durationSeconds: 180,
+        elapsedSeconds: 180,
+        completedAt: '2026-11-12T12:00:00Z',
+        isoDate: '2026-11-12',
+      },
+    ]),
+  });
+  const restoreList = loadAndMigrateRestoreSessions(restoreStorage);
+  assert.equal(restoreList.length, 1);
+  assert.equal(restoreList[0].mode, 'breathing');
+
+  // Focus daily total and TodaySummary remain 0 when focus sessions are empty, regardless of restorative sessions
+  assert.equal(calculateDailyTotal(afterClearReload, '2026-11-12'), 0);
+  const focusSummary = calculateTodaySummary(
+    afterClearReload,
+    180,
+    '2026-11-12'
+  );
+  assert.equal(focusSummary.actualMinutes, 0);
+  assert.equal(focusSummary.completedCount, 0);
+});
+
 

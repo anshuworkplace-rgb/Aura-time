@@ -5,10 +5,17 @@ import {
   ChamberId,
   FocusImmersionMode,
   FocusSceneId,
+  LiquidLensSubMode,
+  SanctuaryExperienceMode,
+  SanctuaryOrganismId,
   TimerStatus,
   UserSettings,
 } from '../types/aura';
-import { CHAMBERS, FOCUS_SCENES } from '../utils/focusEngine';
+import {
+  CHAMBERS,
+  FOCUS_SCENES,
+  formatRemainingTime,
+} from '../utils/focusEngine';
 import { SoundControlPanel } from './SoundControlPanel';
 import { TimeControlPanel } from './TimeControlPanel';
 import { FocusControlPanel } from './FocusControlPanel';
@@ -21,11 +28,21 @@ import {
   Pause,
   RotateCcw,
   SlidersHorizontal,
+  Wind,
+  Moon,
+  Waves,
 } from 'lucide-react';
 
 export type DockGroupId = 'sound' | 'time' | 'focus' | 'more' | null;
 
 interface ControlDockProps {
+  activeOrganism?: SanctuaryOrganismId;
+  experienceMode?: SanctuaryExperienceMode;
+  remainingSeconds?: number;
+  liquidLensSubMode?: LiquidLensSubMode;
+  onSelectLiquidLensSubMode?: (subMode: LiquidLensSubMode) => void;
+  onOpenAuraConsole?: () => void;
+  isAuraConsoleOpen?: boolean;
   status: TimerStatus;
   primaryActionText?: string;
   onPrimaryAction?: () => void;
@@ -53,8 +70,15 @@ interface ControlDockProps {
 }
 
 export const ControlDock: React.FC<ControlDockProps> = ({
+  activeOrganism = 'celestial-jelly',
+  experienceMode = 'focus',
+  remainingSeconds,
+  liquidLensSubMode = 'breathe',
+  onSelectLiquidLensSubMode,
+  onOpenAuraConsole,
+  isAuraConsoleOpen = false,
   status,
-  primaryActionText = 'Begin',
+  primaryActionText = 'Begin Focus',
   onPrimaryAction,
   durationMinutes,
   onChangeDuration,
@@ -81,7 +105,6 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   const [openGroup, setOpenGroup] = useState<DockGroupId>(null);
   const dockRef = useRef<HTMLDivElement>(null);
 
-  // Close open popover on outside pointer down or Escape
   useEffect(() => {
     if (!openGroup) return;
 
@@ -116,8 +139,15 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   };
 
   const isRunning = status === 'running';
-
+  const isRunningOrPaused = status === 'running' || status === 'paused';
+  const isLiquidLensRestore =
+    activeOrganism === 'original' && experienceMode === 'restore';
   const isLeftDrawer = openGroup === 'sound' || openGroup === 'time';
+
+  const displayedTimer =
+    typeof remainingSeconds === 'number'
+      ? formatRemainingTime(remainingSeconds)
+      : `${durationMinutes}:00`;
 
   return (
     <div
@@ -234,7 +264,11 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 }}
                 onOpenInsights={() => {
                   setOpenGroup(null);
-                  onOpenOverlay('insights');
+                  if (onOpenAuraConsole) {
+                    onOpenAuraConsole();
+                  } else {
+                    onOpenOverlay('insights');
+                  }
                 }}
               />
             )}
@@ -242,128 +276,174 @@ export const ControlDock: React.FC<ControlDockProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Unified Compact Control Bar: [Play/Pause] [Reset] [Active Controls] | [Time] | [Soundscape] | [Atmosphere] | [Settings] */}
+      {/* Lightweight Organism-Contextual Dock */}
       <div className="flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]">
-        {/* Primary Session Action: Play / Pause / Resume */}
-        {onPrimaryAction && (
-          <button
-            type="button"
-            data-testid="primary-action-btn"
-            onClick={() => {
-              setOpenGroup(null);
-              onPrimaryAction();
-            }}
-            className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-              isRunning
-                ? 'bg-white/14 text-[#F5F6FF] hover:bg-white/20'
-                : 'text-[#070812] hover:brightness-110 shadow-sm'
-            }`}
-            style={
-              isRunning
-                ? {
-                    boxShadow: `inset 0 0 0 1px ${activeScene.colors.secondary}55`,
-                  }
-                : {
-                    background: `linear-gradient(135deg, #F5F6FF 0%, ${activeScene.colors.secondary} 100%)`,
-                  }
-            }
+        {/* Contextual Section: Liquid Lens Restorative vs Focus Organisms */}
+        {isLiquidLensRestore ? (
+          <div
+            data-testid="dock-liquid-lens-modes"
+            className="flex items-center gap-0.5 sm:gap-1"
           >
-            {isRunning ? (
-              <Pause className="w-3.5 h-3.5 fill-current shrink-0" />
-            ) : (
-              <Play className="w-3.5 h-3.5 fill-current shrink-0" />
-            )}
-            <span>{primaryActionText}</span>
-          </button>
-        )}
-
-        {/* Quick Reset Button */}
-        <button
-          type="button"
-          data-testid="dock-quick-reset-btn"
-          aria-label="Reset session"
-          title="Reset session (R)"
-          onClick={() => {
-            setOpenGroup(null);
-            onResetSession();
-          }}
-          className="p-1.5 sm:p-2 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/8 transition-colors cursor-pointer shrink-0"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-        </button>
-
-        {/* Active Session Direct Actions: Extend +5m, End Session, Minimal Mode */}
-        {(status === 'running' || status === 'paused') && (
+            {(
+              [
+                { id: 'breathe', label: 'Breathe', Icon: Wind },
+                { id: 'stillness', label: 'Stillness', Icon: Moon },
+                { id: 'soundscape', label: 'Soundscape', Icon: Waves },
+              ] as const
+            ).map(({ id, label, Icon }) => {
+              const isSelected = liquidLensSubMode === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  data-testid={`dock-liquid-submode-${id}`}
+                  onClick={() => {
+                    setOpenGroup(null);
+                    onSelectLiquidLensSubMode?.(id);
+                  }}
+                  className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-[#38F8A8]/20 text-[#F5F6FF] border border-[#38F8A8]/45'
+                      : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
+                  }`}
+                >
+                  <Icon className="w-3.5 h-3.5 text-[#38F8A8] shrink-0" />
+                  <span className="hidden xs:inline sm:inline">{label}</span>
+                </button>
+              );
+            })}
+          </div>
+        ) : (
           <>
+            {/* Primary Session Action: Play / Pause / Resume */}
+            {onPrimaryAction && (
+              <button
+                type="button"
+                data-testid="primary-action-btn"
+                onClick={() => {
+                  setOpenGroup(null);
+                  onPrimaryAction();
+                }}
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs font-semibold transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+                  isRunning
+                    ? 'bg-white/14 text-[#F5F6FF] hover:bg-white/20'
+                    : 'text-[#070812] hover:brightness-110 shadow-sm'
+                }`}
+                style={
+                  isRunning
+                    ? {
+                        boxShadow: `inset 0 0 0 1px ${activeScene.colors.secondary}55`,
+                      }
+                    : {
+                        background: `linear-gradient(135deg, #F5F6FF 0%, ${activeScene.colors.secondary} 100%)`,
+                      }
+                }
+              >
+                {isRunning ? (
+                  <Pause className="w-3.5 h-3.5 fill-current shrink-0" />
+                ) : (
+                  <Play className="w-3.5 h-3.5 fill-current shrink-0" />
+                )}
+                <span>{primaryActionText}</span>
+              </button>
+            )}
+
+            {/* Quick Reset Button */}
             <button
               type="button"
-              data-testid="dock-extend-5m-btn"
-              onClick={() => onAddMinutes(5)}
-              title="Extend session by 5 minutes"
-              className="px-2 sm:px-2.5 py-1.5 rounded-full text-[11px] font-mono text-[#2FE8FF] hover:bg-[#2FE8FF]/14 transition-colors cursor-pointer shrink-0"
-            >
-              +5m
-            </button>
-            <button
-              type="button"
-              data-testid="dock-end-session-btn"
+              data-testid="dock-quick-reset-btn"
+              aria-label="Reset session"
+              title="Reset session (R)"
               onClick={() => {
                 setOpenGroup(null);
-                onCompleteSession();
+                onResetSession();
               }}
-              title="End session and log actual focused time"
-              className="px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-medium text-[#FFB08A] hover:bg-[#FFB08A]/14 transition-colors cursor-pointer shrink-0"
+              className="p-1.5 sm:p-2 rounded-full text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/8 transition-colors cursor-pointer shrink-0"
             >
-              End Session
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
+
+            {/* Active Session Direct Actions: Extend +5m, End Session, Minimal Mode */}
+            {isRunningOrPaused && (
+              <>
+                <button
+                  type="button"
+                  data-testid="dock-extend-5m-btn"
+                  onClick={() => onAddMinutes(5)}
+                  title="Extend session by 5 minutes"
+                  className="px-2 sm:px-2.5 py-1.5 rounded-full text-[11px] font-mono text-[#2FE8FF] hover:bg-[#2FE8FF]/14 transition-colors cursor-pointer shrink-0"
+                >
+                  +5m
+                </button>
+                <button
+                  type="button"
+                  data-testid="dock-end-session-btn"
+                  onClick={() => {
+                    setOpenGroup(null);
+                    onCompleteSession();
+                  }}
+                  title="End session and log actual focused time"
+                  className="px-2.5 sm:px-3 py-1.5 rounded-full text-[11px] font-medium text-[#FFB08A] hover:bg-[#FFB08A]/14 transition-colors cursor-pointer shrink-0"
+                >
+                  End Session
+                </button>
+                <button
+                  type="button"
+                  data-testid="dock-minimal-mode-btn"
+                  onClick={() =>
+                    onChangeImmersionMode(
+                      immersionMode === 'minimal' ? 'standard' : 'minimal'
+                    )
+                  }
+                  title="Toggle minimal distraction-free mode"
+                  className={`hidden md:inline-flex px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer shrink-0 ${
+                    immersionMode === 'minimal'
+                      ? 'bg-[#2FE8FF]/20 text-[#2FE8FF]'
+                      : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
+                  }`}
+                >
+                  {immersionMode === 'minimal'
+                    ? 'Exit Minimal'
+                    : 'Minimal Mode'}
+                </button>
+              </>
+            )}
+
+            <span
+              className="hidden sm:block w-[1px] h-4 bg-white/10 mx-0.5 shrink-0"
+              aria-hidden="true"
+            />
+
+            {/* Current Timer / Duration Selector */}
             <button
               type="button"
-              data-testid="dock-minimal-mode-btn"
-              onClick={() =>
-                onChangeImmersionMode(
-                  immersionMode === 'minimal' ? 'balanced' : 'minimal'
-                )
-              }
-              title="Toggle minimal distraction-free mode (M)"
-              className={`hidden md:inline-flex px-2.5 py-1.5 rounded-full text-[11px] font-medium transition-colors cursor-pointer shrink-0 ${
-                immersionMode === 'minimal'
-                  ? 'bg-[#2FE8FF]/20 text-[#2FE8FF]'
+              data-testid="dock-group-time"
+              aria-label={`Timer ${displayedTimer} (${durationMinutes} minutes)`}
+              aria-expanded={openGroup === 'time'}
+              onClick={() => toggleGroup('time')}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                openGroup === 'time'
+                  ? 'bg-white/14 text-[#F5F6FF]'
                   : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
               }`}
             >
-              {immersionMode === 'minimal' ? 'Exit Minimal' : 'Minimal Mode'}
+              <Clock className="w-3.5 h-3.5 text-[#8A5CFF] shrink-0" />
+              <span
+                data-testid="dock-timer-readout"
+                className="font-mono tabular-nums"
+              >
+                {isRunningOrPaused ? displayedTimer : `${durationMinutes}m`}
+              </span>
             </button>
           </>
         )}
-
-        <span
-          className="hidden sm:block w-[1px] h-4 bg-white/10 mx-0.5 shrink-0"
-          aria-hidden="true"
-        />
-
-        {/* Duration / Time */}
-        <button
-          type="button"
-          data-testid="dock-group-time"
-          aria-label={`Duration ${durationMinutes} minutes`}
-          aria-expanded={openGroup === 'time'}
-          onClick={() => toggleGroup('time')}
-          className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
-            openGroup === 'time'
-              ? 'bg-white/14 text-[#F5F6FF]'
-              : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
-          }`}
-        >
-          <Clock className="w-3.5 h-3.5 text-[#8A5CFF] shrink-0" />
-          <span className="font-mono tabular-nums">{durationMinutes}m</span>
-        </button>
 
         <span
           className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
           aria-hidden="true"
         />
 
-        {/* Single Smart Soundscape Button */}
+        {/* Quick Audio Control */}
         <button
           type="button"
           data-testid="dock-group-sound"
@@ -384,16 +464,11 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           ) : (
             <VolumeX className="w-3.5 h-3.5 text-[#A3A1BA] shrink-0" />
           )}
-          <span className="hidden sm:inline tracking-wide max-w-[124px] truncate">
+          <span className="hidden sm:inline tracking-wide max-w-[120px] truncate">
             {activeChamber.name}
           </span>
           <span className="sm:hidden">{activeChamber.name.split(' ')[0]}</span>
         </button>
-
-        <span
-          className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
-          aria-hidden="true"
-        />
 
         {/* Atmosphere Selector Trigger */}
         <button
@@ -415,10 +490,9 @@ export const ControlDock: React.FC<ControlDockProps> = ({
             }}
             aria-hidden="true"
           />
-          <span className="hidden sm:inline tracking-wide max-w-[116px] truncate">
+          <span className="hidden sm:inline tracking-wide max-w-[110px] truncate">
             {activeScene.name}
           </span>
-          <span className="sm:hidden">{activeScene.name.split(' ')[0]}</span>
         </button>
 
         <span
@@ -426,23 +500,44 @@ export const ControlDock: React.FC<ControlDockProps> = ({
           aria-hidden="true"
         />
 
-        {/* Settings & Studio Preferences Trigger */}
+        {/* Quick Studio Tools Popover Trigger */}
         <button
           type="button"
           data-testid="dock-group-more"
-          aria-label="Settings and Studio Preferences"
+          aria-label="Quick Studio Controls"
           aria-expanded={openGroup === 'more'}
-          title="Settings & Preferences"
+          title="Quick Controls & Keyboard Shortcuts"
           onClick={() => toggleGroup('more')}
-          className={`flex items-center gap-1.5 p-1.5 sm:px-3 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+          className={`flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
             openGroup === 'more'
               ? 'bg-white/14 text-[#F5F6FF]'
               : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
           }`}
         >
           <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
-          <span className="hidden md:inline tracking-wide">Settings</span>
+          <span className="hidden lg:inline tracking-wide">Quick</span>
         </button>
+
+        {/* Discreet Aura Console Trigger */}
+        {onOpenAuraConsole && (
+          <button
+            type="button"
+            data-testid="dock-aura-console-btn"
+            aria-label="Open Aura Console"
+            onClick={() => {
+              setOpenGroup(null);
+              onOpenAuraConsole();
+            }}
+            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-full text-xs font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+              isAuraConsoleOpen
+                ? 'bg-[#2FE8FF]/20 text-[#2FE8FF] border border-[#2FE8FF]/45'
+                : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/6'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#2FE8FF]" />
+            <span>Console</span>
+          </button>
+        )}
       </div>
     </div>
   );
