@@ -35,6 +35,7 @@ import {
 } from '../utils/mobilePerformanceEngine';
 import { CelestialJelly3DSceneController } from './CelestialJelly3DScene';
 import { LivingBloom3DSceneController } from './LivingBloom3DScene';
+import { LiquidLens3DSceneController } from './LiquidLens3DScene';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
@@ -434,6 +435,15 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
       // 6c. Modular 3D Living Bloom Controller (shares threeScene & renderer)
       const livingBloomController = new LivingBloom3DSceneController({
+        parentScene: threeScene,
+        pixelRatio: appliedPixelRatio,
+        isSoftwareGl,
+        initialScene: liveStateRef.current.scene,
+        initialPhase: liveStateRef.current.phase,
+      });
+
+      // 6d. Modular 3D Liquid Lens Controller (shares threeScene & renderer)
+      const liquidLensController = new LiquidLens3DSceneController({
         parentScene: threeScene,
         pixelRatio: appliedPixelRatio,
         isSoftwareGl,
@@ -844,6 +854,23 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           pollenDrawFraction: currentProfile.pollenDrawFraction,
         });
 
+        // Update 3D Liquid Lens Controller
+        liquidLensController.update({
+          orbDesign: state.orbDesign,
+          scene: state.scene,
+          chamber: state.chamber,
+          status: state.status,
+          phase: state.phase,
+          totalSeconds: state.totalSeconds || 2700,
+          progress: state.progress,
+          audioBands,
+          reducedMotion: state.reducedMotion,
+          dt,
+          pointerNormX: currentPtrX,
+          pointerNormY: currentPtrY,
+          pointerActive,
+        });
+
         activeRenderer.render(threeScene, camera);
 
         if (isSoftwareGl) {
@@ -869,6 +896,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
         celestialJellyController.dispose();
         livingBloomController.dispose();
+        liquidLensController.dispose();
         fluidPipeline?.dispose();
         neutralFluidTex?.dispose();
         webgpuDevice?.destroy?.();

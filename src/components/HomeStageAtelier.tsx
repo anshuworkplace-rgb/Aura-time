@@ -186,7 +186,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
         data-testid="home-orbital-organism-rail"
         role="radiogroup"
         aria-label="Organism Selector"
-        className={`fixed top-11 sm:top-5 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1.25rem)] transition-all duration-500 ${
+        className={`fixed top-14 sm:top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1.25rem)] transition-all duration-500 ${
           hiddenDuringSession
             ? 'opacity-0 -translate-y-2 pointer-events-none'
             : 'opacity-100'
