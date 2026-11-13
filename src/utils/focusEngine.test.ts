@@ -842,6 +842,145 @@ test('Stage 2: Reflect TodaySummary, WeeklyOverview, PersonalFocusPatterns (incl
   );
 });
 
+test('Stage 3: Aura Intelligence smart recommendations, 30-day monthly analytics, verified garden achievements, task breakdown, and product health metrics work accurately', async () => {
+  const {
+    DEFAULT_FOCUS_ROUTINES,
+    computeSmartRecommendations,
+    calculateMonthlyAnalytics,
+    computeAuraGardenAchievements,
+    generateLocalTaskBreakdown,
+    generateLocalWeeklyReflection,
+    computePreferredSoundscapes,
+  } = await import('./auraIntelligence');
+  const { computeProductMetricsSummary } = await import('./productAnalytics');
+  const { DEFAULT_USER_SETTINGS } = await import('./focusEngine');
+
+  // 1. Default personalized routines include 5 curated presets
+  assert.equal(DEFAULT_FOCUS_ROUTINES.length, 5);
+  assert.equal(DEFAULT_FOCUS_ROUTINES[0].name, 'Morning Clarity');
+
+  // 2. Smart recommendations adapt when long sessions are frequently interrupted
+  const historyWithInterruptedLong: SessionRecord[] = [
+    {
+      id: 'int-1',
+      label: 'Study calculus',
+      durationMinutes: 20,
+      plannedMinutes: 60,
+      actualMinutes: 20,
+      completionStatus: 'interrupted',
+      completedAt: '2026-11-11T09:00:00Z',
+      isoDate: '2026-11-11',
+      hourOfDay: 9,
+      sceneId: 'electric-quiet',
+      chamberId: 'ocean-drift',
+    },
+    {
+      id: 'int-2',
+      label: 'Study linear algebra',
+      durationMinutes: 22,
+      plannedMinutes: 60,
+      actualMinutes: 22,
+      completionStatus: 'interrupted',
+      completedAt: '2026-11-12T09:00:00Z',
+      isoDate: '2026-11-12',
+      hourOfDay: 9,
+      sceneId: 'electric-quiet',
+      chamberId: 'ocean-drift',
+    },
+    {
+      id: 'comp-1',
+      label: 'Focused sprint',
+      durationMinutes: 25,
+      plannedMinutes: 25,
+      actualMinutes: 25,
+      completionStatus: 'completed',
+      completedAt: '2026-11-12T11:00:00Z',
+      isoDate: '2026-11-12',
+      hourOfDay: 11,
+      sceneId: 'electric-quiet',
+      chamberId: 'ocean-drift',
+    },
+  ];
+
+  const recs = computeSmartRecommendations({
+    sessions: historyWithInterruptedLong,
+    todayIsoDate: '2026-11-12',
+    currentDurationMinutes: 60,
+    currentSceneId: 'electric-quiet',
+    settings: DEFAULT_USER_SETTINGS,
+  });
+  assert.equal(recs.length >= 1, true);
+  assert.equal(
+    recs.some((r) => r.id === 'rec-step-down-duration'),
+    true
+  );
+  assert.equal(
+    recs.every((r) => r.explanation.length > 15),
+    true
+  );
+
+  // 3. 30-day Monthly Analytics computes 4-week buckets and % change vs previous 30 days
+  const monthly = calculateMonthlyAnalytics(
+    historyWithInterruptedLong,
+    '2026-11-12',
+    180
+  );
+  assert.equal(monthly.totalActualMinutes, 67);
+  assert.equal(monthly.completedSessionsCount, 1);
+  assert.equal(monthly.interruptedSessionsCount, 2);
+  assert.equal(monthly.activeDaysCount, 2);
+  assert.equal(monthly.weeklyTrends.length, 4);
+
+  // 4. Verified Garden Milestones deduplicate session IDs and never fabricated
+  const duplicateSessionArray: SessionRecord[] = [
+    historyWithInterruptedLong[2],
+    historyWithInterruptedLong[2], // duplicate ID
+  ];
+  const achievements = computeAuraGardenAchievements(
+    duplicateSessionArray,
+    900,
+    false
+  );
+  const firstDrop = achievements.find((a) => a.id === 'ach-first-session')!;
+  assert.equal(firstDrop.unlocked, true);
+  assert.equal(firstDrop.progressText, '1 / 1 session');
+
+  // 5. Local Task Breakdown produces structured steps
+  const steps = generateLocalTaskBreakdown(
+    'Prepare physics exam chapter and practice problems',
+    25
+  );
+  assert.equal(steps.length, 4);
+  assert.equal(steps[0].durationMinutes, 25);
+
+  // 6. Weekly Reflection & Preferred Soundscapes
+  const reflection = generateLocalWeeklyReflection({
+    completedSessions: 1,
+    interruptedSessions: 2,
+    totalActualMinutes: 67,
+    mostUsedEnvironment: 'Electric Quiet',
+    bestDayLabel: 'Thu',
+    averageMinutes: 25,
+  });
+  assert.equal(reflection.summary.includes('1 focus session'), true);
+
+  const prefSounds = computePreferredSoundscapes(historyWithInterruptedLong);
+  assert.equal(prefSounds.length, 1);
+  assert.equal(prefSounds[0].chamberId, 'ocean-drift');
+
+  // 7. Product Health Metrics Summary excludes sample seed sessions
+  const metrics = computeProductMetricsSummary(
+    historyWithInterruptedLong,
+    [],
+    '2026-11-12'
+  );
+  assert.equal(metrics.activated, true);
+  assert.equal(metrics.sessionCompletionRatePercent, 33);
+});
+
+
+
+
 test('AURA RESONANCE 6 shared sound presets, equal-power crossfades, and theme-specific kinematics work accurately', () => {
   assert.equal(RESONANCE_SOUND_PRESETS.length, 6);
   const expectedNames = [

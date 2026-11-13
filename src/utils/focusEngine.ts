@@ -559,7 +559,28 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   backgroundMix: 0.52,
   orbDesign: 'celestial-jelly',
   performanceMode: 'auto',
+  preferredDurationMinutes: 45,
+  preferredSceneId: 'electric-quiet',
+  preferredWorkPeriod: 'morning',
+  animationIntensity: 'standard',
+  gardenProgressionEnabled: true,
+  excludeSampleDataInInsights: false,
+  aiProcessingConsent: false,
+  productAnalyticsConsent: true,
+  onboardingCompleted: false,
+  syncAccountEmail: null,
+  lastCloudSyncAt: null,
 };
+
+/**
+ * Returns YYYY-MM-DD in local time for the given Date (or now).
+ */
+export function getLocalIsoDate(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 
 /**
  * Formats seconds into MM:SS or H:MM:SS.
