@@ -1089,16 +1089,6 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
                 : 'pauses'}
             </span>
           )}
-          <button
-            type="button"
-            data-testid="liquid-lens-mute-toggle"
-            aria-label={interaction.audio.muted ? 'Unmute ambient sound' : 'Mute ambient sound'}
-            title={interaction.audio.muted ? 'Unmute ambient sound' : 'Mute ambient sound'}
-            onClick={interaction.audio.onToggleMute}
-            className="p-2 rounded-full aura-glass text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
-          >
-            {interaction.audio.muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </button>
           {onReturnToFocusOrganism && (
             <button
               type="button"
