@@ -220,8 +220,8 @@ export const Breathe: React.FC<LiquidLensBreatheProps> = ({
                     {preset.exhaleSeconds}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#A3A1BA] mt-0.5 truncate">
-                  {preset.subtitle}
+                <p className="text-[11px] text-[#A3A1BA] mt-0.5 line-clamp-2">
+                  {preset.description}
                 </p>
               </button>
             );
@@ -662,7 +662,10 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
   });
   const [selectedBreathingId, setSelectedBreathingId] =
     useState<BreathingPresetId>(
-      () => settings.defaultBreathingPresetId ?? 'coherent-5-5'
+      () =>
+      settings.defaultBreathingPresetId === 'box-4-4-4-4'
+        ? 'coherent-5-5'
+        : settings.defaultBreathingPresetId ?? 'coherent-5-5'
     );
   const [selectedQuietId, setSelectedQuietId] = useState<QuietMomentPresetId>(
     () => settings.defaultQuietMomentPresetId ?? 'reset-2m'
@@ -1022,10 +1025,13 @@ export const LiquidLensExperience: React.FC<LiquidLensExperienceProps> = ({
       setElapsedFloatSec(0);
     }
     setSessionState('running');
+    if (interaction.audio.activeChamberId !== activeEnvironment.chamberId) {
+      interaction.audio.onSelectChamber(activeEnvironment.chamberId);
+    }
     if (!interaction.audio.isPlaying && !interaction.audio.muted) {
       interaction.audio.onTogglePlay(true);
     }
-  }, [interaction.audio, sessionState]);
+  }, [activeEnvironment.chamberId, interaction.audio, sessionState]);
 
   const handlePause = useCallback(() => {
     setSessionState('paused');
