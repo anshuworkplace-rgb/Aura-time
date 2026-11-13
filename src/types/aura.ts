@@ -65,9 +65,20 @@ export type ActiveOverlay =
   | 'scenes'
   | 'chambers'
   | 'insights'
-  | 'calibration';
+  | 'calibration'
+  | 'landing'
+  | 'onboarding';
 
 export type FocusImmersionMode = 'standard' | 'balanced' | 'deep' | 'minimal';
+
+export type PreferredWorkPeriod =
+  | 'morning'
+  | 'afternoon'
+  | 'evening'
+  | 'night'
+  | 'flexible';
+
+export type AnimationIntensity = 'calm' | 'standard' | 'vivid';
 
 export interface FocusSceneConfig {
   id: FocusSceneId;
@@ -185,6 +196,75 @@ export interface RestoreEnvironmentConfig {
   secondaryHex: string;
 }
 
+export interface FocusRoutine {
+  id: string;
+  name: string;
+  description: string;
+  focusDurationMinutes: number;
+  sceneId: FocusSceneId;
+  chamberId: ChamberId;
+  orbDesign?: OrbDesignId;
+  breakDurationMinutes: number;
+  targetSessionsCount: number;
+  isCustom?: boolean;
+}
+
+export interface SmartRecommendation {
+  id: string;
+  category: 'duration' | 'environment' | 'break' | 'momentum';
+  title: string;
+  explanation: string;
+  actionLabel: string;
+  confidenceNote: string;
+  applyPayload: {
+    durationMinutes?: number;
+    sceneId?: FocusSceneId;
+    chamberId?: ChamberId;
+    openRestore?: boolean;
+  };
+}
+
+export interface TaskBreakdownStep {
+  stepNumber: number;
+  title: string;
+  durationMinutes: number;
+  recommendedSceneId: FocusSceneId;
+  recommendedChamberId: ChamberId;
+  rationale: string;
+}
+
+export interface AuraGardenAchievement {
+  id: string;
+  title: string;
+  description: string;
+  unlocked: boolean;
+  progressText: string;
+  rewardEffect: string;
+}
+
+export interface MonthlyWeekBucket {
+  weekLabel: string;
+  startDateIso: string;
+  endDateIso: string;
+  actualMinutes: number;
+  completedSessions: number;
+  interruptedSessions: number;
+}
+
+export interface MonthlyAnalyticsSummary {
+  totalActualMinutes: number;
+  completedSessionsCount: number;
+  interruptedSessionsCount: number;
+  activeDaysCount: number;
+  monthlyGoalMinutes: number;
+  monthlyGoalProgressRatio: number;
+  previousPeriodActualMinutes: number;
+  periodDeltaPercent: number | null;
+  weeklyTrends: MonthlyWeekBucket[];
+  mostUsedSceneId: FocusSceneId | null;
+  mostUsedChamberId: ChamberId | null;
+}
+
 export type PerformanceMode = 'auto' | 'balanced' | 'ultra';
 export type PerformanceProfileTier = 'ultra' | 'balanced';
 
@@ -209,4 +289,17 @@ export interface UserSettings {
   orbDesign: OrbDesignId;
   /** Intelligent Mobile Performance Engine mode: 'auto' (default), 'balanced', or 'ultra' */
   performanceMode?: PerformanceMode;
+  /** Stage 3: Personal Focus Profile & Privacy Preferences */
+  preferredDurationMinutes?: number;
+  preferredSceneId?: FocusSceneId;
+  preferredWorkPeriod?: PreferredWorkPeriod;
+  animationIntensity?: AnimationIntensity;
+  gardenProgressionEnabled?: boolean;
+  excludeSampleDataInInsights?: boolean;
+  aiProcessingConsent?: boolean;
+  productAnalyticsConsent?: boolean;
+  onboardingCompleted?: boolean;
+  syncAccountEmail?: string | null;
+  lastCloudSyncAt?: string | null;
 }
+
