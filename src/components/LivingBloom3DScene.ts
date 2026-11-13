@@ -360,7 +360,8 @@ export class LivingBloom3DSceneController {
     if (
       sizeChanged ||
       nowMs - this.lastRectQueryMs > 600 ||
-      !this.lensElement
+      !this.lensElement ||
+      !this.lensElement.isConnected
     ) {
       this.lastRectQueryMs = nowMs;
       this.lastViewportW = viewportWidth;

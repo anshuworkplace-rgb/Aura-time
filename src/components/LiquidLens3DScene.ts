@@ -151,18 +151,17 @@ export class LiquidLens3DSceneController {
 
   public update(params: LiquidLens3DUpdateParams): void {
     const isActive = params.orbDesign === 'original';
-    const targetOpacity = isActive ? 1 : 0;
-    this.currentOpacity = THREE.MathUtils.damp(
-      this.currentOpacity,
-      targetOpacity,
-      5.0,
-      params.dt
-    );
-
-    if (this.currentOpacity < 0.01) {
+    if (!isActive) {
+      this.currentOpacity = 0;
       this.rootGroup.visible = false;
       return;
     }
+    this.currentOpacity = THREE.MathUtils.damp(
+      this.currentOpacity,
+      1,
+      8.0,
+      params.dt
+    );
     this.rootGroup.visible = true;
 
     const speedMult = params.reducedMotion

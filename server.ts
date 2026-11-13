@@ -503,9 +503,56 @@ Allowed recommendedChamberId values: "rain-chamber", "ocean-drift", "forest-echo
   // 5. Vite Dev Middleware / Static Production Assets
   // ---------------------------------------------------------------------------
   if (!isProduction) {
+    const disableHmr = process.env.DISABLE_HMR === 'true';
+    if (disableHmr) {
+      // Prevent @vite/client from opening a failing wss://...:24678 WebSocket
+      // when running behind a reverse proxy with HMR disabled.
+      app.get('/@vite/client', (_req, res) => {
+        res.type('application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-store');
+        res.send(
+          [
+            'export function createHotContext() {',
+            '  return {',
+            '    accept() {},',
+            '    dispose() {},',
+            '    prune() {},',
+            '    invalidate() {},',
+            '    on() {},',
+            '    off() {},',
+            '    send() {},',
+            '    data: {},',
+            '  };',
+            '}',
+            'export function updateStyle(id, content) {',
+            '  if (typeof document === "undefined") return;',
+            '  let style = document.querySelector(`style[data-vite-dev-id="${id}"]`);',
+            '  if (!style) {',
+            '    style = document.createElement("style");',
+            '    style.setAttribute("data-vite-dev-id", id);',
+            '    document.head.appendChild(style);',
+            '  }',
+            '  style.textContent = content;',
+            '}',
+            'export function removeStyle(id) {',
+            '  if (typeof document === "undefined") return;',
+            '  const style = document.querySelector(`style[data-vite-dev-id="${id}"]`);',
+            '  if (style) style.remove();',
+            '}',
+            'export function injectQuery(url) { return url; }',
+          ].join('\n')
+        );
+      });
+    }
+
     const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: !disableHmr,
+        ws: disableHmr ? (false as const) : undefined,
+        watch: disableHmr ? null : undefined,
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);

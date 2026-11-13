@@ -168,7 +168,7 @@ export function buildPerformanceProfile(
   const { isSoftwareGl, isMobileDevice, devicePixelRatio } = capabilities;
 
   if (tier === 'ultra') {
-    const dprCap = isSoftwareGl ? 1.0 : isMobileDevice ? 1.75 : 2.0;
+    const dprCap = isSoftwareGl ? 0.55 : isMobileDevice ? 1.75 : 2.0;
     const effectiveDpr = Math.min(devicePixelRatio, dprCap);
     return {
       profileId: 'ultra',
@@ -177,17 +177,19 @@ export function buildPerformanceProfile(
       description:
         'For powerful phones & desktops. Maximum visual fidelity, higher particle density, and full rendering resolution.',
       pixelRatioCap: Number(effectiveDpr.toFixed(2)),
-      internalResolutionScale: 1.0,
+      internalResolutionScale: isSoftwareGl ? 0.55 : 1.0,
       targetFps: 60,
       minFrameIntervalMs: 0,
-      primaryAuroraSteps: isSoftwareGl ? 6 : 8,
-      secondaryAuroraSteps: isSoftwareGl ? 4 : 6,
+      primaryAuroraSteps: isSoftwareGl ? 4 : 8,
+      secondaryAuroraSteps: isSoftwareGl ? 3 : 6,
       fluidGridSize: isSoftwareGl ? 64 : 128,
       fluidStepCadence: 1,
       enableMultiPassFluidFbo: !isSoftwareGl,
-      particleDrawFraction: 1.0,
-      backgroundParticleCount: TOTAL_BACKGROUND_PARTICLES,
-      pointSizeCompensation: 1.0,
+      particleDrawFraction: isSoftwareGl ? 0.6 : 1.0,
+      backgroundParticleCount: Math.round(
+        TOTAL_BACKGROUND_PARTICLES * (isSoftwareGl ? 0.6 : 1.0)
+      ),
+      pointSizeCompensation: isSoftwareGl ? 1.18 : 1.0,
       planktonDrawFraction: 1.0,
       jellyBiolumeNodeFraction: 1.0,
       pollenDrawFraction: 1.0,
@@ -200,7 +202,7 @@ export function buildPerformanceProfile(
   // Preserves 100% of visual appearance, scenes, organisms, shaders, and particles
   // while optimizing pixel fill rate, ray-marching slices (with brightness compensation),
   // particle draw count (with point-size compensation), and 30–45 FPS frame pacing.
-  const dprCap = isSoftwareGl ? 1.0 : isMobileDevice ? 1.25 : 1.5;
+  const dprCap = isSoftwareGl ? 0.55 : isMobileDevice ? 1.25 : 1.5;
   const effectiveDpr = Math.min(devicePixelRatio, dprCap);
   const particleDrawFraction = 0.65;
 
@@ -211,11 +213,11 @@ export function buildPerformanceProfile(
     description:
       'Default smartphone profile. Preserves full visual appearance while optimizing resolution, particle workload, and animation scheduling for stable 30–45 FPS.',
     pixelRatioCap: Number(effectiveDpr.toFixed(2)),
-    internalResolutionScale: isSoftwareGl ? 1.0 : 0.92,
+    internalResolutionScale: isSoftwareGl ? 0.55 : 0.92,
     targetFps: 42,
     minFrameIntervalMs: isSoftwareGl ? 0 : 22, // ~45 FPS ceiling on mobile hardware
-    primaryAuroraSteps: isSoftwareGl ? 5 : 5,
-    secondaryAuroraSteps: isSoftwareGl ? 4 : 4,
+    primaryAuroraSteps: isSoftwareGl ? 4 : 5,
+    secondaryAuroraSteps: isSoftwareGl ? 3 : 4,
     fluidGridSize: isSoftwareGl ? 64 : 96,
     fluidStepCadence: 2,
     enableMultiPassFluidFbo: !isSoftwareGl,

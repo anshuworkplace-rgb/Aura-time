@@ -112,6 +112,13 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
       ? candidate.defaultQuietMomentPresetId
       : 'reset-2m';
 
+  const VALID_SCENES = new Set<FocusSceneId>(
+    Object.keys(FOCUS_SCENES) as FocusSceneId[]
+  );
+  const VALID_PERF = new Set(['auto', 'high', 'balanced']);
+  const VALID_TEXT_SCALE = new Set(['default', 'large', 'monumental']);
+  const VALID_ANIM = new Set(['subtle', 'standard', 'fluid']);
+
   return {
     ...defaultsWithRestore,
     ...candidate,
@@ -123,6 +130,42 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
     selectedChamberId: candidate.selectedChamberId
       ? normalizeChamberId(candidate.selectedChamberId)
       : defaultsWithRestore.selectedChamberId,
+    preferredSceneId:
+      candidate.preferredSceneId && VALID_SCENES.has(candidate.preferredSceneId)
+        ? candidate.preferredSceneId
+        : defaultsWithRestore.preferredSceneId,
+    performanceMode:
+      candidate.performanceMode && VALID_PERF.has(candidate.performanceMode)
+        ? candidate.performanceMode
+        : defaultsWithRestore.performanceMode,
+    timerTextScale:
+      candidate.timerTextScale && VALID_TEXT_SCALE.has(candidate.timerTextScale)
+        ? candidate.timerTextScale
+        : defaultsWithRestore.timerTextScale,
+    animationIntensity:
+      candidate.animationIntensity && VALID_ANIM.has(candidate.animationIntensity)
+        ? candidate.animationIntensity
+        : defaultsWithRestore.animationIntensity,
+    preferredWorkPeriod:
+      candidate.preferredWorkPeriod === 'morning' ||
+      candidate.preferredWorkPeriod === 'afternoon' ||
+      candidate.preferredWorkPeriod === 'evening' ||
+      candidate.preferredWorkPeriod === 'night'
+        ? candidate.preferredWorkPeriod
+        : defaultsWithRestore.preferredWorkPeriod,
+    preferredDurationMinutes:
+      typeof candidate.preferredDurationMinutes === 'number' &&
+      Number.isFinite(candidate.preferredDurationMinutes) &&
+      candidate.preferredDurationMinutes >= 5 &&
+      candidate.preferredDurationMinutes <= 180
+        ? Math.round(candidate.preferredDurationMinutes)
+        : defaultsWithRestore.preferredDurationMinutes,
+    dailySessionsGoal:
+      typeof candidate.dailySessionsGoal === 'number' &&
+      Number.isFinite(candidate.dailySessionsGoal) &&
+      candidate.dailySessionsGoal > 0
+        ? Math.round(candidate.dailySessionsGoal)
+        : defaultsWithRestore.dailySessionsGoal,
     dailyGoalMinutes:
       typeof candidate.dailyGoalMinutes === 'number' &&
       Number.isFinite(candidate.dailyGoalMinutes) &&
@@ -197,17 +240,22 @@ export function sanitizeSessionRecords(
         ? Math.max(1, Math.round(rec.actualMinutes))
         : Math.max(1, Math.round(rec.durationMinutes));
 
+    const safeIsoDate = /^\d{4}-\d{2}-\d{2}$/.test(rec.isoDate)
+      ? rec.isoDate
+      : fallbackIsoDate;
+
     valid.push({
       id: rec.id,
       label: typeof rec.label === 'string' ? rec.label : 'Deep work',
       durationMinutes: Math.max(1, Math.round(rec.durationMinutes)),
       plannedMinutes:
-        typeof rec.plannedMinutes === 'number'
+        typeof rec.plannedMinutes === 'number' && Number.isFinite(rec.plannedMinutes)
           ? rec.plannedMinutes
           : Math.max(1, Math.round(rec.durationMinutes)),
       actualMinutes,
       actualFocusedSeconds:
-        typeof rec.actualFocusedSeconds === 'number'
+        typeof rec.actualFocusedSeconds === 'number' &&
+        Number.isFinite(rec.actualFocusedSeconds)
           ? rec.actualFocusedSeconds
           : actualMinutes * 60,
       completionStatus:
@@ -221,12 +269,13 @@ export function sanitizeSessionRecords(
         typeof rec.completedAt === 'string'
           ? rec.completedAt
           : new Date().toISOString(),
-      isoDate: rec.isoDate,
+      isoDate: safeIsoDate,
       hourOfDay:
         typeof rec.hourOfDay === 'number' &&
+        Number.isFinite(rec.hourOfDay) &&
         rec.hourOfDay >= 0 &&
         rec.hourOfDay <= 23
-          ? rec.hourOfDay
+          ? Math.floor(rec.hourOfDay)
           : 10,
       sceneId,
       chamberId,
@@ -373,6 +422,60 @@ export function loadAndMigrateRestoreSessions(
   return [];
 }
 
+export function sanitizeRoutines(raw: unknown): FocusRoutine[] {
+  if (!Array.isArray(raw)) return DEFAULT_FOCUS_ROUTINES;
+  const valid: FocusRoutine[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Partial<FocusRoutine>;
+    if (typeof rec.id !== 'string' || typeof rec.name !== 'string') continue;
+    const focusDurationMinutes =
+      typeof rec.focusDurationMinutes === 'number' &&
+      Number.isFinite(rec.focusDurationMinutes) &&
+      rec.focusDurationMinutes >= 5 &&
+      rec.focusDurationMinutes <= 180
+        ? Math.round(rec.focusDurationMinutes)
+        : 25;
+    const breakDurationMinutes =
+      typeof rec.breakDurationMinutes === 'number' &&
+      Number.isFinite(rec.breakDurationMinutes) &&
+      rec.breakDurationMinutes >= 1 &&
+      rec.breakDurationMinutes <= 60
+        ? Math.round(rec.breakDurationMinutes)
+        : 5;
+    const sceneId: FocusSceneId =
+      rec.sceneId && rec.sceneId in FOCUS_SCENES
+        ? rec.sceneId
+        : 'electric-quiet';
+    const orbDesign: OrbDesignId =
+      rec.orbDesign && VALID_ORB_DESIGNS.includes(rec.orbDesign)
+        ? rec.orbDesign
+        : 'celestial-jelly';
+
+    valid.push({
+      id: rec.id,
+      name: rec.name.trim() || 'Focus Routine',
+      description:
+        typeof rec.description === 'string'
+          ? rec.description
+          : 'Personalized sanctuary focus routine.',
+      focusDurationMinutes,
+      sceneId,
+      chamberId: normalizeChamberId(rec.chamberId),
+      orbDesign,
+      breakDurationMinutes,
+      targetSessionsCount:
+        typeof rec.targetSessionsCount === 'number' &&
+        Number.isFinite(rec.targetSessionsCount) &&
+        rec.targetSessionsCount >= 1
+          ? Math.round(rec.targetSessionsCount)
+          : 2,
+      isCustom: Boolean(rec.isCustom),
+    });
+  }
+  return valid.length > 0 ? valid : DEFAULT_FOCUS_ROUTINES;
+}
+
 export function loadAndMigrateRoutines(storage?: StorageLike): FocusRoutine[] {
   const store =
     storage ?? (typeof window !== 'undefined' ? window.localStorage : undefined);
@@ -381,10 +484,7 @@ export function loadAndMigrateRoutines(storage?: StorageLike): FocusRoutine[] {
   try {
     const raw = store.getItem(STORAGE_KEYS.ROUTINES);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
+      return sanitizeRoutines(JSON.parse(raw));
     }
   } catch {
     // Ignore

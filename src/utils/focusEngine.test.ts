@@ -1142,6 +1142,62 @@ test('Final Integration: versioned storage migration preserves legacy settings/s
   );
   assert.equal(focusSummary.actualMinutes, 0);
   assert.equal(focusSummary.completedCount, 0);
+
+  // 5. Corrupted localStorage entries (bad dates, invalid numbers, broken routines) sanitize safely
+  const {
+    loadAndMigrateRoutines,
+    sanitizeRoutines,
+    sanitizeSessionRecords,
+    sanitizeUserSettings,
+  } = await import('./storageMigration');
+
+  const corruptedStorage = createMockStorage({
+    [STORAGE_KEYS.SETTINGS]: '{broken-json',
+    [STORAGE_KEYS.ROUTINES]: JSON.stringify([
+      null,
+      { id: 'r1', name: 'Bad Routine', focusDurationMinutes: 'NaN', sceneId: 'unknown' },
+    ]),
+  });
+  const recoveredSettings = loadAndMigrateSettings(corruptedStorage);
+  assert.equal(recoveredSettings.orbDesign, 'celestial-jelly');
+
+  const safeSettings = sanitizeUserSettings({
+    orbDesign: 'bad-design',
+    preferredSceneId: 'nonexistent',
+    dailyGoalMinutes: -50,
+    preferredDurationMinutes: Number.NaN,
+    ambienceVolume: 5,
+  });
+  assert.equal(safeSettings.orbDesign, 'celestial-jelly');
+  assert.equal(safeSettings.preferredSceneId, 'electric-quiet');
+  assert.equal(safeSettings.dailyGoalMinutes, 180);
+  assert.equal(safeSettings.preferredDurationMinutes, 45);
+  assert.equal(safeSettings.ambienceVolume, 1);
+
+  const safeSessions = sanitizeSessionRecords(
+    [
+      null,
+      {
+        id: 'corrupt-date-1',
+        durationMinutes: 25,
+        isoDate: 'invalid-date',
+        sceneId: 'unknown-scene',
+      },
+    ],
+    '2026-11-12',
+    false
+  );
+  assert.equal(safeSessions.length, 1);
+  assert.equal(safeSessions[0].isoDate, '2026-11-12');
+  assert.equal(safeSessions[0].sceneId, 'electric-quiet');
+
+  const safeRoutines = loadAndMigrateRoutines(corruptedStorage);
+  assert.equal(safeRoutines.length, 1);
+  assert.equal(safeRoutines[0].focusDurationMinutes, 25);
+  assert.equal(safeRoutines[0].sceneId, 'electric-quiet');
+
+  const fallbackRoutines = sanitizeRoutines([]);
+  assert.equal(fallbackRoutines.length >= 5, true);
 });
 
 

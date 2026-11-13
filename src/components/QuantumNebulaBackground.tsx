@@ -246,12 +246,14 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         isSoftwareGl,
         liveStateRef.current.reducedMotion
       );
-      let appliedPixelRatio = Number(
-        (
-          currentProfile.pixelRatioCap *
-          currentProfile.internalResolutionScale
-        ).toFixed(2)
-      );
+      let appliedPixelRatio = isSoftwareGl
+        ? currentProfile.internalResolutionScale
+        : Number(
+            (
+              currentProfile.pixelRatioCap *
+              currentProfile.internalResolutionScale
+            ).toFixed(2)
+          );
 
       renderer = new THREE.WebGLRenderer({
         antialias: !isSoftwareGl,
@@ -548,7 +550,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
             frameId = window.setTimeout(poll, 5);
           } else {
             if (sync) gl.deleteSync(sync);
-            frameId = window.setTimeout(cb, 80);
+            frameId = window.setTimeout(cb, 32);
           }
         };
         frameId = window.setTimeout(poll, 5);
@@ -602,7 +604,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
 
         // Dynamically adjust pixel ratio & draw ranges when profile or dynamic scale shifts
         const targetPixelRatio = isSoftwareGl
-          ? 1
+          ? currentProfile.internalResolutionScale
           : Number(
               Math.max(
                 0.85,

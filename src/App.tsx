@@ -142,7 +142,12 @@ export default function App() {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.sceneId && FOCUS_SCENES[parsed.sceneId as FocusSceneId]) {
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          parsed.sceneId &&
+          FOCUS_SCENES[parsed.sceneId as FocusSceneId]
+        ) {
           return parsed.sceneId;
         }
       }
@@ -161,7 +166,9 @@ export default function App() {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed.chamberId) return normalizeChamberId(parsed.chamberId);
+        if (parsed && typeof parsed === 'object' && parsed.chamberId) {
+          return normalizeChamberId(parsed.chamberId);
+        }
       }
     } catch {
       // ignore
@@ -174,8 +181,15 @@ export default function App() {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (typeof parsed.durationMinutes === 'number') {
-          return parsed.durationMinutes;
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          typeof parsed.durationMinutes === 'number' &&
+          Number.isFinite(parsed.durationMinutes) &&
+          parsed.durationMinutes >= 5 &&
+          parsed.durationMinutes <= 180
+        ) {
+          return Math.round(parsed.durationMinutes);
         }
       }
     } catch {
@@ -189,7 +203,13 @@ export default function App() {
       const raw = localStorage.getItem(STORAGE_KEYS.STATE);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (typeof parsed.sessionLabel === 'string') return parsed.sessionLabel;
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          typeof parsed.sessionLabel === 'string'
+        ) {
+          return parsed.sessionLabel;
+        }
       }
     } catch {
       // ignore
