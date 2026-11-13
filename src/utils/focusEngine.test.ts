@@ -764,16 +764,27 @@ test('Stage 2: Reflect TodaySummary, WeeklyOverview, PersonalFocusPatterns (incl
   );
   assert.equal(RESTORE_ENVIRONMENTS.length, 4);
   assert.equal(QUIET_MOMENT_PRESETS.length, 3);
-  assert.equal(BREATHING_PRESETS.length >= 4, true);
+  assert.equal(BREATHING_PRESETS.length, 4); // Three curated purposes + hidden Custom Cadence
 
-  // Verify breathing phase calculation
-  const boxPreset = BREATHING_PRESETS.find((b) => b.id === 'box-4-4-4-4')!;
-  const inhalePhase = calculateBreathingPhaseAtTime(boxPreset, 2.0);
+  // Liquid Lens exposes three distinct, no-forced-hold breathing purposes.
+  const curatedBreaths = BREATHING_PRESETS.filter((preset) => preset.id !== 'custom');
+  assert.deepEqual(
+    curatedBreaths.map((preset) => preset.name),
+    ['Find Your Balance', 'Release Tension', 'Prepare for Rest']
+  );
+  assert.deepEqual(
+    curatedBreaths.map((preset) => [preset.inhaleSeconds, preset.holdInSeconds, preset.exhaleSeconds, preset.holdOutSeconds]),
+    [[5, 0, 5, 0], [4, 0, 6, 0], [5, 0, 7, 0]]
+  );
+
+  // Verify a cadence transitions directly from inhale to exhale without a forced hold.
+  const balancePreset = curatedBreaths[0];
+  const inhalePhase = calculateBreathingPhaseAtTime(balancePreset, 2.0);
   assert.equal(inhalePhase.phase, 'inhale');
   assert.equal(inhalePhase.expansion > 0 && inhalePhase.expansion < 1, true);
-  const holdInPhase = calculateBreathingPhaseAtTime(boxPreset, 5.0);
-  assert.equal(holdInPhase.phase, 'hold-in');
-  assert.equal(holdInPhase.expansion, 1);
+  const exhalePhase = calculateBreathingPhaseAtTime(balancePreset, 5.0);
+  assert.equal(exhalePhase.phase, 'exhale');
+  assert.equal(exhalePhase.expansion < 1, true);
 
   // Verify empty state for PersonalFocusPatterns and AuraGarden
   const emptyPatterns = calculatePersonalFocusPatterns([]);
