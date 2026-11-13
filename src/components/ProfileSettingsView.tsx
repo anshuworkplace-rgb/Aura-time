@@ -64,6 +64,7 @@ interface ProfileSettingsViewProps {
   onResetAllData: () => void;
   onOpenLandingPage: () => void;
   onOpenOnboarding: () => void;
+  consoleSection?: 'preferences' | 'personal-data';
 }
 
 export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
@@ -79,6 +80,7 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
   onResetAllData,
   onOpenLandingPage,
   onOpenOnboarding,
+  consoleSection = 'preferences',
 }) => {
   const [notifStatus, setNotifStatus] = useState<string>(() => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -298,27 +300,43 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
     }
   };
 
+  const isPersonalDataView = consoleSection === 'personal-data';
+
   return (
     <section
       data-testid="profile-settings-view"
+      data-console-section={consoleSection}
       aria-label="Sanctuary Profile and Settings"
-      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-20 pb-24 flex flex-col"
+      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-4 pb-24 flex flex-col"
     >
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 mb-6">
         <div>
           <div className="flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-[#2FE8FF]" />
-            <span className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#2FE8FF]">
-              PROFILE & SANCTUARY CALIBRATION
+            <span
+              className={`inline-block w-2 h-2 rounded-full ${
+                isPersonalDataView ? 'bg-[#38F8A8]' : 'bg-[#2FE8FF]'
+              }`}
+            />
+            <span
+              className={`text-[11px] font-mono uppercase tracking-[0.2em] ${
+                isPersonalDataView ? 'text-[#38F8A8]' : 'text-[#2FE8FF]'
+              }`}
+            >
+              {isPersonalDataView
+                ? 'AURA CONSOLE · PERSONAL DATA & OWNERSHIP'
+                : 'AURA CONSOLE · SANCTUARY PREFERENCES'}
             </span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] tracking-tight mt-1">
-            Personal Sanctuary Preferences
+            {isPersonalDataView
+              ? 'Personal Data, Privacy & Sync Boundary'
+              : 'Personal Sanctuary Preferences'}
           </h1>
           <p className="text-xs sm:text-sm text-[#A3A1BA] mt-0.5">
-            Personal Focus Profile, organisms, soundscapes, optional sync, and
-            DPDP-aligned privacy controls.
+            {isPersonalDataView
+              ? 'Local-first journal ownership, DPDP consent controls, optional cloud sync, JSON export, and reset tools.'
+              : 'Personal Focus Profile, organisms, soundscapes, audio calibration, and focus goal targets.'}
           </p>
         </div>
 
@@ -347,8 +365,13 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left Column (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
+        {/* Preferences Column (7 cols) */}
+        <div
+          data-testid="aura-console-preferences-column"
+          className={`lg:col-span-7 space-y-6 ${
+            isPersonalDataView ? 'order-2 lg:order-2 opacity-90' : 'order-1'
+          }`}
+        >
           {/* 0. Personal Focus Profile (AURA INTELLIGENCE) */}
           <div
             data-testid="personal-focus-profile-card"
@@ -830,8 +853,13 @@ export const ProfileSettingsView: React.FC<ProfileSettingsViewProps> = ({
           </div>
         </div>
 
-        {/* Right Column (5 cols) */}
-        <div className="lg:col-span-5 space-y-6">
+        {/* Personal Data & Goals Column (5 cols) */}
+        <div
+          data-testid="aura-console-personal-data-column"
+          className={`lg:col-span-5 space-y-6 ${
+            isPersonalDataView ? 'order-1 lg:order-1' : 'order-2'
+          }`}
+        >
           {/* 3. Timer & Goal Defaults */}
           <div className="aura-glass rounded-3xl p-6">
             <div className="flex items-center gap-2 mb-4">

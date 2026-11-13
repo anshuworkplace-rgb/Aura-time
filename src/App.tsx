@@ -1,22 +1,32 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Compass,
   Wind,
   BarChart3,
-  User,
+  Sliders,
+  ShieldCheck,
   Sparkles,
   BookOpen,
   Play,
+  X,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   ActiveOverlay,
+  AuraConsoleSectionId,
   ChamberId,
   FocusImmersionMode,
   FocusRoutine,
   FocusSceneId,
-  NavigationTab,
+  LiquidLensSubMode,
+  OrbDesignId,
+  RestorePreferenceCompatibility,
   RestoreSessionRecord,
+  SanctuaryExperienceMode,
+  SanctuaryNavigationTarget,
+  SanctuaryOrganismId,
   SessionRecord,
+  SharedAudioControlsContract,
+  SharedSanctuaryInteractionContract,
   SmartRecommendation,
   TaskBreakdownStep,
   TimerPhase,
@@ -24,12 +34,15 @@ import {
   UserSettings,
 } from './types/aura';
 import {
+  BREATHING_PRESETS,
   CHAMBERS,
   DEFAULT_USER_SETTINGS,
   FOCUS_SCENES,
   MAX_SCRUB_MINUTES,
   MIN_SCRUB_MINUTES,
   ORB_DESIGNS,
+  QUIET_MOMENT_PRESETS,
+  RESTORE_ENVIRONMENTS,
   calculateDailyTotal,
   calculateProgress,
   createActualSessionRecord,
@@ -58,6 +71,7 @@ import { AuraButton } from './components/AuraButton';
 import {
   HomeStageLayout,
   HomeStageOrbitalFrame,
+  SanctuaryOrganismSelector,
 } from './components/HomeStageAtelier';
 import { RestoreExperience } from './components/RestoreExperience';
 import { ReflectExperience } from './components/ReflectExperience';
@@ -75,17 +89,86 @@ const STORAGE_KEYS = {
   SOUNDSCAPE: 'aura_selected_soundscape_v2',
 };
 
+const VALID_ORB_DESIGNS: readonly OrbDesignId[] = [
+  'original',
+  'celestial-jelly',
+  'living-bloom',
+];
+
+function sanitizeSettings(raw: unknown): UserSettings {
+  if (!raw || typeof raw !== 'object') return DEFAULT_USER_SETTINGS;
+  const candidate = raw as Partial<UserSettings>;
+  const orbDesign: OrbDesignId =
+    candidate.orbDesign && VALID_ORB_DESIGNS.includes(candidate.orbDesign)
+      ? candidate.orbDesign
+      : DEFAULT_USER_SETTINGS.orbDesign;
+
+  return {
+    ...DEFAULT_USER_SETTINGS,
+    ...candidate,
+    orbDesign,
+    dailyGoalMinutes:
+      typeof candidate.dailyGoalMinutes === 'number' &&
+      Number.isFinite(candidate.dailyGoalMinutes) &&
+      candidate.dailyGoalMinutes > 0
+        ? candidate.dailyGoalMinutes
+        : DEFAULT_USER_SETTINGS.dailyGoalMinutes,
+    breakMinutes:
+      typeof candidate.breakMinutes === 'number' &&
+      Number.isFinite(candidate.breakMinutes) &&
+      candidate.breakMinutes > 0
+        ? candidate.breakMinutes
+        : DEFAULT_USER_SETTINGS.breakMinutes,
+    ambienceVolume:
+      typeof candidate.ambienceVolume === 'number' &&
+      Number.isFinite(candidate.ambienceVolume)
+        ? Math.max(0, Math.min(1, candidate.ambienceVolume))
+        : DEFAULT_USER_SETTINGS.ambienceVolume,
+    alertVolume:
+      typeof candidate.alertVolume === 'number' &&
+      Number.isFinite(candidate.alertVolume)
+        ? Math.max(0, Math.min(1, candidate.alertVolume))
+        : DEFAULT_USER_SETTINGS.alertVolume,
+    backgroundMix:
+      typeof candidate.backgroundMix === 'number' &&
+      Number.isFinite(candidate.backgroundMix)
+        ? Math.max(0, Math.min(1, candidate.backgroundMix))
+        : DEFAULT_USER_SETTINGS.backgroundMix,
+  };
+}
+
+function sanitizeSessions(raw: unknown, fallbackIsoDate: string): SessionRecord[] {
+  if (!Array.isArray(raw)) return generateSeedSessions(fallbackIsoDate);
+  const valid = raw.filter(
+    (item): item is SessionRecord =>
+      Boolean(item) &&
+      typeof item === 'object' &&
+      typeof (item as SessionRecord).id === 'string' &&
+      typeof (item as SessionRecord).isoDate === 'string' &&
+      typeof (item as SessionRecord).durationMinutes === 'number'
+  );
+  return valid;
+}
+
 export default function App() {
   const todayIsoDate = getLocalIsoDate();
 
-  // 0. Primary Navigation State (Focus | Restore | Reflect | Profile)
-  const [activeNavTab, setActiveNavTab] = useState<NavigationTab>('focus');
+  // 0. Unified Sanctuary Navigation State:
+  // - 3 Primary Organisms: Liquid Lens ('original'), Celestial Jelly ('celestial-jelly'), Living Bloom ('living-bloom')
+  // - 1 Personal Control Center: Aura Console ('my-rhythm' | 'preferences' | 'personal-data')
+  const [isAuraConsoleOpen, setIsAuraConsoleOpen] = useState<boolean>(false);
+  const [activeConsoleSection, setActiveConsoleSection] =
+    useState<AuraConsoleSectionId>('my-rhythm');
+  const [liquidLensMode, setLiquidLensMode] =
+    useState<SanctuaryExperienceMode>('restore');
+  const [liquidLensSubMode, setLiquidLensSubMode] =
+    useState<LiquidLensSubMode>('breathe');
 
   // 1. User Settings (defaults to Celestial Jelly organism)
   const [settings, setSettings] = useState<UserSettings>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-      if (raw) return { ...DEFAULT_USER_SETTINGS, ...JSON.parse(raw) };
+      if (raw) return sanitizeSettings(JSON.parse(raw));
     } catch {
       // ignore
     }
@@ -97,8 +180,7 @@ export default function App() {
     try {
       const raw = localStorage.getItem(STORAGE_KEYS.SESSIONS);
       if (raw) {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) return parsed;
+        return sanitizeSessions(JSON.parse(raw), todayIsoDate);
       }
     } catch {
       // ignore
@@ -223,7 +305,7 @@ export default function App() {
   // Track initial visit once per mount
   useEffect(() => {
     trackProductEvent('first_visit', settings.productAnalyticsConsent !== false, {
-      nav: activeNavTab,
+      organism: settings.orbDesign ?? 'celestial-jelly',
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -312,7 +394,7 @@ export default function App() {
 
   // Auto-hide control dock during active running session until pointer/keyboard activity
   useEffect(() => {
-    if (status !== 'running' || activeNavTab !== 'focus') {
+    if (status !== 'running' || isAuraConsoleOpen) {
       setRailVisible(true);
       return;
     }
@@ -332,7 +414,7 @@ export default function App() {
       window.removeEventListener('pointermove', reveal);
       window.removeEventListener('keydown', reveal);
     };
-  }, [status, activeNavTab]);
+  }, [status, isAuraConsoleOpen]);
 
   const updateSettings = useCallback((partial: Partial<UserSettings>) => {
     setSettings((prev) => ({ ...prev, ...partial }));
@@ -585,11 +667,36 @@ export default function App() {
     [settings.productAnalyticsConsent]
   );
 
+  // Unified Sanctuary Organism Selection Handler
+  const handleSelectOrganism = useCallback(
+    (
+      organismId: SanctuaryOrganismId,
+      options?: { experienceMode?: SanctuaryExperienceMode }
+    ) => {
+      updateSettings({ orbDesign: organismId });
+      setIsAuraConsoleOpen(false);
+      if (organismId === 'original') {
+        setLiquidLensMode(options?.experienceMode ?? 'restore');
+      } else {
+        setLiquidLensMode('focus');
+      }
+    },
+    [updateSettings]
+  );
+
+  const handleOpenAuraConsole = useCallback(
+    (section: AuraConsoleSectionId = 'my-rhythm') => {
+      setActiveConsoleSection(section);
+      setIsAuraConsoleOpen(true);
+    },
+    []
+  );
+
   // Stage 3: Smart Recommendations, Personalized Routines & Task Breakdown handlers
   const handleApplyRecommendation = useCallback(
     (rec: SmartRecommendation) => {
       if (rec.applyPayload.openRestore) {
-        setActiveNavTab('restore');
+        handleSelectOrganism('original', { experienceMode: 'restore' });
         return;
       }
       targetEndTimestampRef.current = null;
@@ -607,9 +714,12 @@ export default function App() {
         handleSelectSoundscape(rec.applyPayload.chamberId);
       }
       setStatus('idle');
-      setActiveNavTab('focus');
+      setIsAuraConsoleOpen(false);
+      if ((settings.orbDesign ?? 'celestial-jelly') === 'original') {
+        setLiquidLensMode('focus');
+      }
     },
-    [handleSelectSoundscape]
+    [handleSelectOrganism, handleSelectSoundscape, settings.orbDesign]
   );
 
   const handleApplyRoutine = useCallback(
@@ -622,13 +732,15 @@ export default function App() {
       setRemainingSeconds(mins * 60);
       setSceneId(routine.sceneId);
       handleSelectSoundscape(routine.chamberId);
+      const nextOrb = routine.orbDesign ?? 'celestial-jelly';
       updateSettings({
-        orbDesign: routine.orbDesign ?? 'celestial-jelly',
+        orbDesign: nextOrb,
         breakMinutes: routine.breakDurationMinutes,
       });
       setSessionLabel(routine.name);
       setStatus('idle');
-      setActiveNavTab('focus');
+      setIsAuraConsoleOpen(false);
+      setLiquidLensMode('focus');
     },
     [handleSelectSoundscape, updateSettings]
   );
@@ -680,7 +792,8 @@ export default function App() {
       handleSelectSoundscape(step.recommendedChamberId);
       setSessionLabel(step.title);
       setStatus('idle');
-      setActiveNavTab('focus');
+      setIsAuraConsoleOpen(false);
+      setLiquidLensMode('focus');
     },
     [handleSelectSoundscape]
   );
@@ -748,7 +861,19 @@ export default function App() {
         return;
       }
 
-      if (e.code === 'Space' && activeNavTab === 'focus') {
+      if (isAuraConsoleOpen) {
+        if (e.key === 'Escape') {
+          setIsAuraConsoleOpen(false);
+        }
+        return;
+      }
+
+      const isFocusStageActive =
+        !isAuraConsoleOpen &&
+        ((settings.orbDesign ?? 'celestial-jelly') !== 'original' ||
+          liquidLensMode === 'focus');
+
+      if (e.code === 'Space' && isFocusStageActive) {
         if (
           target &&
           (target.tagName === 'BUTTON' ||
@@ -763,17 +888,17 @@ export default function App() {
         }
         e.preventDefault();
         handlePrimaryAction();
-      } else if (e.key.toLowerCase() === 'f' && activeNavTab === 'focus') {
+      } else if (e.key.toLowerCase() === 'f' && isFocusStageActive) {
         e.preventDefault();
         toggleBrowserFullScreen();
         setImmersionMode((prev) => (prev === 'deep' ? 'standard' : 'deep'));
       } else if (e.key.toLowerCase() === 'm') {
         e.preventDefault();
         setIsSoundPlaying((prev) => !prev);
-      } else if (e.key.toLowerCase() === 'r' && activeNavTab === 'focus') {
+      } else if (e.key.toLowerCase() === 'r' && isFocusStageActive) {
         e.preventDefault();
         handleReset();
-      } else if (e.key.toLowerCase() === 's' && activeNavTab === 'focus') {
+      } else if (e.key.toLowerCase() === 's' && isFocusStageActive) {
         e.preventDefault();
         if (status === 'running' || status === 'paused') {
           handleFinalizeSession(true);
@@ -784,11 +909,13 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [
-    activeNavTab,
     activeOverlay,
     handleFinalizeSession,
     handlePrimaryAction,
     handleReset,
+    isAuraConsoleOpen,
+    liquidLensMode,
+    settings.orbDesign,
     status,
     toggleBrowserFullScreen,
   ]);
@@ -796,10 +923,20 @@ export default function App() {
   const activeScene = FOCUS_SCENES[sceneId] || FOCUS_SCENES['electric-quiet'];
   const activeChamber =
     CHAMBERS.find((c) => c.id === chamberId) || CHAMBERS[0];
+  const activeOrganism: SanctuaryOrganismId =
+    settings.orbDesign ?? 'celestial-jelly';
   const activeOrbMeta =
-    ORB_DESIGNS.find(
-      (o) => o.id === (settings.orbDesign ?? 'celestial-jelly')
-    ) || ORB_DESIGNS[1];
+    ORB_DESIGNS.find((o) => o.id === activeOrganism) || ORB_DESIGNS[1];
+  const experienceMode: SanctuaryExperienceMode =
+    activeOrganism === 'original' ? liquidLensMode : 'focus';
+  const isFocusStageView =
+    !isAuraConsoleOpen &&
+    (activeOrganism !== 'original' || liquidLensMode === 'focus');
+  const isLiquidLensRestoreView =
+    !isAuraConsoleOpen &&
+    activeOrganism === 'original' &&
+    liquidLensMode === 'restore';
+
   const progress = calculateProgress(remainingSeconds, totalSeconds);
   const todayMinutes = calculateDailyTotal(sessions, todayIsoDate);
   const dailyGoalRatio = Math.min(
@@ -821,6 +958,148 @@ export default function App() {
     return recs[0] || null;
   }, [durationMinutes, sceneId, sessions, settings, todayIsoDate]);
 
+  // Shared Audio Contract for AI Studio 2 Integration Modules
+  const sharedAudioContract = useMemo<SharedAudioControlsContract>(
+    () => ({
+      isPlaying: isSoundPlaying && !settings.soundMuted,
+      muted: Boolean(settings.soundMuted),
+      activeChamberId: chamberId,
+      activeChamber,
+      ambienceVolume: settings.ambienceVolume,
+      alertVolume: settings.alertVolume,
+      audioEnergy: soundEngine.getAudioBands().overall,
+      audioReactive: settings.audioReactive,
+      onTogglePlay: (forcePlaying) => {
+        setIsSoundPlaying((prev) =>
+          typeof forcePlaying === 'boolean' ? forcePlaying : !prev
+        );
+      },
+      onSelectChamber: handleSelectSoundscape,
+      onPreviewChamber: (id, vol) => {
+        soundEngine.previewSoundscape(id, vol ?? settings.ambienceVolume);
+      },
+      onChangeAmbienceVolume: (vol) =>
+        updateSettings({ ambienceVolume: vol, soundMuted: false }),
+      onChangeAlertVolume: (vol) => updateSettings({ alertVolume: vol }),
+      onToggleMute: () =>
+        updateSettings({ soundMuted: !settings.soundMuted }),
+      onPlayGentleBell: (vol) =>
+        soundEngine.playRestoreCompletionChime(vol ?? settings.alertVolume),
+    }),
+    [
+      activeChamber,
+      chamberId,
+      handleSelectSoundscape,
+      isSoundPlaying,
+      settings.alertVolume,
+      settings.ambienceVolume,
+      settings.audioReactive,
+      settings.soundMuted,
+      updateSettings,
+    ]
+  );
+
+  // Unified Navigation Callback for AI Studio 2 Integration Modules
+  const handleSanctuaryNavigate = useCallback(
+    (target: SanctuaryNavigationTarget) => {
+      if (target.destination === 'organism') {
+        handleSelectOrganism(target.organismId, {
+          experienceMode: target.experienceMode,
+        });
+        if (target.liquidLensSubMode) {
+          setLiquidLensSubMode(target.liquidLensSubMode);
+        }
+      } else if (target.destination === 'aura-console') {
+        handleOpenAuraConsole(target.section ?? 'my-rhythm');
+      } else if (target.destination === 'overlay') {
+        setActiveOverlay(target.overlay);
+      } else if (target.destination === 'close-panels') {
+        setIsAuraConsoleOpen(false);
+        setActiveOverlay('none');
+      }
+    },
+    [handleOpenAuraConsole, handleSelectOrganism]
+  );
+
+  // Shared Sanctuary Interaction Contract for AI Studio 2 Integration Modules
+  const sanctuaryInteractionContract =
+    useMemo<SharedSanctuaryInteractionContract>(
+      () => ({
+        activeOrganism,
+        experienceMode,
+        sessionStatus: status,
+        sessionPhase: phase,
+        activeSceneId: sceneId,
+        activeScene,
+        audio: sharedAudioContract,
+        openPanel: isAuraConsoleOpen ? 'aura-console' : activeOverlay,
+        isAuraConsoleOpen,
+        activeConsoleSection,
+        reducedMotion: settings.reducedMotion,
+        onSelectOrganism: handleSelectOrganism,
+        onSelectScene: handleSelectScene,
+        onOpenAuraConsole: handleOpenAuraConsole,
+        onClosePanel: () => {
+          setIsAuraConsoleOpen(false);
+          setActiveOverlay('none');
+        },
+        onNavigate: handleSanctuaryNavigate,
+      }),
+      [
+        activeConsoleSection,
+        activeOrganism,
+        activeOverlay,
+        activeScene,
+        experienceMode,
+        handleOpenAuraConsole,
+        handleSanctuaryNavigate,
+        handleSelectOrganism,
+        handleSelectScene,
+        isAuraConsoleOpen,
+        phase,
+        sceneId,
+        settings.reducedMotion,
+        sharedAudioContract,
+        status,
+      ]
+    );
+
+  // Restore Preference Compatibility Contract for AI Studio 2 LiquidLensExperience
+  const restoreCompatibilityContract =
+    useMemo<RestorePreferenceCompatibility>(
+      () => ({
+        settings,
+        onUpdateSettings: updateSettings,
+        restoreSessions,
+        onCompleteRestoreSession: (partialRecord) => {
+          const rec: RestoreSessionRecord = {
+            ...partialRecord,
+            id: `restore-${Date.now()}`,
+            completedAt: new Date().toISOString(),
+            isoDate: getLocalIsoDate(),
+          };
+          setRestoreSessions((prev) => [rec, ...prev]);
+          trackProductEvent(
+            'restore_session_completed',
+            settings.productAnalyticsConsent !== false,
+            {
+              mode: rec.mode,
+              elapsedSeconds:
+                rec.elapsedSeconds ?? rec.durationSeconds ?? 0,
+            }
+          );
+        },
+        availableEnvironments: RESTORE_ENVIRONMENTS,
+        availableBreathingPresets: BREATHING_PRESETS,
+        availableStillnessPresets: QUIET_MOMENT_PRESETS,
+      }),
+      [restoreSessions, settings, updateSettings]
+    );
+
+  void liquidLensSubMode;
+  void sanctuaryInteractionContract;
+  void restoreCompatibilityContract;
+
   const isRunningOrPaused = status === 'running' || status === 'paused';
 
   const primaryActionText =
@@ -840,7 +1119,7 @@ export default function App() {
           : activeScene.colors.baseBg,
       }}
       className={`min-h-[100dvh] w-full text-[#F5F6FF] relative overflow-x-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
-        activeNavTab === 'focus' ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : ''
+        isFocusStageView ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : ''
       } ${settings.highContrast ? 'high-contrast' : ''}`}
     >
       {/* Real-Time 3D Dual Volumetric Aurora × GPU Fluid Dynamics Background Coupled to ORB & Soundscape */}
@@ -849,7 +1128,7 @@ export default function App() {
         chamber={activeChamber}
         activeChamberId={chamberId}
         resonancePulseTimestamp={resonancePulseTimestamp}
-        orbDesign={settings.orbDesign ?? 'celestial-jelly'}
+        orbDesign={activeOrganism}
         status={status}
         phase={phase}
         remainingSeconds={remainingSeconds}
@@ -860,29 +1139,29 @@ export default function App() {
           settings.reducedMotion ||
           settings.animationIntensity === 'calm' ||
           activeOverlay !== 'none' ||
-          activeNavTab !== 'focus'
+          isAuraConsoleOpen
         }
         performanceMode={settings.performanceMode ?? 'auto'}
         backgroundMix={settings.backgroundMix ?? 0.52}
       />
 
-      {/* Sanctuary Top Header: [AURA TIME · Current Environment] | [Focus · Restore · Reflect · Profile] | [Today's Focus · About] */}
+      {/* Unified Sanctuary Header: [AURA TIME · Atmosphere] | [Liquid Lens · Celestial Jelly · Living Bloom] | [Rhythm · Aura Console] */}
       <header
         data-testid="sanctuary-header"
         className={`fixed top-0 left-0 right-0 z-40 w-full px-3 sm:px-8 pt-2 sm:pt-3.5 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-1.5 gap-x-2 sm:gap-4 shrink-0 transition-opacity duration-700 ${
-          activeNavTab === 'focus' && isRunningOrPaused && !railVisible
+          isFocusStageView && isRunningOrPaused && !railVisible
             ? 'opacity-70 hover:opacity-100'
             : 'opacity-100'
         }`}
       >
-        {/* Zone 1: Brand Wordmark & Current Environment Pill */}
+        {/* Zone 1: Brand Wordmark & Current Atmosphere Pill */}
         <div className="order-1 flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => {
-              setActiveNavTab('focus');
+              setIsAuraConsoleOpen(false);
             }}
-            title="AURA TIME · Digital Sanctuary"
+            title="AURA TIME · Unified Digital Sanctuary"
             className="font-display text-[11px] sm:text-xs font-semibold tracking-[0.22em] text-[#F5F6FF]/95 hover:text-[#F5F6FF] transition-colors uppercase py-1 cursor-pointer whitespace-nowrap shrink-0"
           >
             AURA TIME
@@ -892,11 +1171,11 @@ export default function App() {
             type="button"
             data-testid="header-environment-badge"
             onClick={() => setActiveOverlay('scenes')}
-            title="Change Focus Organism & Atmosphere"
+            title="Change Sanctuary Organism & Atmosphere"
             className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full aura-glass text-[11px] text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
           >
             <Sparkles className="w-3 h-3 text-[#2FE8FF]" />
-            <span>{activeOrbMeta.name}</span>
+            <span>{activeOrbMeta.subtitle}</span>
             <span className="opacity-45">·</span>
             <span className="text-[#F5F6FF] font-medium">
               {activeScene.name}
@@ -906,43 +1185,24 @@ export default function App() {
           <OfflineIndicator />
         </div>
 
-        {/* Zone 2: Four-Destination Primary Navigation (Focus | Restore | Reflect | Profile) */}
-        <nav
-          role="navigation"
-          aria-label="Primary Sanctuary Navigation"
+        {/* Zone 2: Single Unified Sanctuary Experience Selector (Liquid Lens · Celestial Jelly · Living Bloom) */}
+        <div
           data-testid="primary-sanctuary-nav"
-          className="order-3 sm:order-2 w-full sm:w-auto flex items-center justify-between sm:justify-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-xl"
+          className="order-3 sm:order-2 w-full sm:w-auto flex items-center justify-center"
         >
-          {(
-            [
-              { id: 'focus', label: 'Focus', Icon: Compass },
-              { id: 'restore', label: 'Restore', Icon: Wind },
-              { id: 'reflect', label: 'Reflect', Icon: BarChart3 },
-              { id: 'profile', label: 'Profile', Icon: User },
-            ] as const
-          ).map(({ id, label, Icon }) => {
-            const isCurrent = activeNavTab === id;
-            return (
-              <button
-                key={id}
-                type="button"
-                data-testid={`nav-tab-${id}`}
-                aria-current={isCurrent ? 'page' : undefined}
-                onClick={() => setActiveNavTab(id)}
-                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap ${
-                  isCurrent
-                    ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50 shadow-[0_0_16px_rgba(47,232,255,0.2)]'
-                    : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
-                }`}
-              >
-                <Icon className="w-3.5 h-3.5 shrink-0 text-[#2FE8FF]" />
-                <span>{label}</span>
-              </button>
-            );
-          })}
-        </nav>
+          <SanctuaryOrganismSelector
+            orbDesign={activeOrganism}
+            activeScene={activeScene}
+            isAuraConsoleOpen={isAuraConsoleOpen}
+            onSelectOrbDesign={(designId) =>
+              handleSelectOrganism(designId, {
+                experienceMode: designId === 'original' ? 'restore' : 'focus',
+              })
+            }
+          />
+        </div>
 
-        {/* Zone 3: Today's Actual Focus Total, PWA Install & About / Aura Plus */}
+        {/* Zone 3: Discreet Aura Console Entry Point & Today's Rhythm Signal */}
         <div className="order-2 sm:order-3 flex items-center gap-1.5 sm:gap-2 shrink-0">
           <PWAInstallButton compact />
 
@@ -960,20 +1220,267 @@ export default function App() {
           <button
             type="button"
             data-testid="today-signal-btn"
-            onClick={() => setActiveNavTab('reflect')}
-            title="View Today's Actual Focus in Reflect Journal"
+            onClick={() => handleOpenAuraConsole('my-rhythm')}
+            title="Open My Rhythm in Aura Console"
             className="font-mono tabular-nums text-[11px] sm:text-xs text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors py-1 px-2.5 rounded-full aura-glass cursor-pointer whitespace-nowrap shrink-0"
           >
             {formatTodaySignal(todayMinutes)}
           </button>
+
+          <button
+            type="button"
+            data-testid="aura-console-trigger"
+            aria-expanded={isAuraConsoleOpen}
+            onClick={() => {
+              if (isAuraConsoleOpen) {
+                setIsAuraConsoleOpen(false);
+              } else {
+                handleOpenAuraConsole(activeConsoleSection);
+              }
+            }}
+            title="Aura Console · My Rhythm, Preferences & Personal Data"
+            className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+              isAuraConsoleOpen
+                ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/55 shadow-[0_0_16px_rgba(47,232,255,0.22)]'
+                : 'aura-glass text-[#A3A1BA] hover:text-[#F5F6FF]'
+            }`}
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#2FE8FF] shrink-0" />
+            <span>Aura Console</span>
+          </button>
         </div>
       </header>
 
-      {/* Main Destination Views */}
-      {activeNavTab === 'focus' && (
+      {/* ==================================================================== */}
+      {/* PERSONAL CONTROL CENTER: AURA CONSOLE (My Rhythm · Preferences · Personal Data) */}
+      {/* ==================================================================== */}
+      {isAuraConsoleOpen && (
+        <main
+          data-testid="aura-console-view"
+          aria-label="Aura Console Personal Control Center"
+          className="relative z-20 flex-1 overflow-y-auto pt-24 sm:pt-20 pb-12"
+        >
+          {/* Aura Console Unified Sub-Header Bar */}
+          <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 mb-4">
+            <div className="aura-glass rounded-3xl p-3 sm:p-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="w-2 h-2 rounded-full bg-[#2FE8FF] shadow-[0_0_8px_#2FE8FF]" />
+                <div>
+                  <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#2FE8FF] block">
+                    PERSONAL CONTROL CENTER
+                  </span>
+                  <h2 className="font-display text-sm sm:text-base font-semibold text-[#F5F6FF]">
+                    Aura Console
+                  </h2>
+                </div>
+              </div>
+
+              {/* 3 Canonical Sections: My Rhythm | Preferences | Personal Data */}
+              <div
+                role="tablist"
+                aria-label="Aura Console Sections"
+                data-testid="aura-console-tabs"
+                className="flex items-center gap-1 p-1 rounded-full bg-white/[0.04] border border-white/10"
+              >
+                {(
+                  [
+                    {
+                      id: 'my-rhythm',
+                      label: 'My Rhythm',
+                      Icon: BarChart3,
+                    },
+                    {
+                      id: 'preferences',
+                      label: 'Preferences',
+                      Icon: Sliders,
+                    },
+                    {
+                      id: 'personal-data',
+                      label: 'Personal Data',
+                      Icon: ShieldCheck,
+                    },
+                  ] as const
+                ).map(({ id, label, Icon }) => {
+                  const isSelected = activeConsoleSection === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      data-testid={`aura-console-tab-${id}`}
+                      onClick={() => setActiveConsoleSection(id)}
+                      className={`flex items-center gap-1.5 px-3 sm:px-4 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer whitespace-nowrap ${
+                        isSelected
+                          ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50 shadow-[0_0_14px_rgba(47,232,255,0.18)]'
+                          : 'text-[#A3A1BA] hover:text-[#F5F6FF] border border-transparent'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5 text-[#2FE8FF] shrink-0" />
+                      <span>{label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <button
+                type="button"
+                data-testid="aura-console-close-btn"
+                onClick={() => setIsAuraConsoleOpen(false)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium bg-white/[0.05] hover:bg-white/[0.1] text-[#A3A1BA] hover:text-[#F5F6FF] border border-white/10 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Return to Sanctuary</span>
+              </button>
+            </div>
+          </div>
+
+          {activeConsoleSection === 'my-rhythm' && (
+            <ReflectExperience
+              sessions={sessions}
+              scene={activeScene}
+              settings={settings}
+              routines={routines}
+              currentDurationMinutes={durationMinutes}
+              currentSceneId={sceneId}
+              onUpdateSettings={updateSettings}
+              onClearSeedSessions={handleClearSeedSessions}
+              onRestoreSeedSessions={handleRestoreSeedSessions}
+              onNavigateToFocus={() => setIsAuraConsoleOpen(false)}
+              onApplyRecommendation={handleApplyRecommendation}
+              onApplyRoutine={handleApplyRoutine}
+              onSaveRoutine={handleSaveRoutine}
+              onDuplicateRoutine={handleDuplicateRoutine}
+              onDeleteRoutine={handleDeleteRoutine}
+              onApplyTaskStep={handleApplyTaskStep}
+            />
+          )}
+
+          {(activeConsoleSection === 'preferences' ||
+            activeConsoleSection === 'personal-data') && (
+            <ProfileSettingsView
+              consoleSection={activeConsoleSection}
+              settings={settings}
+              onUpdateSettings={updateSettings}
+              sessions={sessions}
+              restoreSessions={restoreSessions}
+              routines={routines}
+              onSyncSessionsAndRoutines={(
+                nextSessions,
+                nextRestore,
+                nextRoutines
+              ) => {
+                setSessions(nextSessions);
+                setRestoreSessions(nextRestore);
+                setRoutines(nextRoutines);
+              }}
+              soundscapePlaying={isSoundPlaying}
+              onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
+              onClearSeedSessions={handleClearSeedSessions}
+              onRestoreSeedSessions={handleRestoreSeedSessions}
+              onResetAllData={handleResetAllData}
+              onOpenLandingPage={() => setActiveOverlay('landing')}
+              onOpenOnboarding={() => setActiveOverlay('onboarding')}
+            />
+          )}
+        </main>
+      )}
+
+      {/* ==================================================================== */}
+      {/* ORGANISM 1: LIQUID LENS — RESTORATIVE EXPERIENCE BOUNDARY            */}
+      {/* ==================================================================== */}
+      {isLiquidLensRestoreView && (
+        <main
+          data-testid="liquid-lens-sanctuary-view"
+          className="relative z-20 flex-1 overflow-y-auto pb-6"
+        >
+          {/* Discreet Liquid Lens Experience Mode Switcher (Restorative Experience <-> 3D Refractive Orb Stage) */}
+          <div className="relative z-30 w-full max-w-4xl mx-auto px-4 sm:px-6 pt-20 sm:pt-16 -mb-14 flex items-center justify-between gap-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full aura-glass text-[11px] text-[#A3A1BA]">
+              <Wind className="w-3.5 h-3.5 text-[#38F8A8]" />
+              <span className="font-mono uppercase tracking-wider text-[#F5F6FF]">
+                Liquid Lens · Restorative Sanctuary
+              </span>
+            </div>
+            <button
+              type="button"
+              data-testid="liquid-lens-stage-mode-toggle"
+              onClick={() => setLiquidLensMode('focus')}
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full aura-glass text-[11px] text-[#2FE8FF] hover:text-[#F5F6FF] transition-colors cursor-pointer"
+            >
+              <Sparkles className="w-3 h-3" />
+              <span>View 3D Liquid Lens Stage</span>
+            </button>
+          </div>
+
+          <RestoreExperience
+            settings={settings}
+            onUpdateSettings={updateSettings}
+            soundscapePlaying={isSoundPlaying}
+            onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
+            onSelectEnvironment={(nextSceneId, nextChamberId) => {
+              setSceneId(nextSceneId);
+              handleSelectSoundscape(nextChamberId);
+            }}
+            onReturnToFocus={() =>
+              handleSelectOrganism('celestial-jelly', {
+                experienceMode: 'focus',
+              })
+            }
+            onRecordRestoreSession={(rec) => {
+              setRestoreSessions((prev) => [rec, ...prev]);
+              trackProductEvent(
+                'restore_session_completed',
+                settings.productAnalyticsConsent !== false,
+                {
+                  mode: rec.mode,
+                  elapsedSeconds:
+                    rec.elapsedSeconds ?? rec.durationSeconds ?? 0,
+                }
+              );
+            }}
+            restoreSessionsCount={restoreSessions.length}
+          />
+
+          {/* Persistent Control Center Dock */}
+          <div className="w-full flex justify-center px-3 mt-2">
+            <ControlDock
+              status={status}
+              primaryActionText={primaryActionText}
+              onPrimaryAction={handlePrimaryAction}
+              durationMinutes={durationMinutes}
+              onChangeDuration={handleChangeDuration}
+              onAddMinutes={handleAddMinutes}
+              scrubberOpen={scrubberOpen}
+              onToggleScrubber={() => setScrubberOpen((prev) => !prev)}
+              primaryChamberId={chamberId}
+              onSelectPrimaryChamber={handleSelectSoundscape}
+              isSoundPlaying={isSoundPlaying}
+              onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
+              activeSceneId={sceneId}
+              onSelectScene={handleSelectScene}
+              immersionMode={immersionMode}
+              onChangeImmersionMode={setImmersionMode}
+              settings={settings}
+              onUpdateSettings={updateSettings}
+              isFloatingOpen={isFloatingOpen}
+              onToggleFloating={() => setIsFloatingOpen((prev) => !prev)}
+              onToggleFullScreen={toggleBrowserFullScreen}
+              onCompleteSession={() => handleFinalizeSession(true)}
+              onResetSession={handleReset}
+              onOpenOverlay={(ov) => setActiveOverlay(ov)}
+            />
+          </div>
+        </main>
+      )}
+
+      {/* ==================================================================== */}
+      {/* ORGANISMS 2 & 3 (AND LIQUID LENS 3D STAGE): PROTECTED FOCUS SANCTUARY */}
+      {/* ==================================================================== */}
+      {isFocusStageView && (
         <main
           data-testid="focus-experience-view"
-          className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-between sm:justify-center pt-24 sm:pt-16 pb-2 sm:pb-3 px-3 sm:px-4"
+          className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-between sm:justify-center pt-20 sm:pt-14 pb-2 sm:pb-3 px-3 sm:px-4"
         >
           {immersionMode === 'minimal' && isRunningOrPaused ? (
             /* Minimal Focus Option: Only the time and a subtle progress edge */
@@ -1014,12 +1521,17 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* Central Living Lens + Home Stage Orbital Frame + Single Primary Action + 4-Group Dock */
+            /* Central Living Lens + Home Stage Orbital Frame + Single Primary Action + Persistent Control Dock */
             <div className="w-full flex-1 min-h-0 flex flex-col items-center justify-between sm:justify-center">
               <HomeStageOrbitalFrame
                 stageLayout={stageLayout}
-                orbDesign={settings.orbDesign ?? 'celestial-jelly'}
-                onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+                orbDesign={activeOrganism}
+                onSelectOrbDesign={(orbDesign) =>
+                  handleSelectOrganism(orbDesign, {
+                    experienceMode:
+                      orbDesign === 'original' ? 'restore' : 'focus',
+                  })
+                }
                 activeSceneId={sceneId}
                 activeScene={activeScene}
                 onSelectScene={handleSelectScene}
@@ -1039,6 +1551,18 @@ export default function App() {
               />
 
               <div className="my-auto flex flex-col items-center justify-center">
+                {activeOrganism === 'original' && (
+                  <button
+                    type="button"
+                    data-testid="liquid-lens-open-restore-btn"
+                    onClick={() => setLiquidLensMode('restore')}
+                    className="mb-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full aura-glass text-[11px] text-[#38F8A8] hover:text-[#F5F6FF] transition-colors cursor-pointer"
+                  >
+                    <Wind className="w-3 h-3" />
+                    <span>Open Liquid Lens Restorative Sanctuary (Breathe · Stillness)</span>
+                  </button>
+                )}
+
                 <LivingLens
                   scene={activeScene}
                   chamber={activeChamber}
@@ -1048,7 +1572,7 @@ export default function App() {
                   onTriggerResonancePulse={() =>
                     setResonancePulseTimestamp(Date.now())
                   }
-                  orbDesign={settings.orbDesign ?? 'celestial-jelly'}
+                  orbDesign={activeOrganism}
                   completedSessionsCount={
                     sessions.filter(
                       (s) => (s.completionStatus ?? 'completed') === 'completed'
@@ -1077,7 +1601,11 @@ export default function App() {
                   lastCompletedSession={lastCompletedSession}
                   onPrimaryAction={handlePrimaryAction}
                   onStartBreak={handleStartBreak}
-                  onOpenRestore={() => setActiveNavTab('restore')}
+                  onOpenRestore={() =>
+                    handleSelectOrganism('original', {
+                      experienceMode: 'restore',
+                    })
+                  }
                   onStartAgain={handlePrimaryAction}
                 />
 
@@ -1145,85 +1673,6 @@ export default function App() {
         </main>
       )}
 
-      {activeNavTab === 'restore' && (
-        <main className="relative z-20 flex-1 overflow-y-auto">
-          <RestoreExperience
-            settings={settings}
-            onUpdateSettings={updateSettings}
-            soundscapePlaying={isSoundPlaying}
-            onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
-            onSelectEnvironment={(nextSceneId, nextChamberId) => {
-              setSceneId(nextSceneId);
-              handleSelectSoundscape(nextChamberId);
-            }}
-            onReturnToFocus={() => setActiveNavTab('focus')}
-            onRecordRestoreSession={(rec) => {
-              setRestoreSessions((prev) => [rec, ...prev]);
-              trackProductEvent(
-                'restore_session_completed',
-                settings.productAnalyticsConsent !== false,
-                {
-                  mode: rec.mode,
-                  elapsedSeconds: rec.elapsedSeconds ?? rec.durationSeconds ?? 0,
-                }
-              );
-            }}
-            restoreSessionsCount={restoreSessions.length}
-          />
-        </main>
-      )}
-
-      {activeNavTab === 'reflect' && (
-        <main className="relative z-20 flex-1 overflow-y-auto">
-          <ReflectExperience
-            sessions={sessions}
-            scene={activeScene}
-            settings={settings}
-            routines={routines}
-            currentDurationMinutes={durationMinutes}
-            currentSceneId={sceneId}
-            onUpdateSettings={updateSettings}
-            onClearSeedSessions={handleClearSeedSessions}
-            onRestoreSeedSessions={handleRestoreSeedSessions}
-            onNavigateToFocus={() => setActiveNavTab('focus')}
-            onApplyRecommendation={handleApplyRecommendation}
-            onApplyRoutine={handleApplyRoutine}
-            onSaveRoutine={handleSaveRoutine}
-            onDuplicateRoutine={handleDuplicateRoutine}
-            onDeleteRoutine={handleDeleteRoutine}
-            onApplyTaskStep={handleApplyTaskStep}
-          />
-        </main>
-      )}
-
-      {activeNavTab === 'profile' && (
-        <main className="relative z-20 flex-1 overflow-y-auto">
-          <ProfileSettingsView
-            settings={settings}
-            onUpdateSettings={updateSettings}
-            sessions={sessions}
-            restoreSessions={restoreSessions}
-            routines={routines}
-            onSyncSessionsAndRoutines={(
-              nextSessions,
-              nextRestore,
-              nextRoutines
-            ) => {
-              setSessions(nextSessions);
-              setRestoreSessions(nextRestore);
-              setRoutines(nextRoutines);
-            }}
-            soundscapePlaying={isSoundPlaying}
-            onToggleSoundscape={(playing) => setIsSoundPlaying(playing)}
-            onClearSeedSessions={handleClearSeedSessions}
-            onRestoreSeedSessions={handleRestoreSeedSessions}
-            onResetAllData={handleResetAllData}
-            onOpenLandingPage={() => setActiveOverlay('landing')}
-            onOpenOnboarding={() => setActiveOverlay('onboarding')}
-          />
-        </main>
-      )}
-
       {/* Barely Visible Daily-Progress Ambient Glow Near Bottom Screen Edge */}
       <footer className="relative z-20 w-full flex flex-col items-center pointer-events-none shrink-0">
         <div
@@ -1257,8 +1706,12 @@ export default function App() {
         onClose={() => setActiveOverlay('none')}
         activeSceneId={sceneId}
         onSelectScene={handleSelectScene}
-        orbDesign={settings.orbDesign ?? 'celestial-jelly'}
-        onChangeOrbDesign={(design) => updateSettings({ orbDesign: design })}
+        orbDesign={activeOrganism}
+        onChangeOrbDesign={(design) =>
+          handleSelectOrganism(design, {
+            experienceMode: design === 'original' ? 'restore' : 'focus',
+          })
+        }
         backgroundMix={settings.backgroundMix ?? 0.52}
         onChangeBackgroundMix={(mix) => updateSettings({ backgroundMix: mix })}
       />
@@ -1302,7 +1755,11 @@ export default function App() {
         durationMinutes={durationMinutes}
         settings={settings}
         onSelectScene={handleSelectScene}
-        onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+        onSelectOrbDesign={(orbDesign) =>
+          handleSelectOrganism(orbDesign, {
+            experienceMode: orbDesign === 'original' ? 'restore' : 'focus',
+          })
+        }
         onChangeDuration={handleChangeDuration}
         onSelectSoundscape={handleSelectSoundscape}
         onDismiss={() => {
@@ -1316,7 +1773,7 @@ export default function App() {
             preferredSceneId: sceneId,
           });
           setActiveOverlay('none');
-          setActiveNavTab('focus');
+          setIsAuraConsoleOpen(false);
           if (startFirstSessionNow) {
             const startSecs = durationMinutes * 60;
             setTotalSeconds(startSecs);
@@ -1325,6 +1782,7 @@ export default function App() {
             setPhase('focus');
             setStatus('running');
             setIsSoundPlaying(true);
+            setLiquidLensMode('focus');
           }
         }}
       />
@@ -1333,13 +1791,23 @@ export default function App() {
       <LandingPageOverlay
         isOpen={activeOverlay === 'landing'}
         activeSceneId={sceneId}
-        activeOrbDesign={settings.orbDesign ?? 'celestial-jelly'}
+        activeOrbDesign={activeOrganism}
         onSelectScene={handleSelectScene}
-        onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+        onSelectOrbDesign={(orbDesign) =>
+          handleSelectOrganism(orbDesign, {
+            experienceMode: orbDesign === 'original' ? 'restore' : 'focus',
+          })
+        }
         onEnterSanctuary={(targetTab) => {
           setActiveOverlay('none');
-          if (targetTab) {
-            setActiveNavTab(targetTab);
+          if (targetTab === 'restore') {
+            handleSelectOrganism('original', { experienceMode: 'restore' });
+          } else if (targetTab === 'reflect') {
+            handleOpenAuraConsole('my-rhythm');
+          } else if (targetTab === 'profile') {
+            handleOpenAuraConsole('preferences');
+          } else {
+            setIsAuraConsoleOpen(false);
           }
         }}
         onStartQuickSession={(mins, nextScene) => {
@@ -1348,7 +1816,8 @@ export default function App() {
           setRemainingSeconds(mins * 60);
           setSceneId(nextScene);
           setActiveOverlay('none');
-          setActiveNavTab('focus');
+          setIsAuraConsoleOpen(false);
+          setLiquidLensMode('focus');
         }}
         onRecordPremiumInterest={(plan) => {
           trackProductEvent(

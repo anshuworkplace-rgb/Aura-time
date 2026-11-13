@@ -301,5 +301,13 @@ export interface UserSettings {
   onboardingCompleted?: boolean;
   syncAccountEmail?: string | null;
   lastCloudSyncAt?: string | null;
+  /** Optional Liquid Lens / Restore default preferences */
+  defaultRestoreMode?: RestoreModeId;
+  defaultRestoreEnvironmentId?: RestoreEnvironmentId;
+  defaultBreathingPresetId?: BreathingPresetId;
+  defaultQuietMomentPresetId?: QuietMomentPresetId;
 }
+
+export * from './integrationContract';
+
 

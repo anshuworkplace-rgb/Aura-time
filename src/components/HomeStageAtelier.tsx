@@ -144,6 +144,76 @@ const OrganismMiniGlyph: React.FC<{
   );
 };
 
+export interface SanctuaryOrganismSelectorProps {
+  orbDesign: OrbDesignId;
+  activeScene: FocusSceneConfig;
+  isAuraConsoleOpen?: boolean;
+  onSelectOrbDesign: (id: OrbDesignId) => void;
+}
+
+/**
+ * Single Unified Sanctuary Experience Selector:
+ * 1. Liquid Lens (original — restorative experience)
+ * 2. Celestial Jelly (celestial-jelly — focus experience)
+ * 3. Living Bloom (living-bloom — focus experience)
+ */
+export const SanctuaryOrganismSelector: React.FC<
+  SanctuaryOrganismSelectorProps
+> = ({
+  orbDesign,
+  activeScene,
+  isAuraConsoleOpen = false,
+  onSelectOrbDesign,
+}) => {
+  return (
+    <nav
+      data-testid="home-orbital-organism-rail"
+      role="radiogroup"
+      aria-label="Organism Selector"
+      className="flex items-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]"
+    >
+      {ORB_DESIGNS.map((design) => {
+        const isSelected = !isAuraConsoleOpen && orbDesign === design.id;
+        const displayLabel =
+          ORGANISM_DISPLAY_LABELS[design.id] || design.name;
+        const roleTag = design.id === 'original' ? 'Restore' : 'Focus';
+        return (
+          <button
+            key={design.id}
+            type="button"
+            role="radio"
+            aria-checked={isSelected}
+            data-testid={`home-orb-node-${design.id}`}
+            onClick={() => onSelectOrbDesign(design.id)}
+            title={`${displayLabel} (${roleTag}) — ${design.description}`}
+            className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
+              isSelected
+                ? 'text-[#F5F6FF] font-semibold'
+                : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/[0.04]'
+            }`}
+            style={
+              isSelected
+                ? {
+                    background: `linear-gradient(135deg, ${activeScene.colors.primary}2E, ${activeScene.colors.secondary}22)`,
+                    boxShadow: `inset 0 0 0 1px ${activeScene.colors.secondary}55`,
+                  }
+                : undefined
+            }
+          >
+            <OrganismMiniGlyph
+              designId={design.id}
+              active={isSelected}
+              primaryColor={activeScene.colors.primary}
+              secondaryColor={activeScene.colors.secondary}
+            />
+            <span className="tracking-wide">{displayLabel}</span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+};
+
 interface HomeStageOrbitalRailsProps {
   stageLayout?: HomeStageLayout;
   orbDesign: OrbDesignId;
@@ -163,13 +233,9 @@ interface HomeStageOrbitalRailsProps {
 }
 
 /**
- * Renders:
- * 1. Top-center Organism Selector pill (`Liquid Lens` | `Celestial Jelly` | `Living Bloom`)
- * 2. Right-side Theme Spectrum Selector (`ATMOSPHERE •` with the 5 colour themes)
+ * Renders the Right-Side Theme Spectrum Selector (`ATMOSPHERE •` with the 5 colour themes)
  */
 export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
-  orbDesign,
-  onSelectOrbDesign,
   activeSceneId,
   activeScene,
   onSelectScene,
@@ -181,57 +247,7 @@ export const HomeStageOrbitalFrame: React.FC<HomeStageOrbitalRailsProps> = ({
 
   return (
     <>
-      {/* 1. First Option: Top-Center Organism Selector Pill (Liquid Lens | Celestial Jelly | Living Bloom) */}
-      <nav
-        data-testid="home-orbital-organism-rail"
-        role="radiogroup"
-        aria-label="Organism Selector"
-        className={`fixed top-[82px] sm:top-16 left-1/2 -translate-x-1/2 z-30 flex items-center gap-0.5 sm:gap-1 p-1 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1.25rem)] transition-all duration-500 ${
-          hiddenDuringSession
-            ? 'opacity-0 -translate-y-2 pointer-events-none'
-            : 'opacity-100'
-        }`}
-      >
-        {ORB_DESIGNS.map((design) => {
-          const isSelected = orbDesign === design.id;
-          const displayLabel =
-            ORGANISM_DISPLAY_LABELS[design.id] || design.name;
-          return (
-            <button
-              key={design.id}
-              type="button"
-              role="radio"
-              aria-checked={isSelected}
-              data-testid={`home-orb-node-${design.id}`}
-              onClick={() => onSelectOrbDesign(design.id)}
-              title={`${displayLabel} — ${design.description}`}
-              className={`group flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-4 py-1 sm:py-1.5 rounded-full text-[11px] sm:text-xs font-medium transition-all duration-200 cursor-pointer whitespace-nowrap shrink-0 ${
-                isSelected
-                  ? 'text-[#F5F6FF] font-semibold'
-                  : 'text-[#A3A1BA] hover:text-[#F5F6FF] hover:bg-white/[0.04]'
-              }`}
-              style={
-                isSelected
-                  ? {
-                      background: `linear-gradient(135deg, ${activeScene.colors.primary}2E, ${activeScene.colors.secondary}22)`,
-                      boxShadow: `inset 0 0 0 1px ${activeScene.colors.secondary}55`,
-                    }
-                  : undefined
-              }
-            >
-              <OrganismMiniGlyph
-                designId={design.id}
-                active={isSelected}
-                primaryColor={activeScene.colors.primary}
-                secondaryColor={activeScene.colors.secondary}
-              />
-              <span className="tracking-wide">{displayLabel}</span>
-            </button>
-          );
-        })}
-      </nav>
-
-      {/* 2. Second Option: Right-Side Colour Theme Selector (ATMOSPHERE) */}
+      {/* Right-Side Colour Theme Selector (ATMOSPHERE) */}
       <aside
         data-testid="home-orbital-spectrum-rail"
         aria-label="Colour Theme Spectrum Selector"

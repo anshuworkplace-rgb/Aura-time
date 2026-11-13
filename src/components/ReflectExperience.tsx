@@ -402,16 +402,16 @@ export const ReflectExperience: React.FC<ReflectExperienceProps> = ({
     <section
       data-testid="reflect-experience-view"
       aria-label="Reflect Focus Journal and Aura Garden"
-      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-24 sm:pt-20 pb-24 flex flex-col"
+      className="relative z-20 w-full max-w-5xl mx-auto px-4 sm:px-6 pt-4 pb-24 flex flex-col"
     >
       {/* Header & Sub-navigation */}
       <div className="flex flex-col gap-4 mb-6">
         <div className="max-w-3xl">
           <div className="text-[11px] font-mono uppercase tracking-[0.2em] text-[#2FE8FF]">
-            REFLECT · PERSONAL FOCUS JOURNAL & AURA INTELLIGENCE
+            AURA CONSOLE · MY RHYTHM & AURA INTELLIGENCE
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-semibold text-[#F5F6FF] tracking-tight mt-1">
-            Focus Patterns, Routines & My Aura Garden
+            My Rhythm, Routines & Aura Garden
           </h1>
           <p className="text-xs sm:text-sm text-[#A3A1BA] mt-0.5">
             Calm, honest reflection and deterministic session recommendations
