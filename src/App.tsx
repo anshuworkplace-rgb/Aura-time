@@ -352,22 +352,53 @@ export default function App() {
   }, []);
 
   // Immediate Smart Soundscape Switcher handler (independent of timer state)
+  // AURA RESONANCE 3.0: sound selection and focus-session activation stay in sync.
+  // Selecting a sound starts an idle/completed focus session, resumes a paused
+  // session without resetting its remaining time, and preserves a running timer.
   const handleSelectSoundscape = useCallback(
     (nextChamberId: ChamberId) => {
       const normalized = normalizeChamberId(nextChamberId);
+      const targetVolume =
+        settings.ambienceVolume <= 0 ? 0.75 : settings.ambienceVolume;
+
       setChamberId(normalized);
-      if (settings.ambienceVolume <= 0) {
-        updateSettings({
-          ambienceVolume: 0.75,
-          selectedChamberId: normalized,
-          soundMuted: false,
-        });
-      } else {
-        updateSettings({ selectedChamberId: normalized, soundMuted: false });
-      }
+      updateSettings({
+        ambienceVolume: targetVolume,
+        selectedChamberId: normalized,
+        soundMuted: false,
+      });
       setIsSoundPlaying(true);
+
+      if (status === 'idle' || status === 'completed') {
+        const startSecs = durationMinutes * 60;
+        setPhase('focus');
+        setTotalSeconds(startSecs);
+        setRemainingSeconds(startSecs);
+        setLastCompletedSession(null);
+        setScrubberOpen(false);
+        targetEndTimestampRef.current = Date.now() + startSecs * 1000;
+        setStatus('running');
+        trackProductEvent(
+          'first_session_started',
+          settings.productAnalyticsConsent !== false,
+          { durationMinutes, sceneId, chamberId: normalized }
+        );
+      } else if (status === 'paused') {
+        targetEndTimestampRef.current = Date.now() + remainingSeconds * 1000;
+        setStatus('running');
+      }
+      // When already running, changing the sound deliberately leaves the
+      // timer deadline and remaining time untouched.
     },
-    [settings.ambienceVolume, updateSettings]
+    [
+      durationMinutes,
+      remainingSeconds,
+      sceneId,
+      settings.ambienceVolume,
+      settings.productAnalyticsConsent,
+      status,
+      updateSettings,
+    ]
   );
 
   // Honest Session Completion Handler:
