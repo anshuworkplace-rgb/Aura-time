@@ -13,7 +13,6 @@ import {
   FocusImmersionMode,
   FocusRoutine,
   FocusSceneId,
-  LiquidLensSubMode,
   RestorePreferenceCompatibility,
   RestoreSessionRecord,
   SanctuaryExperienceMode,
@@ -36,7 +35,6 @@ import {
   MAX_SCRUB_MINUTES,
   MIN_SCRUB_MINUTES,
   ORB_DESIGNS,
-  QUIET_MOMENT_PRESETS,
   RESTORE_ENVIRONMENTS,
   calculateDailyTotal,
   calculateProgress,
@@ -92,8 +90,6 @@ export default function App() {
     useState<AuraConsoleSectionId>('my-rhythm');
   const [liquidLensMode, setLiquidLensMode] =
     useState<SanctuaryExperienceMode>('restore');
-  const [liquidLensSubMode, setLiquidLensSubMode] =
-    useState<LiquidLensSubMode>('breathe');
 
   // 1. User Settings (migrated across v1/v2/v3 keys)
   const [settings, setSettings] = useState<UserSettings>(() => {
@@ -952,9 +948,6 @@ export default function App() {
         handleSelectOrganism(target.organismId, {
           experienceMode: target.experienceMode,
         });
-        if (target.liquidLensSubMode) {
-          setLiquidLensSubMode(target.liquidLensSubMode);
-        }
       } else if (target.destination === 'aura-console') {
         handleOpenAuraConsole(target.section ?? 'my-rhythm');
       } else if (target.destination === 'overlay') {
@@ -1037,7 +1030,6 @@ export default function App() {
         },
         availableEnvironments: RESTORE_ENVIRONMENTS,
         availableBreathingPresets: BREATHING_PRESETS,
-        availableStillnessPresets: QUIET_MOMENT_PRESETS,
       }),
       [restoreSessions, settings, updateSettings]
     );
@@ -1061,7 +1053,11 @@ export default function App() {
           : activeScene.colors.baseBg,
       }}
       className={`min-h-[100dvh] w-full text-[#F5F6FF] relative overflow-x-hidden flex flex-col justify-between transition-colors duration-1000 select-none ${
-        isFocusStageView ? 'h-[100dvh] max-h-[100dvh] overflow-hidden' : ''
+        isFocusStageView
+          ? 'h-[100dvh] max-h-[100dvh] overflow-hidden'
+          : isLiquidLensRestoreView
+          ? 'sm:h-[100dvh] sm:max-h-[100dvh] sm:overflow-hidden'
+          : ''
       } ${settings.highContrast ? 'high-contrast' : ''}`}
     >
       {/* Real-Time 3D Dual Volumetric Aurora × GPU Fluid Dynamics Background Coupled to ORB & Soundscape */}
@@ -1096,7 +1092,7 @@ export default function App() {
             : 'opacity-100'
         }`}
       >
-        {/* Zone 1: Brand Wordmark & Current Atmosphere Pill */}
+        {/* Zone 1: Brand Wordmark */}
         <div className="order-1 flex items-center gap-2 shrink-0">
           <button
             type="button"
@@ -1114,14 +1110,11 @@ export default function App() {
             data-testid="header-environment-badge"
             onClick={() => setActiveOverlay('scenes')}
             title="Change Sanctuary Organism & Atmosphere"
-            className="hidden lg:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full aura-glass text-[11px] text-[#A3A1BA] hover:text-[#F5F6FF] transition-colors cursor-pointer"
+            className="sr-only"
           >
-            <Sparkles className="w-3 h-3 text-[#2FE8FF]" />
             <span>{activeOrbMeta.subtitle}</span>
-            <span className="opacity-45">·</span>
-            <span className="text-[#F5F6FF] font-medium">
-              {activeScene.name}
-            </span>
+            <span>·</span>
+            <span>{activeScene.name}</span>
           </button>
 
           <OfflineIndicator />
@@ -1261,13 +1254,38 @@ export default function App() {
       {isLiquidLensRestoreView && (
         <main
           data-testid="liquid-lens-sanctuary-view"
-          className="relative z-20 flex-1 overflow-y-auto pb-6"
+          className="relative z-20 flex-1 min-h-0 flex flex-col items-center justify-between pt-16 sm:pt-14 pb-2 sm:pb-3 px-3 sm:px-4 overflow-y-auto"
         >
+          <HomeStageOrbitalFrame
+            stageLayout={stageLayout}
+            orbDesign={activeOrganism}
+            onSelectOrbDesign={(orbDesign) =>
+              handleSelectOrganism(orbDesign, {
+                experienceMode:
+                  orbDesign === 'original' ? 'restore' : 'focus',
+              })
+            }
+            activeSceneId={sceneId}
+            activeScene={activeScene}
+            onSelectScene={handleSelectScene}
+            activeChamber={activeChamber}
+            onSelectChamber={handleSelectSoundscape}
+            isSoundPlaying={isSoundPlaying}
+            onToggleSound={() => setIsSoundPlaying((prev) => !prev)}
+            onCycleChamber={() => {
+              const idx = CHAMBERS.findIndex((c) => c.id === chamberId);
+              const next = CHAMBERS[(idx + 1) % CHAMBERS.length];
+              handleSelectSoundscape(next.id);
+            }}
+            durationMinutes={durationMinutes}
+            onChangeDuration={handleChangeDuration}
+            status={status}
+            railVisible={railVisible}
+          />
+
           <LiquidLensExperience
             interaction={sanctuaryInteractionContract}
             restoreCompatibility={restoreCompatibilityContract}
-            activeSubMode={liquidLensSubMode}
-            onSubModeChange={setLiquidLensSubMode}
             onReturnToFocusOrganism={(targetOrganism) => {
               if (targetOrganism === 'original') {
                 setLiquidLensMode('focus');
@@ -1280,13 +1298,11 @@ export default function App() {
           />
 
           {/* Persistent Control Center Dock */}
-          <div className="w-full flex justify-center px-3 mt-1">
+          <div className="w-full flex justify-center px-3 mt-1 shrink-0">
             <ControlDock
               activeOrganism={activeOrganism}
               experienceMode={experienceMode}
               remainingSeconds={remainingSeconds}
-              liquidLensSubMode={liquidLensSubMode}
-              onSelectLiquidLensSubMode={setLiquidLensSubMode}
               onOpenAuraConsole={() =>
                 handleOpenAuraConsole(activeConsoleSection)
               }
@@ -1405,7 +1421,7 @@ export default function App() {
                     className="mb-1.5 inline-flex items-center gap-1.5 px-3 py-1 rounded-full aura-glass text-[11px] text-[#38F8A8] hover:text-[#F5F6FF] transition-colors cursor-pointer"
                   >
                     <Wind className="w-3 h-3" />
-                    <span>Open Liquid Lens Restorative Sanctuary (Breathe · Stillness)</span>
+                    <span>Open Liquid Lens Breathing</span>
                   </button>
                 )}
 
@@ -1490,8 +1506,6 @@ export default function App() {
                     activeOrganism={activeOrganism}
                     experienceMode={experienceMode}
                     remainingSeconds={remainingSeconds}
-                    liquidLensSubMode={liquidLensSubMode}
-                    onSelectLiquidLensSubMode={setLiquidLensSubMode}
                     onOpenAuraConsole={() =>
                       handleOpenAuraConsole(activeConsoleSection)
                     }

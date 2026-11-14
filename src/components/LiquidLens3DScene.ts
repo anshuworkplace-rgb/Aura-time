@@ -149,102 +149,11 @@ export class LiquidLens3DSceneController {
     options.parentScene.add(this.rootGroup);
   }
 
-  public update(params: LiquidLens3DUpdateParams): void {
-    const isActive = params.orbDesign === 'original';
-    if (!isActive) {
-      this.currentOpacity = 0;
-      this.rootGroup.visible = false;
-      return;
-    }
-    this.currentOpacity = THREE.MathUtils.damp(
-      this.currentOpacity,
-      1,
-      8.0,
-      params.dt
-    );
-    this.rootGroup.visible = true;
-
-    const speedMult = params.reducedMotion
-      ? 0.15
-      : params.status === 'paused'
-      ? 0.25
-      : params.status === 'running'
-      ? 1.15
-      : 0.85;
-
-    this.simTime += params.dt * speedMult;
-
-    // Smooth color transitions reflecting scene + selected Aura Resonance sound
-    const colorDamp = 1 - Math.exp(-3.0 * params.dt);
-    this.targetColor.set(params.scene.colors.primary);
-    if (params.chamber?.primaryHex) {
-      this.targetColor.lerp(new THREE.Color(params.chamber.primaryHex), 0.45);
-    }
-    this.currentPrimary.lerp(this.targetColor, colorDamp);
-
-    this.targetColor.set(params.scene.colors.secondary);
-    if (params.chamber?.secondaryHex) {
-      this.targetColor.lerp(new THREE.Color(params.chamber.secondaryHex), 0.45);
-    }
-    this.currentSecondary.lerp(this.targetColor, colorDamp);
-
-    this.targetColor.set(params.scene.colors.tertiary);
-    this.currentTertiary.lerp(this.targetColor, colorDamp);
-
-    this.outerMat.color.copy(this.currentPrimary);
-    this.outerMat.opacity = 0.24 * this.currentOpacity;
-
-    this.innerMat.color.copy(this.currentSecondary);
-    this.innerMat.opacity = 0.16 * this.currentOpacity;
-
-    // Gentle breathing and audio-reactive pulse
-    const breathScale =
-      1 +
-      Math.sin(this.simTime * 1.1) * 0.035 +
-      params.audioBands.bass * 0.06;
-    this.outerMeniscus.scale.set(breathScale, breathScale, 1 + Math.cos(this.simTime * 0.9) * 0.08);
-    this.outerMeniscus.rotation.z = this.simTime * 0.18;
-    this.outerMeniscus.rotation.x = Math.sin(this.simTime * 0.45) * 0.16;
-    this.outerMeniscus.rotation.y = Math.cos(this.simTime * 0.38) * 0.16;
-
-    const innerScale =
-      0.96 +
-      Math.cos(this.simTime * 1.35) * 0.04 +
-      params.audioBands.mid * 0.05;
-    this.innerRefractor.scale.setScalar(innerScale);
-    this.innerRefractor.rotation.y = -this.simTime * 0.22;
-
-    this.causticRings.forEach((ring, idx) => {
-      const dir = idx % 2 === 0 ? 1 : -1;
-      ring.rotation.z = this.simTime * 0.32 * dir;
-      ring.rotation.x = Math.sin(this.simTime * 0.5 + idx) * 0.28;
-      const ringPulse = 1 + Math.sin(this.simTime * 1.4 + idx * 1.2) * 0.045;
-      ring.scale.setScalar(ringPulse);
-      this.ringMats[idx].color.copy(
-        idx % 2 === 0 ? this.currentSecondary : this.currentTertiary
-      );
-      this.ringMats[idx].opacity = (0.26 - idx * 0.05) * this.currentOpacity;
-    });
-
-    this.suspendedMotes.rotation.z = this.simTime * 0.09;
-    this.motesMat.color.copy(this.currentSecondary);
-    this.motesMat.opacity = 0.42 * this.currentOpacity;
-
-    // Subtle pointer tilt
-    const tiltX = params.pointerActive ? (params.pointerNormY - 0.5) * 0.18 : 0;
-    const tiltY = params.pointerActive ? (params.pointerNormX - 0.5) * 0.18 : 0;
-    this.rootGroup.rotation.x = THREE.MathUtils.damp(
-      this.rootGroup.rotation.x,
-      tiltX,
-      3.5,
-      params.dt
-    );
-    this.rootGroup.rotation.y = THREE.MathUtils.damp(
-      this.rootGroup.rotation.y,
-      tiltY,
-      3.5,
-      params.dt
-    );
+  public update(_params: LiquidLens3DUpdateParams): void {
+    // Keep 3D torus/ring meshes hidden so Liquid Lens ("original") displays the clean
+    // volumetric Quantum Nebula background with the 2D Refractive Liquid Lens orb centerpiece.
+    this.currentOpacity = 0;
+    this.rootGroup.visible = false;
   }
 
   public dispose(): void {

@@ -5,7 +5,6 @@ import {
   ChamberId,
   FocusImmersionMode,
   FocusSceneId,
-  LiquidLensSubMode,
   SanctuaryExperienceMode,
   SanctuaryOrganismId,
   TimerStatus,
@@ -28,9 +27,6 @@ import {
   Pause,
   RotateCcw,
   SlidersHorizontal,
-  Wind,
-  Moon,
-  Waves,
 } from 'lucide-react';
 
 export type DockGroupId = 'sound' | 'time' | 'focus' | 'more' | null;
@@ -39,8 +35,6 @@ interface ControlDockProps {
   activeOrganism?: SanctuaryOrganismId;
   experienceMode?: SanctuaryExperienceMode;
   remainingSeconds?: number;
-  liquidLensSubMode?: LiquidLensSubMode;
-  onSelectLiquidLensSubMode?: (subMode: LiquidLensSubMode) => void;
   onOpenAuraConsole?: () => void;
   isAuraConsoleOpen?: boolean;
   status: TimerStatus;
@@ -73,8 +67,6 @@ export const ControlDock: React.FC<ControlDockProps> = ({
   activeOrganism = 'celestial-jelly',
   experienceMode = 'focus',
   remainingSeconds,
-  liquidLensSubMode = 'breathe',
-  onSelectLiquidLensSubMode,
   onOpenAuraConsole,
   isAuraConsoleOpen = false,
   status,
@@ -278,17 +270,8 @@ export const ControlDock: React.FC<ControlDockProps> = ({
 
       {/* Lightweight Organism-Contextual Dock */}
       <div className="flex items-center gap-0.5 sm:gap-1 p-1 sm:p-1.5 rounded-full aura-glass shadow-2xl max-w-[calc(100vw-1rem)]">
-        {/* Contextual Section: Liquid Lens Restorative vs Focus Organisms */}
-        {isLiquidLensRestore ? (
-          <div
-            data-testid="dock-liquid-lens-modes"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-[#F5F6FF]"
-            aria-label="Liquid Lens breathing experience"
-          >
-            <Wind className="w-3.5 h-3.5 text-[#38F8A8] shrink-0" />
-            <span>Breathe</span>
-          </div>
-        ) : (
+        {/* Focus Session Controls (Celestial Jelly & Living Bloom / Focus stage) */}
+        {!isLiquidLensRestore && (
           <>
             {/* Primary Session Action: Play / Pause / Resume */}
             {onPrimaryAction && (
@@ -410,18 +393,18 @@ export const ControlDock: React.FC<ControlDockProps> = ({
                 {isRunningOrPaused ? displayedTimer : `${durationMinutes}m`}
               </span>
             </button>
+            <span
+              className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
+              aria-hidden="true"
+            />
           </>
         )}
 
-        <span
-          className="hidden sm:block w-[1px] h-4 bg-white/10 shrink-0"
-          aria-hidden="true"
-        />
-
-        {/* Quick Audio Control */}
+        {/* Quick Audio Control (Single Discreet Mute/Unmute during Liquid Lens Breathe) */}
         <button
           type="button"
           data-testid="dock-group-sound"
+          aria-pressed={isLiquidLensRestore ? Boolean(settings.soundMuted) : undefined}
           aria-label={
             isLiquidLensRestore
               ? settings.soundMuted
@@ -467,7 +450,9 @@ export const ControlDock: React.FC<ControlDockProps> = ({
               <span className="sm:hidden">{activeChamber.name.split(' ')[0]}</span>
             </>
           )}
-          {isLiquidLensRestore && <span className="hidden sm:inline">Sound</span>}
+          {isLiquidLensRestore && (
+            <span>{settings.soundMuted ? 'Muted' : 'Sound'}</span>
+          )}
         </button>
 
         {/* Atmosphere Selector Trigger */}

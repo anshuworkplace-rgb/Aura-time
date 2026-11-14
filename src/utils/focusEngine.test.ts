@@ -764,25 +764,35 @@ test('Stage 2: Reflect TodaySummary, WeeklyOverview, PersonalFocusPatterns (incl
   );
   assert.equal(RESTORE_ENVIRONMENTS.length, 4);
   assert.equal(QUIET_MOMENT_PRESETS.length, 3);
-  assert.equal(BREATHING_PRESETS.length, 4); // Three curated purposes + hidden Custom Cadence
+  assert.equal(BREATHING_PRESETS.length, 3); // Strictly three breathing purposes
 
   // Liquid Lens exposes three distinct, no-forced-hold breathing purposes.
-  const curatedBreaths = BREATHING_PRESETS.filter((preset) => preset.id !== 'custom');
   assert.deepEqual(
-    curatedBreaths.map((preset) => preset.name),
+    BREATHING_PRESETS.map((preset) => preset.name),
     ['Find Your Balance', 'Release Tension', 'Prepare for Rest']
   );
   assert.deepEqual(
-    curatedBreaths.map((preset) => [preset.inhaleSeconds, preset.holdInSeconds, preset.exhaleSeconds, preset.holdOutSeconds]),
-    [[5, 0, 5, 0], [4, 0, 6, 0], [5, 0, 7, 0]]
+    BREATHING_PRESETS.map((preset) => [
+      preset.inhaleSeconds,
+      preset.holdInSeconds,
+      preset.exhaleSeconds,
+      preset.holdOutSeconds,
+    ]),
+    [
+      [5, 0, 5, 0],
+      [4, 0, 6, 0],
+      [5, 0, 7, 0],
+    ]
   );
 
   // Verify a cadence transitions directly from inhale to exhale without a forced hold.
-  const balancePreset = curatedBreaths[0];
+  const balancePreset = BREATHING_PRESETS[0];
   const inhalePhase = calculateBreathingPhaseAtTime(balancePreset, 2.0);
   assert.equal(inhalePhase.phase, 'inhale');
   assert.equal(inhalePhase.expansion > 0 && inhalePhase.expansion < 1, true);
-  const exhalePhase = calculateBreathingPhaseAtTime(balancePreset, 5.0);
+  const exhalePeak = calculateBreathingPhaseAtTime(balancePreset, 5.0);
+  assert.equal(exhalePeak.phase, 'exhale');
+  const exhalePhase = calculateBreathingPhaseAtTime(balancePreset, 5.5);
   assert.equal(exhalePhase.phase, 'exhale');
   assert.equal(exhalePhase.expansion < 1, true);
 
@@ -1211,4 +1221,205 @@ test('Final Integration: versioned storage migration preserves legacy settings/s
   assert.equal(fallbackRoutines.length >= 5, true);
 });
 
+test('Liquid Lens Three-Purpose Breathing Engine: drift-corrected timing, exponential smoothing, discrete state gating, and safe legacy preset migration', async () => {
+  const {
+    BREATHING_DURATION_OPTIONS,
+    CURATED_BREATHING_PRESETS,
+    computeClockElapsed,
+    dampValue,
+    getBreathingPresetById,
+    hasDiscreteBreathingStateChanged,
+    normalizeBreathingPresetId,
+  } = await import('./breathingEngine');
+  const { sanitizeUserSettings } = await import('./storageMigration');
 
+  // Strictly three curated presets with zero holds
+  assert.equal(CURATED_BREATHING_PRESETS.length, 3);
+  assert.deepEqual(BREATHING_DURATION_OPTIONS, [120, 180, 240, 300, 600]);
+  for (const preset of CURATED_BREATHING_PRESETS) {
+    assert.equal(preset.holdInSeconds, 0);
+    assert.equal(preset.holdOutSeconds, 0);
+  }
+
+  // Legacy preset IDs migrate cleanly (including removed Equilibrium Box & custom)
+  assert.equal(normalizeBreathingPresetId('box-4-4-4-4'), 'coherent-5-5');
+  assert.equal(normalizeBreathingPresetId('custom'), 'coherent-5-5');
+  assert.equal(normalizeBreathingPresetId('deep-rest'), 'deep-rest-4-7-8');
+  assert.equal(normalizeBreathingPresetId('simple-flow'), 'wave-6-2-7');
+  assert.equal(getBreathingPresetById('box-4-4-4-4').name, 'Find Your Balance');
+
+  const migrated = sanitizeUserSettings({
+    defaultBreathingPresetId: 'box-4-4-4-4',
+    defaultRestoreMode: 'quiet-moment',
+    soundMuted: true,
+  });
+  assert.equal(migrated.defaultBreathingPresetId, 'coherent-5-5');
+  assert.equal(migrated.defaultRestoreMode, 'breathing');
+  assert.equal(migrated.soundMuted, true);
+
+  // Drift-corrected monotonic clock computation across pause/resume segments
+  const runningClock = computeClockElapsed({
+    accumulatedSeconds: 12.4,
+    segmentStartPerfMs: 10_000,
+    nowPerfMs: 14_750,
+    targetDurationSeconds: 180,
+  });
+  assert.equal(Math.abs(runningClock.elapsedFloatSeconds - 17.15) < 1e-6, true);
+  assert.equal(runningClock.elapsedWholeSeconds, 17);
+  assert.equal(runningClock.remainingSeconds, 163);
+  assert.equal(runningClock.isComplete, false);
+
+  const completedClock = computeClockElapsed({
+    accumulatedSeconds: 179.0,
+    segmentStartPerfMs: 10_000,
+    nowPerfMs: 11_500,
+    targetDurationSeconds: 180,
+  });
+  assert.equal(completedClock.elapsedFloatSeconds, 180);
+  assert.equal(completedClock.elapsedWholeSeconds, 180);
+  assert.equal(completedClock.remainingSeconds, 0);
+  assert.equal(completedClock.isComplete, true);
+
+  // Smooth exponential damping converges monotonically without overshoot
+  const step1 = dampValue(0.2, 0.9, 7.5, 0.016);
+  const step2 = dampValue(step1, 0.9, 7.5, 0.016);
+  assert.equal(step1 > 0.2 && step2 > step1 && step2 < 0.9, true);
+
+  // Discrete React state update gating avoids per-frame re-renders
+  const baseUi = {
+    elapsedSeconds: 5,
+    phase: 'exhale' as const,
+    phaseRemainingSeconds: 5,
+    completedCycles: 0,
+  };
+  assert.equal(hasDiscreteBreathingStateChanged(baseUi, { ...baseUi }), false);
+  assert.equal(
+    hasDiscreteBreathingStateChanged(baseUi, { ...baseUi, elapsedSeconds: 6 }),
+    true
+  );
+  assert.equal(
+    hasDiscreteBreathingStateChanged(baseUi, { ...baseUi, phase: 'inhale' }),
+    true
+  );
+});
+
+test('Living Breathing Intelligence, Adaptive Atmosphere Engine, and Spatial Sound Experience', async () => {
+  const {
+    ADAPTIVE_ATMOSPHERE_PROFILES,
+    INTELLIGENT_BREATHING_PATTERNS,
+    SPATIAL_SOUND_CATALOG,
+    computeBreathingOrbKinematics,
+    formatPatternCadenceSummary,
+    getBreathingPhaseInstruction,
+    resolveIntelligentBreathingPattern,
+    sanitizeCustomBreathingPattern,
+  } = await import('./breathingEngine');
+  const { calculateBreathingPhaseAtTime } = await import('./focusEngine');
+
+  // 1. Configurable intelligent patterns (Balanced, Box, Relaxing, Restorative, Custom)
+  assert.equal(INTELLIGENT_BREATHING_PATTERNS.length, 5);
+
+  const boxPattern = resolveIntelligentBreathingPattern('box-4-4-4-4');
+  assert.equal(boxPattern.inhaleSeconds, 4);
+  assert.equal(boxPattern.holdInSeconds, 4);
+  assert.equal(boxPattern.exhaleSeconds, 4);
+  assert.equal(boxPattern.holdOutSeconds, 4);
+  assert.equal(
+    formatPatternCadenceSummary(boxPattern),
+    '4s in · 4s hold · 4s out · 4s rest'
+  );
+
+  const customTiming = sanitizeCustomBreathingPattern({
+    inhaleSeconds: 6,
+    holdInSeconds: 3,
+    exhaleSeconds: 7,
+    holdOutSeconds: 2,
+  });
+  const customPattern = resolveIntelligentBreathingPattern('custom', customTiming);
+  assert.equal(customPattern.inhaleSeconds, 6);
+  assert.equal(customPattern.holdInSeconds, 3);
+  assert.equal(customPattern.exhaleSeconds, 7);
+  assert.equal(customPattern.holdOutSeconds, 2);
+
+  // Cycle timing across 4 phases in Box 4-4-4-4 (total 16s)
+  const inhaleCycle = calculateBreathingPhaseAtTime(boxPattern, 2.0);
+  assert.equal(inhaleCycle.phase, 'inhale');
+  const holdInCycle = calculateBreathingPhaseAtTime(boxPattern, 5.5);
+  assert.equal(holdInCycle.phase, 'hold-in');
+  const exhaleCycle = calculateBreathingPhaseAtTime(boxPattern, 10.0);
+  assert.equal(exhaleCycle.phase, 'exhale');
+  const restCycle = calculateBreathingPhaseAtTime(boxPattern, 14.0);
+  assert.equal(restCycle.phase, 'hold-out');
+
+  // 2. 4-State Orb Kinematics & Instructions
+  assert.equal(getBreathingPhaseInstruction('inhale'), 'Breathe In');
+  assert.equal(getBreathingPhaseInstruction('hold-in'), 'Hold');
+  assert.equal(getBreathingPhaseInstruction('exhale'), 'Breathe Out');
+  assert.equal(getBreathingPhaseInstruction('hold-out'), 'Rest');
+
+  const inhaleKin = computeBreathingOrbKinematics({
+    sessionState: 'running',
+    phase: 'inhale',
+    phaseProgress: 0.75,
+    expansion: 0.85,
+    ambientTimeSec: 1.0,
+  });
+  assert.equal(inhaleKin.instruction, 'Breathe In');
+  assert.equal(inhaleKin.radialDriftVelocity > 0, true);
+  assert.equal(inhaleKin.targetExpansion > 0.5, true);
+
+  const holdKin = computeBreathingOrbKinematics({
+    sessionState: 'running',
+    phase: 'hold-in',
+    phaseProgress: 0.5,
+    expansion: 1.0,
+    ambientTimeSec: 2.0,
+  });
+  assert.equal(holdKin.instruction, 'Hold');
+  assert.equal(holdKin.targetExpansion, 1);
+  assert.equal(holdKin.radialDriftVelocity, 0);
+  assert.equal(holdKin.surfaceElasticityScale <= 0.25, true);
+
+  const exhaleKin = computeBreathingOrbKinematics({
+    sessionState: 'running',
+    phase: 'exhale',
+    phaseProgress: 0.75,
+    expansion: 0.15,
+    ambientTimeSec: 3.0,
+  });
+  assert.equal(exhaleKin.instruction, 'Breathe Out');
+  assert.equal(exhaleKin.radialDriftVelocity < 0, true);
+  assert.equal(exhaleKin.targetExpansion < 0.5, true);
+
+  const restKin = computeBreathingOrbKinematics({
+    sessionState: 'running',
+    phase: 'hold-out',
+    phaseProgress: 0.5,
+    expansion: 0.0,
+    ambientTimeSec: 4.0,
+  });
+  assert.equal(restKin.instruction, 'Rest');
+  assert.equal(restKin.targetExpansion, 0);
+
+  // 3. Adaptive Atmosphere Engine (all 5 themes)
+  const expectedScenes = [
+    'deep-current',
+    'chromatic-flow',
+    'night-signal',
+    'electric-quiet',
+    'solar-drift',
+  ] as const;
+  for (const sceneId of expectedScenes) {
+    const profile = ADAPTIVE_ATMOSPHERE_PROFILES[sceneId];
+    assert.ok(profile, `Missing profile for ${sceneId}`);
+    assert.equal(profile.radialGradientCss.includes('radial-gradient'), true);
+    assert.equal(profile.lavenderTintRgb.length, 3);
+  }
+
+  // 4. Spatial Sound Catalog (6 spatial soundscapes)
+  assert.equal(SPATIAL_SOUND_CATALOG.length, 6);
+  assert.deepEqual(
+    SPATIAL_SOUND_CATALOG.map((item) => item.label),
+    ['Ocean', 'Rain', 'Forest', 'Wind', 'Singing Bowls', 'Deep Ambient']
+  );
+});

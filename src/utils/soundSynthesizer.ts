@@ -733,7 +733,77 @@ class AuraSoundEngine {
 
       osc.start(start);
       osc.stop(start + 3.9);
+      osc.onended = () => {
+        try {
+          osc.disconnect();
+          gain.disconnect();
+        } catch {
+          // ignore
+        }
+      };
     });
+  }
+
+  /**
+   * Feature 3: Plays a whisper-soft, breath-synchronized harmonic singing-bowl cue
+   * when transitioning between Inhale, Hold, Exhale, and Rest phases.
+   */
+  public playBreathingPhaseCue(
+    phase: 'inhale' | 'hold-in' | 'exhale' | 'hold-out',
+    alertVolume = 0.55
+  ) {
+    if (alertVolume <= 0.01) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+
+    filter.type = 'lowpass';
+    filter.frequency.value = 920;
+
+    if (phase === 'inhale') {
+      // Gentle rising harmonic interval (C4 -> G4)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(261.63, now);
+      osc.frequency.exponentialRampToValueAtTime(392.0, now + 0.95);
+    } else if (phase === 'hold-in') {
+      // Pure crystalline sustain shimmer (C5)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(523.25, now);
+    } else if (phase === 'exhale') {
+      // Warm grounding descent (G4 -> C4)
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(392.0, now);
+      osc.frequency.exponentialRampToValueAtTime(261.63, now + 1.15);
+    } else {
+      // Soft resting resonance (G3)
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(196.0, now);
+    }
+
+    const peak = Math.max(0.001, 0.042 * alertVolume);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(peak, now + 0.18);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.45);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain ?? ctx.destination);
+
+    osc.start(now);
+    osc.stop(now + 1.5);
+    osc.onended = () => {
+      try {
+        osc.disconnect();
+        filter.disconnect();
+        gain.disconnect();
+      } catch {
+        // ignore
+      }
+    };
   }
 
   /**

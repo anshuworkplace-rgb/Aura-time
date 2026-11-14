@@ -13,6 +13,7 @@ import {
   UserSettings,
 } from '../types/aura';
 import { ORB_DESIGNS } from './organicOrbEngine';
+import { CURATED_BREATHING_PRESETS } from './breathingEngine';
 
 export { ORB_DESIGNS };
 
@@ -406,52 +407,8 @@ export const RESTORE_ENVIRONMENTS: RestoreEnvironmentConfig[] = [
   },
 ];
 
-export const BREATHING_PRESETS: BreathingPatternConfig[] = [
-  {
-    id: 'coherent-5-5',
-    name: 'Find Your Balance',
-    subtitle: '5s Inhale · 5s Exhale',
-    description: 'A steady, even rhythm for a gentle reset between demanding moments.',
-    inhaleSeconds: 5,
-    holdInSeconds: 0,
-    exhaleSeconds: 5,
-    holdOutSeconds: 0,
-    recommendedDurationSeconds: 180,
-  },
-  {
-    id: 'deep-rest-4-7-8',
-    name: 'Release Tension',
-    subtitle: '4s Inhale · 6s Exhale',
-    description: 'A comfortable, slightly longer exhale to help you downshift without forced pauses.',
-    inhaleSeconds: 4,
-    holdInSeconds: 0,
-    exhaleSeconds: 6,
-    holdOutSeconds: 0,
-    recommendedDurationSeconds: 240,
-  },
-  {
-    id: 'wave-6-2-7',
-    name: 'Prepare for Rest',
-    subtitle: '5s Inhale · 7s Exhale',
-    description: 'A slow, unhurried rhythm for an evening wind-down; keep every breath comfortable.',
-    inhaleSeconds: 5,
-    holdInSeconds: 0,
-    exhaleSeconds: 7,
-    holdOutSeconds: 0,
-    recommendedDurationSeconds: 300,
-  },
-  {
-    id: 'custom',
-    name: 'Custom Cadence',
-    subtitle: 'Personalized inhale, hold & exhale',
-    description: 'Tune each stage to match your natural resting breath.',
-    inhaleSeconds: 4,
-    holdInSeconds: 0,
-    exhaleSeconds: 6,
-    holdOutSeconds: 0,
-    recommendedDurationSeconds: 180,
-  },
-];
+export const BREATHING_PRESETS: BreathingPatternConfig[] =
+  CURATED_BREATHING_PRESETS;
 
 export const QUIET_MOMENT_PRESETS: QuietMomentConfig[] = [
   {

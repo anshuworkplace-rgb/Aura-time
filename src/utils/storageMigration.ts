@@ -18,6 +18,10 @@ import {
   normalizeChamberId,
 } from './focusEngine';
 import { DEFAULT_FOCUS_ROUTINES } from './auraIntelligence';
+import {
+  normalizeBreathingPresetId,
+  sanitizeCustomBreathingPattern,
+} from './breathingEngine';
 
 export const STORAGE_KEYS = {
   SETTINGS: 'aura_living_lens_settings_v3',
@@ -43,24 +47,11 @@ const VALID_ORB_DESIGNS: readonly OrbDesignId[] = [
   'living-bloom',
 ];
 
-const VALID_RESTORE_MODES: readonly RestoreModeId[] = [
-  'breathing',
-  'quiet-moment',
-];
-
 const VALID_RESTORE_ENVS: readonly RestoreEnvironmentId[] = [
   'rain-garden',
   'ocean-drift',
   'forest-stillness',
   'celestial-night',
-];
-
-const VALID_BREATHING_PRESETS: readonly BreathingPresetId[] = [
-  'coherent-5-5',
-  'deep-rest-4-7-8',
-  'box-4-4-4-4',
-  'wave-6-2-7',
-  'custom',
 ];
 
 const VALID_QUIET_PRESETS: readonly QuietMomentPresetId[] = [
@@ -76,6 +67,8 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
     defaultRestoreEnvironmentId: 'rain-garden',
     defaultBreathingPresetId: 'coherent-5-5',
     defaultQuietMomentPresetId: 'reset-2m',
+    customBreathingPattern: sanitizeCustomBreathingPattern(),
+    breathSoundSync: false,
   };
 
   if (!raw || typeof raw !== 'object') {
@@ -88,11 +81,7 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
       ? candidate.orbDesign
       : defaultsWithRestore.orbDesign;
 
-  const defaultRestoreMode: RestoreModeId =
-    candidate.defaultRestoreMode &&
-    VALID_RESTORE_MODES.includes(candidate.defaultRestoreMode)
-      ? candidate.defaultRestoreMode
-      : 'breathing';
+  const defaultRestoreMode: RestoreModeId = 'breathing';
 
   const defaultRestoreEnvironmentId: RestoreEnvironmentId =
     candidate.defaultRestoreEnvironmentId &&
@@ -101,10 +90,7 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
       : 'rain-garden';
 
   const defaultBreathingPresetId: BreathingPresetId =
-    candidate.defaultBreathingPresetId &&
-    VALID_BREATHING_PRESETS.includes(candidate.defaultBreathingPresetId)
-      ? candidate.defaultBreathingPresetId
-      : 'coherent-5-5';
+    normalizeBreathingPresetId(candidate.defaultBreathingPresetId);
 
   const defaultQuietMomentPresetId: QuietMomentPresetId =
     candidate.defaultQuietMomentPresetId &&
@@ -127,6 +113,10 @@ export function sanitizeUserSettings(raw: unknown): UserSettings {
     defaultRestoreEnvironmentId,
     defaultBreathingPresetId,
     defaultQuietMomentPresetId,
+    customBreathingPattern: sanitizeCustomBreathingPattern(
+      candidate.customBreathingPattern
+    ),
+    breathSoundSync: Boolean(candidate.breathSoundSync),
     selectedChamberId: candidate.selectedChamberId
       ? normalizeChamberId(candidate.selectedChamberId)
       : defaultsWithRestore.selectedChamberId,

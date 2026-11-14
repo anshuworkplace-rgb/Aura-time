@@ -306,6 +306,15 @@ export interface UserSettings {
   defaultRestoreEnvironmentId?: RestoreEnvironmentId;
   defaultBreathingPresetId?: BreathingPresetId;
   defaultQuietMomentPresetId?: QuietMomentPresetId;
+  /** Custom user-configured breathing phase durations (in seconds) */
+  customBreathingPattern?: {
+    inhaleSeconds: number;
+    holdInSeconds: number;
+    exhaleSeconds: number;
+    holdOutSeconds: number;
+  };
+  /** Optional subtle harmonic sound cue synchronized with breathing phase transitions */
+  breathSoundSync?: boolean;
 }
 
 export * from './integrationContract';

@@ -54,7 +54,7 @@ export type SanctuaryOrganismId = OrbDesignId;
 
 /**
  * Active experience mode derived from or coordinated with the active organism:
- * - `'restore'` -> Liquid Lens restorative sanctuary (Breathe, Stillness, Soundscape)
+ * - `'restore'` -> Liquid Lens breathing sanctuary (Breathe)
  * - `'focus'`   -> Celestial Jelly & Living Bloom focus sanctuary (and optional Liquid Lens orb focus stage)
  */
 export type SanctuaryExperienceMode = 'restore' | 'focus';
@@ -69,9 +69,9 @@ export type AuraConsoleSectionId =
   | 'personal-data';
 
 /**
- * Sub-experiences inside the Liquid Lens restorative organism.
+ * Single restorative sub-experience inside Liquid Lens.
  */
-export type LiquidLensSubMode = 'breathe' | 'stillness' | 'soundscape';
+export type LiquidLensSubMode = 'breathe';
 
 /**
  * Unified open panel state across the sanctuary shell and persistent Control Dock.
@@ -89,7 +89,6 @@ export type SanctuaryNavigationTarget =
       destination: 'organism';
       organismId: SanctuaryOrganismId;
       experienceMode?: SanctuaryExperienceMode;
-      liquidLensSubMode?: LiquidLensSubMode;
     }
   | {
       destination: 'aura-console';
@@ -225,7 +224,7 @@ export interface RestorePreferenceCompatibility {
   onUpdateSettings: (partial: Partial<UserSettings>) => void;
   /** Completed restorative sessions (`aura_restore_sessions_v1`) */
   restoreSessions: RestoreSessionRecord[];
-  /** Callback invoked when a Breathe or Stillness session finishes */
+  /** Callback invoked when a Breathe session finishes */
   onCompleteRestoreSession: (
     record: Omit<RestoreSessionRecord, 'id' | 'completedAt' | 'isoDate'>
   ) => void;
@@ -233,27 +232,29 @@ export interface RestorePreferenceCompatibility {
   availableEnvironments: readonly RestoreEnvironmentConfig[];
   /** Available breathing cadence presets (`BREATHING_PRESETS`) */
   availableBreathingPresets: readonly BreathingPresetConfig[];
-  /** Available stillness / quiet moment presets (`QUIET_MOMENT_PRESETS`) */
-  availableStillnessPresets: readonly QuietMomentPresetConfig[];
+  /** Optional legacy stillness presets kept unused for external type compatibility */
+  availableStillnessPresets?: readonly QuietMomentPresetConfig[];
 }
 
 /**
- * Sub-component contract: `Breathe` (Guided breathing inside Liquid Lens).
+ * Sub-component contract: `Breathe` (Three-purpose guided breathing inside Liquid Lens).
  */
 export interface LiquidLensBreatheProps {
   activePresetId: BreathingPresetId;
+  activePreset: BreathingPresetConfig;
   availablePresets: readonly BreathingPresetConfig[];
-  tuning: LiquidLensContextualTuning;
+  durationSeconds: number;
+  availableDurations: readonly number[];
   isRunning: boolean;
   currentPhase: BreathingPhase;
-  phaseProgress: number;
   phaseRemainingSeconds: number;
   elapsedSeconds: number;
   completedCycles: number;
-  environment: RestoreEnvironmentConfig;
+  accentHex: string;
+  secondaryHex: string;
   reducedMotion: boolean;
   onSelectPreset: (presetId: BreathingPresetId) => void;
-  onUpdateTuning: (partial: Partial<LiquidLensContextualTuning>) => void;
+  onSelectDurationSeconds: (seconds: number) => void;
   onStart: () => void;
   onPause: () => void;
   onReset: () => void;
@@ -261,48 +262,13 @@ export interface LiquidLensBreatheProps {
 }
 
 /**
- * Sub-component contract: `Stillness` (Minimalist quiet moment inside Liquid Lens).
- */
-export interface LiquidLensStillnessProps {
-  activePresetId: QuietMomentPresetId;
-  availablePresets: readonly QuietMomentPresetConfig[];
-  durationSeconds: number;
-  remainingSeconds: number;
-  elapsedSeconds: number;
-  isRunning: boolean;
-  environment: RestoreEnvironmentConfig;
-  reducedMotion: boolean;
-  onSelectPreset: (presetId: QuietMomentPresetId) => void;
-  onChangeDurationSeconds: (seconds: number) => void;
-  onStart: () => void;
-  onPause: () => void;
-  onReset: () => void;
-  onCompleteSession: () => void;
-}
-
-/**
- * Sub-component contract: `Soundscape` (Restorative acoustic & environment selector).
- */
-export interface LiquidLensSoundscapeProps {
-  activeEnvironmentId: RestoreEnvironmentId;
-  availableEnvironments: readonly RestoreEnvironmentConfig[];
-  audio: SharedAudioControlsContract;
-  reducedMotion: boolean;
-  onSelectEnvironment: (environmentId: RestoreEnvironmentId) => void;
-}
-
-/**
- * Primary module contract: `LiquidLensExperience` (Developed by AI Studio 2).
+ * Primary module contract: `LiquidLensExperience`.
  */
 export interface LiquidLensExperienceProps {
   /** Shared sanctuary state, organism switcher, and audio contract */
   interaction: SharedSanctuaryInteractionContract;
   /** Restore preference & session history compatibility layer */
   restoreCompatibility: RestorePreferenceCompatibility;
-  /** Active sub-mode (`'breathe'` | `'stillness'` | `'soundscape'`) */
-  activeSubMode?: LiquidLensSubMode;
-  /** Optional callback when sub-mode changes */
-  onSubModeChange?: (subMode: LiquidLensSubMode) => void;
   /** Optional callback to return to a Focus organism (`'celestial-jelly'` or `'living-bloom'`) */
   onReturnToFocusOrganism?: (targetOrganism?: SanctuaryOrganismId) => void;
 }

@@ -36,17 +36,12 @@ import {
   OrbDesignId,
   PerformanceMode,
   PreferredWorkPeriod,
-  QuietMomentPresetId,
-  RestoreEnvironmentId,
-  RestoreModeId,
 } from '../types/aura';
 import {
   BREATHING_PRESETS,
   CHAMBERS,
   FOCUS_SCENES,
   ORB_DESIGNS,
-  QUIET_MOMENT_PRESETS,
-  RESTORE_ENVIRONMENTS,
   calculatePersonalFocusPatterns,
   calculateTodaySummary,
   calculateWeeklyOverview,
@@ -1106,48 +1101,21 @@ export const Preferences: React.FC<AuraConsolePreferencesProps> = ({
           </div>
         </div>
 
-        {/* Restorative Defaults */}
+        {/* Liquid Lens Breathing Defaults */}
         <div
           data-testid="restorative-defaults-card"
           className="p-4 sm:p-5 rounded-2xl bg-white/[0.03] border border-white/10 space-y-3 text-xs"
         >
           <h3 className="text-xs font-semibold text-[#F5F6FF]">
-            04. Liquid Lens Restorative Defaults
+            04. Liquid Lens Breathing Defaults
           </h3>
 
           <div>
             <span className="text-[#A3A1BA] block mb-1.5">
-              Default Liquid Lens Mode
-            </span>
-            <div className="flex gap-1.5">
-              {(
-                [
-                  { id: 'breathing', label: 'Breathe' },
-                  { id: 'quiet-moment', label: 'Stillness' },
-                ] as Array<{ id: RestoreModeId; label: string }>
-              ).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => onUpdateSettings({ defaultRestoreMode: m.id })}
-                  className={`px-3 py-1.5 rounded-xl cursor-pointer ${
-                    (settings.defaultRestoreMode ?? 'breathing') === m.id
-                      ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50'
-                      : 'bg-white/[0.03] text-[#A3A1BA] border border-white/10'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <span className="text-[#A3A1BA] block mb-1.5">
-              Default Breathing Cadence
+              Default Breathing Purpose
             </span>
             <div className="flex flex-wrap gap-1.5">
-              {BREATHING_PRESETS.filter((p) => p.id !== 'custom').map((pr) => (
+              {BREATHING_PRESETS.map((pr) => (
                 <button
                   key={pr.id}
                   type="button"
@@ -1156,7 +1124,7 @@ export const Preferences: React.FC<AuraConsolePreferencesProps> = ({
                       defaultBreathingPresetId: pr.id as BreathingPresetId,
                     })
                   }
-                  className={`px-2.5 py-1 rounded-xl cursor-pointer ${
+                  className={`px-3 py-1.5 rounded-xl cursor-pointer ${
                     (settings.defaultBreathingPresetId ?? 'coherent-5-5') ===
                     pr.id
                       ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50'
@@ -1167,52 +1135,9 @@ export const Preferences: React.FC<AuraConsolePreferencesProps> = ({
                 </button>
               ))}
             </div>
-          </div>
-
-          <div>
-            <span className="text-[#A3A1BA] block mb-1.5">
-              Default Stillness Preset & Environment
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              {QUIET_MOMENT_PRESETS.map((qp) => (
-                <button
-                  key={qp.id}
-                  type="button"
-                  onClick={() =>
-                    onUpdateSettings({
-                      defaultQuietMomentPresetId: qp.id as QuietMomentPresetId,
-                    })
-                  }
-                  className={`px-2.5 py-1 rounded-xl font-mono cursor-pointer ${
-                    (settings.defaultQuietMomentPresetId ?? 'reset-2m') === qp.id
-                      ? 'bg-[#FFB08A]/20 text-[#F5F6FF] border border-[#FFB08A]/50'
-                      : 'bg-white/[0.03] text-[#A3A1BA] border border-white/10'
-                  }`}
-                >
-                  {qp.durationMinutes}m
-                </button>
-              ))}
-              {RESTORE_ENVIRONMENTS.map((env) => (
-                <button
-                  key={env.id}
-                  type="button"
-                  onClick={() =>
-                    onUpdateSettings({
-                      defaultRestoreEnvironmentId:
-                        env.id as RestoreEnvironmentId,
-                    })
-                  }
-                  className={`px-2.5 py-1 rounded-xl cursor-pointer ${
-                    (settings.defaultRestoreEnvironmentId ?? 'rain-garden') ===
-                    env.id
-                      ? 'bg-[#2FE8FF]/20 text-[#F5F6FF] border border-[#2FE8FF]/50'
-                      : 'bg-white/[0.03] text-[#A3A1BA] border border-white/10'
-                  }`}
-                >
-                  {env.name}
-                </button>
-              ))}
-            </div>
+            <p className="text-[11px] text-[#A3A1BA] mt-2">
+              All breathing sessions pair seamlessly with your active ambient sound without forced breath holds.
+            </p>
           </div>
         </div>
       </div>
