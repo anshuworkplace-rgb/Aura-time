@@ -5,7 +5,19 @@ import {
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
-import { hexToNormalizedRgb } from './quantumNebulaShaders';
+
+export function hexToNormalizedRgb(hex: string): [number, number, number] {
+  const clean = hex.replace('#', '');
+  const num = parseInt(clean, 16);
+  const r = ((num >> 16) & 255) / 255;
+  const g = ((num >> 8) & 255) / 255;
+  const b = (num & 255) / 255;
+  return [
+    Number(r.toFixed(4)),
+    Number(g.toFixed(4)),
+    Number(b.toFixed(4)),
+  ];
+}
 
 // ============================================================================
 // 1. SCENE-AWARE DUAL AURORA + FLUID DYNAMICS PALETTE & PARAMETERS

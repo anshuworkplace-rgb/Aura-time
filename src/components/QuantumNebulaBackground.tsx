@@ -36,6 +36,7 @@ import {
 import { CelestialJelly3DSceneController } from './CelestialJelly3DScene';
 import { LivingBloom3DSceneController } from './LivingBloom3DScene';
 import { LiquidLens3DSceneController } from './LiquidLens3DScene';
+import { computeCoordinatedResonancePalette } from '../utils/auraResonanceController';
 
 interface QuantumNebulaBackgroundProps {
   scene: FocusSceneConfig;
@@ -50,6 +51,10 @@ interface QuantumNebulaBackgroundProps {
   reducedMotion: boolean;
   backgroundMix?: number;
   performanceMode?: PerformanceMode;
+  resonanceOpen?: boolean;
+  hoveredChamberId?: ChamberConfig['id'] | null;
+  resonancePulseTimestamp?: number;
+  resonancePulseChamberId?: ChamberConfig['id'] | null;
 }
 
 // Pre-allocated module-scope helpers for zero GC in the 60fps animation loop
@@ -60,6 +65,10 @@ const _targetDeep = new THREE.Color();
 const _targetZenith = new THREE.Color();
 const _targetEngineBPrimary = new THREE.Color();
 const _targetEngineBCoral = new THREE.Color();
+const _targetHemiSky = new THREE.Color();
+const _targetKeyLight = new THREE.Color();
+const _scratchChamberPrimary = new THREE.Color();
+const _scratchChamberSecondary = new THREE.Color();
 
 export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = ({
   scene,
@@ -74,6 +83,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
   reducedMotion,
   backgroundMix = 0.52,
   performanceMode = 'auto',
+  resonanceOpen = false,
+  hoveredChamberId = null,
+  resonancePulseTimestamp = 0,
+  resonancePulseChamberId = null,
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const [webglFailed, setWebglFailed] = useState(false);
@@ -107,6 +120,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     reducedMotion,
     backgroundMix,
     performanceMode,
+    resonanceOpen,
+    hoveredChamberId,
+    resonancePulseTimestamp,
+    resonancePulseChamberId,
   });
 
   useEffect(() => {
@@ -123,6 +140,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
       reducedMotion,
       backgroundMix,
       performanceMode,
+      resonanceOpen,
+      hoveredChamberId,
+      resonancePulseTimestamp,
+      resonancePulseChamberId,
     };
     if (mountRef.current) {
       const caps = detectDeviceCapabilities({
@@ -153,6 +174,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
     reducedMotion,
     backgroundMix,
     performanceMode,
+    resonanceOpen,
+    hoveredChamberId,
+    resonancePulseTimestamp,
+    resonancePulseChamberId,
   ]);
 
   useEffect(() => {
@@ -642,10 +667,19 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           secondsSinceCompletion,
         });
 
-        const scenePalette = computeSceneAuroraPalette(
-          state.scene,
-          state.phase
-        );
+        const isResonanceTheme =
+          state.orbDesign === 'celestial-jelly' ||
+          state.orbDesign === 'living-bloom';
+        const resonanceCoord = isResonanceTheme
+          ? computeCoordinatedResonancePalette(
+              state.scene,
+              state.chamber?.id || 'ocean-drift',
+              state.phase
+            )
+          : null;
+        const scenePalette = resonanceCoord
+          ? resonanceCoord.coordinatedPalette
+          : computeSceneAuroraPalette(state.scene, state.phase);
         const mixWeights = computeBackgroundMixWeights(state.backgroundMix);
 
         // Advance Engine A, Engine B, and Engine C on independent, incommensurate timescales
@@ -655,7 +689,7 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         simTimeB += dt * atmosphere.engineBTimeScale * flowMult;
         simTimeC += dt * atmosphere.engineCTimeScale * flowMult;
 
-        // Smoothly damp colors toward active Focus Scene, Soundscape & Break state
+        // Smoothly damp colors toward active Focus Scene (base) + Resonance Sound Profile (secondary layer)
         _targetViolet.setRGB(...scenePalette.engineAPrimary);
         _targetCyan.setRGB(...scenePalette.engineASecondary);
         _targetMagenta.setRGB(...scenePalette.engineCMagentaInterference);
@@ -664,17 +698,21 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         _targetEngineBPrimary.setRGB(...scenePalette.engineBPrimary);
         _targetEngineBCoral.setRGB(...scenePalette.engineBCoralHighlight);
 
-        if (state.chamber) {
+        if (!isResonanceTheme && state.chamber) {
           const chPrimary = hexToNormalizedRgb(state.chamber.primaryHex);
           const chSecondary = hexToNormalizedRgb(state.chamber.secondaryHex);
-          _targetCyan.lerp(
-            new THREE.Color(chPrimary[0], chPrimary[1], chPrimary[2]),
-            0.14
+          _scratchChamberPrimary.setRGB(
+            chPrimary[0],
+            chPrimary[1],
+            chPrimary[2]
           );
-          _targetEngineBPrimary.lerp(
-            new THREE.Color(chSecondary[0], chSecondary[1], chSecondary[2]),
-            0.14
+          _scratchChamberSecondary.setRGB(
+            chSecondary[0],
+            chSecondary[1],
+            chSecondary[2]
           );
+          _targetCyan.lerp(_scratchChamberPrimary, 0.14);
+          _targetEngineBPrimary.lerp(_scratchChamberSecondary, 0.14);
         }
 
         const colorDamp = 1 - Math.exp(-2.8 * dt);
@@ -685,6 +723,17 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
         currentZenith.lerp(_targetZenith, colorDamp);
         currentEngineBPrimary.lerp(_targetEngineBPrimary, colorDamp);
         currentEngineBCoral.lerp(_targetEngineBCoral, colorDamp);
+
+        // Smoothly coordinate environmental hemisphere & directional studio lighting
+        if (resonanceCoord) {
+          _targetHemiSky.setRGB(...resonanceCoord.soundProfile.ambientLightRgb);
+          _targetKeyLight.setRGB(...resonanceCoord.soundProfile.keyLightRgb);
+        } else {
+          _targetHemiSky.setHex(0x2fe8ff);
+          _targetKeyLight.setHex(0xffb08a);
+        }
+        hemiLight.color.lerp(_targetHemiSky, colorDamp);
+        keyLight.color.lerp(_targetKeyLight, colorDamp);
 
         currentPtrX = THREE.MathUtils.damp(currentPtrX, targetPtrX, 3.5, dt);
         currentPtrY = THREE.MathUtils.damp(currentPtrY, targetPtrY, 3.5, dt);
@@ -832,12 +881,17 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           camera,
           planktonDrawFraction: currentProfile.planktonDrawFraction,
           jellyBiolumeNodeFraction: currentProfile.jellyBiolumeNodeFraction,
+          resonanceOpen: state.resonanceOpen,
+          hoveredChamberId: state.hoveredChamberId,
+          resonancePulseTimestamp: state.resonancePulseTimestamp,
+          resonancePulseChamberId: state.resonancePulseChamberId,
         });
 
         // Update 3D Living Bloom Controller
         livingBloomController.update({
           orbDesign: state.orbDesign,
           scene: state.scene,
+          chamber: state.chamber,
           status: state.status,
           phase: state.phase,
           totalSeconds: state.totalSeconds || 2700,
@@ -852,6 +906,10 @@ export const QuantumNebulaBackground: React.FC<QuantumNebulaBackgroundProps> = (
           viewportHeight: currentH,
           camera,
           pollenDrawFraction: currentProfile.pollenDrawFraction,
+          resonanceOpen: state.resonanceOpen,
+          hoveredChamberId: state.hoveredChamberId,
+          resonancePulseTimestamp: state.resonancePulseTimestamp,
+          resonancePulseChamberId: state.resonancePulseChamberId,
         });
 
         // Update 3D Liquid Lens Controller

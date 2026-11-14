@@ -968,4 +968,236 @@ test('Stage 3: Aura Intelligence smart recommendations, 30-day monthly analytics
   assert.equal(metrics.sessionCompletionRatePercent, 33);
 });
 
+test('Resonance 2.0: centralized sound registry, AuraAudioEngine selectAndStartSound confirmation, and Halo/Bloom coordinates work accurately', async () => {
+  const {
+    AURA_SOUND_REGISTRY,
+    auraAudioEngine,
+    CROSSFADE_DURATION_MS,
+  } = await import('./soundSynthesizer');
+
+  // 1. All 6 required presets exist with unique IDs, display names, audio Asset references, loop configs, and statuses
+  assert.equal(AURA_SOUND_REGISTRY.length, 6);
+  const expectedNames = [
+    'Rain Chamber',
+    'Ocean Drift',
+    'Forest Echo',
+    'Cosmic Silence',
+    'Ember Glow',
+    'Celestial Tone',
+  ];
+  assert.deepEqual(
+    AURA_SOUND_REGISTRY.map((entry) => entry.name),
+    expectedNames
+  );
+
+  const uniqueIds = new Set(AURA_SOUND_REGISTRY.map((e) => e.id));
+  const uniqueAssets = new Set(
+    AURA_SOUND_REGISTRY.map((e) => e.audioAssetReference)
+  );
+  assert.equal(uniqueIds.size, 6);
+  assert.equal(uniqueAssets.size, 6);
+
+  for (const entry of AURA_SOUND_REGISTRY) {
+    assert.equal(entry.loopConfig.loop, true);
+    assert.equal(entry.loopConfig.crossfadeMs, CROSSFADE_DURATION_MS);
+    assert.equal(entry.loopConfig.loopEndSec > entry.loopConfig.loopStartSec, true);
+    // Resonance Halo angles avoid top (-90 deg) and bottom (+90 deg) to prevent overlapping header/timer controls
+    assert.notEqual(entry.haloAngleDeg, -90);
+    assert.notEqual(entry.haloAngleDeg, 90);
+    // Harmonic Bloom local botanical coordinates place buds around the outer structure
+    assert.equal(entry.bloomRadiusLocal > 0.75, true);
+  }
+
+  // 2. selectAndStartSound confirms active sound selection and updates registry playback status
+  for (const entry of AURA_SOUND_REGISTRY) {
+    const result = auraAudioEngine.selectAndStartSound(entry.id, {
+      volume: 0.8,
+    });
+    assert.equal(result.confirmed, true);
+    assert.equal(result.chamberId, entry.id);
+    const state = auraAudioEngine.getSoundscapeState();
+    assert.equal(state.activeChamberId, entry.id);
+    assert.equal(state.playing, true);
+
+    const regSnapshot = auraAudioEngine.getSoundRegistry();
+    const activeReg = regSnapshot.find((r) => r.id === entry.id)!;
+    assert.equal(activeReg.playbackStatus, 'playing');
+  }
+
+  auraAudioEngine.syncChambers({
+    playing: false,
+    primaryChamberId: 'ocean-drift',
+    ambienceVolume: 0.75,
+  });
+});
+
+test('Resonance 3.0: AuraSessionController unified sound-to-timer activation, non-resetting sound switches, synchronized pause/resume, error protection, coordinated visual profiles, and 3D-projected organism anchors work accurately', async () => {
+  const {
+    AuraSessionController,
+    RESONANCE_VISUAL_PROFILES,
+    computeCoordinatedResonancePalette,
+    computeProjectedOrganismAnchors,
+    CELESTIAL_JELLY_3D_ANCHORS,
+    LIVING_BLOOM_3D_ANCHORS,
+  } = await import('./auraResonanceController');
+  const { AURA_SOUND_REGISTRY } = await import('./soundSynthesizer');
+
+  // 1. Verify all 6 Resonance Visual Profiles exist with distinct signatures
+  assert.equal(Object.keys(RESONANCE_VISUAL_PROFILES).length, 6);
+  assert.equal(RESONANCE_VISUAL_PROFILES['rain-chamber'].primaryHex, '#38BDF8');
+  assert.equal(RESONANCE_VISUAL_PROFILES['ocean-drift'].primaryHex, '#2FE8FF');
+  assert.equal(RESONANCE_VISUAL_PROFILES['forest-echo'].primaryHex, '#34D399');
+  assert.equal(RESONANCE_VISUAL_PROFILES['cosmic-silence'].primaryHex, '#8A5CFF');
+  assert.equal(RESONANCE_VISUAL_PROFILES['ember-glow'].primaryHex, '#F59E0B');
+  assert.equal(RESONANCE_VISUAL_PROFILES['celestial-tone'].primaryHex, '#F472B6');
+
+  // 2. Verify computeCoordinatedResonancePalette preserves base Atmosphere while applying secondary sound signature
+  for (const scene of Object.values(FOCUS_SCENES)) {
+    const oceanLayer = computeCoordinatedResonancePalette(
+      scene,
+      'ocean-drift',
+      'focus'
+    );
+    const emberLayer = computeCoordinatedResonancePalette(
+      scene,
+      'ember-glow',
+      'focus'
+    );
+    assert.equal(oceanLayer.coordinatedPalette.engineAPrimary.length, 3);
+    assert.equal(oceanLayer.soundProfile.ambientLightRgb.length, 3);
+    assert.equal(oceanLayer.soundProfile.organismEmissiveRgb.length, 3);
+    // Secondary sound layer shifts palette subtly while preserving base atmosphere
+    assert.notDeepEqual(
+      oceanLayer.coordinatedPalette.engineAPrimary,
+      emberLayer.coordinatedPalette.engineAPrimary
+    );
+    assert.notDeepEqual(
+      oceanLayer.soundProfile.organismEmissiveRgb,
+      emberLayer.soundProfile.organismEmissiveRgb
+    );
+  }
+
+  // 3. Verify 3D-projected organism anchors for Celestial Jelly (Resonance Orbit) and Living Bloom (Harmonic Petal Array)
+  assert.equal(Object.keys(CELESTIAL_JELLY_3D_ANCHORS).length, 6);
+  assert.equal(Object.keys(LIVING_BLOOM_3D_ANCHORS).length, 6);
+
+  for (const orbDesign of ['celestial-jelly', 'living-bloom'] as const) {
+    for (const [vw, vh] of [
+      [1440, 900],
+      [390, 844],
+    ] as const) {
+      const anchors = computeProjectedOrganismAnchors(orbDesign, vw, vh);
+      assert.equal(anchors.length, 6);
+      for (const anchor of anchors) {
+        // Safe clearance from top navigation and bottom timer readout
+        assert.equal(Number.isFinite(anchor.stageX), true);
+        assert.equal(anchor.stageY >= -48 && anchor.stageY <= 338, true);
+        assert.equal(Number.isFinite(anchor.leftPct), true);
+        assert.equal(Number.isFinite(anchor.topPct), true);
+        assert.equal(anchor.anatomicalAnchorName.length > 5, true);
+      }
+    }
+  }
+
+  // 4. Verify AuraSessionController: Selecting a sound starts the sound AND automatically starts the focus timer
+  const controller = new AuraSessionController();
+  assert.equal(controller.getSnapshot().state, 'IDLE');
+
+  const initialActivation = controller.selectSoundAndActivateSession(
+    'celestial-tone',
+    {
+      volume: 0.8,
+      currentStatus: 'idle',
+      currentRemainingSeconds: 2700,
+      currentTotalSeconds: 2700,
+      durationMinutes: 45,
+    }
+  );
+  assert.equal(initialActivation.success, true);
+  assert.equal(initialActivation.sessionState, 'RUNNING');
+  assert.equal(initialActivation.nextTimerStatus, 'running');
+  assert.equal(initialActivation.timerAutoStarted, true);
+  assert.equal(initialActivation.timerPreservedWithoutReset, false);
+  assert.equal(initialActivation.nextRemainingSeconds, 2700);
+  assert.equal(controller.getSnapshot().isAudioPlaying, true);
+  assert.equal(controller.getSnapshot().activeSoundId, 'celestial-tone');
+
+  // 5. Verify changing sound during an active session (RUNNING) does NOT reset the timer
+  const midSessionSwitch = controller.selectSoundAndActivateSession(
+    'ember-glow',
+    {
+      volume: 0.8,
+      currentStatus: 'running',
+      currentRemainingSeconds: 1942, // 32m 22s remaining
+      currentTotalSeconds: 2700,
+      durationMinutes: 45,
+    }
+  );
+  assert.equal(midSessionSwitch.success, true);
+  assert.equal(midSessionSwitch.sessionState, 'RUNNING');
+  assert.equal(midSessionSwitch.nextTimerStatus, 'running');
+  assert.equal(midSessionSwitch.timerAutoStarted, false);
+  assert.equal(midSessionSwitch.timerPreservedWithoutReset, true);
+  assert.equal(midSessionSwitch.nextRemainingSeconds, 1942);
+  assert.equal(controller.getSnapshot().activeSoundId, 'ember-glow');
+
+  // 6. Verify all 6 sounds can be selected and activated cleanly
+  for (const entry of AURA_SOUND_REGISTRY) {
+    const res = controller.selectSoundAndActivateSession(entry.id, {
+      volume: 0.75,
+      currentStatus: 'running',
+      currentRemainingSeconds: 1800,
+      currentTotalSeconds: 2700,
+      durationMinutes: 45,
+    });
+    assert.equal(res.success, true);
+    assert.equal(res.soundId, entry.id);
+    assert.equal(res.nextRemainingSeconds, 1800);
+  }
+
+  // 7. Verify Pause and Resume synchronize both audio and timer
+  const pausedSnap = controller.pauseSession(1750);
+  assert.equal(pausedSnap.state, 'PAUSED');
+  assert.equal(pausedSnap.isAudioPlaying, false);
+  assert.equal(pausedSnap.remainingSeconds, 1750);
+
+  const resumedSnap = controller.resumeSession(0.8);
+  assert.equal(resumedSnap.state, 'RUNNING');
+  assert.equal(resumedSnap.isAudioPlaying, true);
+  assert.equal(resumedSnap.remainingSeconds, 1750);
+
+  // 8. Verify audio failure handling transitions to ERROR and never starts a silent focus session
+  const failingEngine = {
+    playResonanceSelectionPulse: () => {},
+    selectAndStartSound: () => ({
+      confirmed: false,
+      chamberId: 'rain-chamber' as const,
+      playing: false,
+      crossfadeDurationMs: 700,
+    }),
+    syncChambers: () => {},
+  };
+  const failController = new AuraSessionController(failingEngine as never);
+  const failedResult = failController.selectSoundAndActivateSession(
+    'rain-chamber',
+    {
+      volume: 0.8,
+      currentStatus: 'idle',
+      currentRemainingSeconds: 2700,
+      currentTotalSeconds: 2700,
+      durationMinutes: 45,
+    }
+  );
+  assert.equal(failedResult.success, false);
+  assert.equal(failedResult.sessionState, 'ERROR');
+  assert.equal(failedResult.nextTimerStatus, 'idle');
+  assert.equal(failedResult.timerAutoStarted, false);
+  assert.equal(typeof failedResult.errorMessage, 'string');
+
+  controller.resetSession(45);
+  assert.equal(controller.getSnapshot().state, 'IDLE');
+});
+
+
+
 

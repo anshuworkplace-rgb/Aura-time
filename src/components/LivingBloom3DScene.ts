@@ -1,10 +1,14 @@
 import * as THREE from 'three';
 import {
+  ChamberConfig,
+  ChamberId,
   FocusSceneConfig,
   OrbDesignId,
   TimerPhase,
   TimerStatus,
 } from '../types/aura';
+import { AURA_SOUND_REGISTRY } from '../utils/soundSynthesizer';
+import { getResonanceVisualProfile } from '../utils/auraResonanceController';
 import {
   LIVING_BLOOM_ANTHER_FRAGMENT_SHADER,
   LIVING_BLOOM_ANTHER_VERTEX_SHADER,
@@ -28,6 +32,7 @@ import {
 export interface LivingBloom3DUpdateInput {
   orbDesign: OrbDesignId;
   scene: FocusSceneConfig;
+  chamber?: ChamberConfig;
   status: TimerStatus;
   phase: TimerPhase;
   totalSeconds: number;
@@ -47,7 +52,120 @@ export interface LivingBloom3DUpdateInput {
   viewportHeight: number;
   camera: THREE.PerspectiveCamera;
   pollenDrawFraction?: number;
+  resonanceOpen?: boolean;
+  hoveredChamberId?: ChamberId | null;
+  resonancePulseTimestamp?: number;
+  resonancePulseChamberId?: ChamberId | null;
 }
+
+/**
+ * Builds a miniature 3-sepal/petal cupped botanical resonance bud in local space
+ * so the 6 Harmonic Bloom buds look organically grown from the same botanical material.
+ */
+function buildHarmonicBotanicalBudGeometry(): THREE.BufferGeometry {
+  const positions: number[] = [];
+  const normals: number[] = [];
+  const uvs: number[] = [];
+  const indices: number[] = [];
+
+  const petalCount = 3;
+  const uSegs = 6;
+  const vSegs = 8;
+
+  for (let p = 0; p < petalCount; p++) {
+    const baseAngle = (p / petalCount) * Math.PI * 2;
+    const baseVertexOffset = positions.length / 3;
+
+    for (let iv = 0; iv <= vSegs; iv++) {
+      const v = iv / vSegs; // 0 at receptacle base -> 1 at bud tip
+      const verticalY = v * 0.13;
+      const cupRadius = Math.sin(v * Math.PI) * 0.048 + 0.012 * (1.0 - v);
+
+      for (let iu = 0; iu <= uSegs; iu++) {
+        const u = iu / uSegs; // 0..1 across petal width
+        const uCentered = (u - 0.5) * 2.0;
+        const angularSpread = uCentered * 0.92 * Math.sin(v * Math.PI * 0.85 + 0.15);
+        const theta = baseAngle + angularSpread;
+
+        const r = cupRadius * (1.0 - 0.18 * uCentered * uCentered);
+        const x = Math.cos(theta) * r;
+        const z = Math.sin(theta) * r;
+        const y = verticalY - 0.04;
+
+        positions.push(x, y, z);
+        const nx = Math.cos(theta);
+        const nz = Math.sin(theta);
+        const ny = 0.35;
+        const nLen = Math.hypot(nx, ny, nz) || 1;
+        normals.push(nx / nLen, ny / nLen, nz / nLen);
+        uvs.push(u, v);
+      }
+    }
+
+    const stride = uSegs + 1;
+    for (let iv = 0; iv < vSegs; iv++) {
+      for (let iu = 0; iu < uSegs; iu++) {
+        const a = baseVertexOffset + iv * stride + iu;
+        const b = a + 1;
+        const c = a + stride;
+        const d = c + 1;
+        indices.push(a, c, b);
+        indices.push(b, c, d);
+      }
+    }
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+  geo.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs, 2));
+  geo.setIndex(indices);
+  return geo;
+}
+
+const HARMONIC_BUD_VERTEX_SHADER = /* glsl */ `
+  uniform float uBudOpenness;
+  varying vec2 vUv;
+  varying vec3 vNormal;
+
+  void main() {
+    vUv = uv;
+    vNormal = normal;
+    vec3 pos = position;
+    // Subtle botanical unfurling when hovered or active
+    float flare = uBudOpenness * smoothstep(0.15, 1.0, uv.y) * 0.032;
+    vec2 radialDir = normalize(pos.xz + vec2(0.0001));
+    pos.xz += radialDir * flare;
+    pos.y -= flare * 0.22;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+  }
+`;
+
+const HARMONIC_BUD_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uVisibility;
+  uniform float uIllumination;
+  uniform vec3 uColorPearlPink;
+  uniform vec3 uColorCoralRose;
+  uniform vec3 uColorLavender;
+  uniform vec3 uColorGoldenPollen;
+  uniform vec3 uColorTranslucentWhite;
+
+  varying vec2 vUv;
+  varying vec3 vNormal;
+
+  void main() {
+    if (uVisibility <= 0.005) discard;
+    float centerMask = 1.0 - abs(vUv.x - 0.5) * 2.0;
+    vec3 basePetal = mix(uColorCoralRose, uColorPearlPink, smoothstep(0.0, 0.75, vUv.y));
+    basePetal = mix(basePetal, uColorLavender, (1.0 - centerMask) * 0.45);
+    vec3 tipGlow = mix(uColorTranslucentWhite, uColorGoldenPollen, uIllumination * 0.65);
+    vec3 col = mix(basePetal, tipGlow, smoothstep(0.55, 1.0, vUv.y) * (0.45 + uIllumination * 0.55));
+    col += uColorGoldenPollen * (1.0 - smoothstep(0.0, 0.45, vUv.y)) * (0.28 + uIllumination * 0.55);
+
+    float alpha = uVisibility * (0.68 + uIllumination * 0.28);
+    gl_FragColor = vec4(col, clamp(alpha, 0.0, 0.95));
+  }
+`;
 
 // Pre-allocated color targets for zero-GC per-frame damping
 const _cPearlPink = new THREE.Color();
@@ -75,6 +193,7 @@ export class LivingBloom3DSceneController {
   private readonly goldenAnthersGeometry: THREE.BufferGeometry;
   private readonly stemAndSepalsGeometry: THREE.BufferGeometry;
   private readonly pollenGeometry: THREE.BufferGeometry;
+  private readonly harmonicBudGeometry: THREE.BufferGeometry;
 
   private readonly petalBackMaterial: THREE.ShaderMaterial;
   private readonly petalFrontMaterial: THREE.ShaderMaterial;
@@ -82,8 +201,20 @@ export class LivingBloom3DSceneController {
   private readonly antherMaterial: THREE.ShaderMaterial;
   private readonly calyxMaterial: THREE.ShaderMaterial;
   private readonly pollenMaterial: THREE.ShaderMaterial;
+  private readonly harmonicBudMeshes: Array<{
+    id: ChamberId;
+    mesh: THREE.Mesh;
+    material: THREE.ShaderMaterial;
+    openness: number;
+    illumination: number;
+    visibility: number;
+  }> = [];
 
   private simTime = 0;
+  private lastPulseTimestamp = 0;
+  private harmonicWaveBoost = 0;
+  private harmonicPollenBoost = 0;
+
   private lensElement: HTMLElement | null = null;
   private lastRectQueryMs = 0;
   private cachedLensCenterWorld = new THREE.Vector2(0, 0.04);
@@ -145,6 +276,7 @@ export class LivingBloom3DSceneController {
     this.pollenGeometry = buildLivingBloomPollenGeometry(
       isSoftwareGl ? 120 : 180
     );
+    this.harmonicBudGeometry = buildHarmonicBotanicalBudGeometry();
 
     // 2. Build Custom Translucent, Iridescent & Vascular Botanical Shaders
     const makePetalUniforms = (passOpacity: number) => ({
@@ -280,7 +412,7 @@ export class LivingBloom3DSceneController {
       blending: THREE.AdditiveBlending,
     });
 
-    // 3. Assemble Depth-Sorted 3D Botanical Hierarchy (renderOrder 20..25)
+    // 3. Assemble Depth-Sorted 3D Botanical Hierarchy (renderOrder 20..26)
     const calyxMesh = new THREE.Mesh(
       this.stemAndSepalsGeometry,
       this.calyxMaterial
@@ -331,6 +463,57 @@ export class LivingBloom3DSceneController {
       petalFrontMesh,
       pollenPoints
     );
+
+    // Resonance 2.0: 6 very small 3D botanical resonance buds positioned around the flower's outer structure
+    AURA_SOUND_REGISTRY.forEach((entry) => {
+      const budMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uBudOpenness: { value: 0.25 },
+          uVisibility: { value: 0.0 },
+          uIllumination: { value: 0.15 },
+          uColorPearlPink: { value: this.currentPearlPink.clone() },
+          uColorCoralRose: { value: this.currentCoralRose.clone() },
+          uColorLavender: { value: this.currentLavender.clone() },
+          uColorGoldenPollen: { value: this.currentGoldenPollen.clone() },
+          uColorTranslucentWhite: { value: this.currentTranslucentWhite.clone() },
+        },
+        vertexShader: HARMONIC_BUD_VERTEX_SHADER,
+        fragmentShader: HARMONIC_BUD_FRAGMENT_SHADER,
+        transparent: true,
+        depthWrite: false,
+        depthTest: true,
+        side: THREE.DoubleSide,
+        blending: THREE.NormalBlending,
+      });
+
+      const budMesh = new THREE.Mesh(this.harmonicBudGeometry, budMat);
+      const azRad = THREE.MathUtils.degToRad(entry.bloomAzimuthDeg);
+      const rLocal = entry.bloomRadiusLocal * 1.16;
+      const bx = Math.cos(azRad) * rLocal;
+      const bz = Math.sin(azRad) * rLocal;
+      const by = entry.bloomElevationLocal + 0.14;
+
+      budMesh.position.set(bx, by, bz);
+      // Tilt each small botanical bud slightly outward from the flower's calyx
+      budMesh.rotation.set(
+        Math.sin(azRad) * 0.36,
+        -azRad + Math.PI * 0.5,
+        -Math.cos(azRad) * 0.36
+      );
+      budMesh.frustumCulled = false;
+      budMesh.renderOrder = 26;
+      budMesh.visible = false;
+
+      this.postureGroup.add(budMesh);
+      this.harmonicBudMeshes.push({
+        id: entry.id,
+        mesh: budMesh,
+        material: budMat,
+        openness: 0.25,
+        illumination: 0.15,
+        visibility: 0.0,
+      });
+    });
 
     // Initial three-quarter elevated botanical viewing posture matching living-bloom-master.png
     this.postureGroup.rotation.set(0.50, 0.14, -0.08);
@@ -442,15 +625,26 @@ export class LivingBloom3DSceneController {
       input.progress
     );
 
-    // STAGE 3: Maintain permanent intrinsic Living Bloom colour identity
+    // STAGE 3: Maintain permanent intrinsic Living Bloom colour identity + coordinated Resonance secondary layer
     const targetRig = computeLivingBloomColorRig(input.scene, input.phase);
+    const soundProfile = getResonanceVisualProfile(
+      input.chamber?.id || 'ocean-drift'
+    );
+    _cCyanReflection.setRGB(...soundProfile.organismEmissiveRgb);
+
     _cPearlPink.setRGB(...targetRig.pearlPink);
-    _cCoralRose.setRGB(...targetRig.coralRose);
-    _cLavender.setRGB(...targetRig.lavender);
+    _cCoralRose.setRGB(...targetRig.coralRose).lerp(_cCyanReflection, 0.22);
+    _cLavender.setRGB(...targetRig.lavender).lerp(_cCyanReflection, 0.24);
     _cTranslucentWhite.setRGB(...targetRig.translucentWhite);
-    _cIridescentViolet.setRGB(...targetRig.iridescentViolet);
-    _cGoldenPollen.setRGB(...targetRig.goldenPollen);
-    _cCyanReflection.setRGB(...targetRig.cyanReflection);
+    _cIridescentViolet
+      .setRGB(...targetRig.iridescentViolet)
+      .lerp(_cCyanReflection, 0.3);
+    _cGoldenPollen
+      .setRGB(...targetRig.goldenPollen)
+      .lerp(_cCyanReflection, 0.24);
+    _cCyanReflection
+      .setRGB(...targetRig.cyanReflection)
+      .lerp(new THREE.Color(...soundProfile.primaryRgb), 0.36);
     _cVeinChampagne.setRGB(...targetRig.veinChampagne);
     _cCarpelMagenta.setRGB(...targetRig.carpelMagenta);
     _cStemRoseOlive.setRGB(...targetRig.stemRoseOlive);
@@ -545,18 +739,56 @@ export class LivingBloom3DSceneController {
         -(worldPtrY - this.rootGroup.position.y) / Math.max(0.1, baseScale);
     }
 
-    const lumi =
-      stateParams.luminescence * (input.status === 'paused' ? 0.68 : 1.0);
+    // Resonance 2.0: Harmonic Bloom 3D Botanical Buds, Inward Nectary Wave & Restrained Pollen Response
+    if (
+      input.resonancePulseTimestamp &&
+      input.resonancePulseTimestamp !== this.lastPulseTimestamp
+    ) {
+      this.lastPulseTimestamp = input.resonancePulseTimestamp;
+      this.harmonicWaveBoost = 0.42;
+      this.harmonicPollenBoost = 0.28;
+    }
+
+    this.harmonicWaveBoost = THREE.MathUtils.damp(
+      this.harmonicWaveBoost,
+      0.0,
+      2.4,
+      dt
+    );
+    this.harmonicPollenBoost = THREE.MathUtils.damp(
+      this.harmonicPollenBoost,
+      0.0,
+      1.8,
+      dt
+    );
+
+    // Keep legacy tiny 3D buds hidden; Living Bloom uses the Harmonic Petal Array markers around its outer silhouette
+    for (let i = 0; i < this.harmonicBudMeshes.length; i++) {
+      this.harmonicBudMeshes[i].mesh.visible = false;
+    }
+
+    const baseLumi =
+      stateParams.luminescence *
+      soundProfile.centralIlluminationMultiplier *
+      (input.status === 'paused' ? 0.68 : 1.0);
+    const lumi = Math.min(1.32, baseLumi + this.harmonicWaveBoost * 0.65);
+    const nectaryPulse = Math.min(
+      1.38,
+      bloomCycle.nectaryPulse + this.harmonicWaveBoost
+    );
 
     const updatePetalUniforms = (u: Record<string, THREE.IUniform>) => {
       u.uTime.value = this.simTime;
       u.uOuterOpenness.value = bloomCycle.outerOpenness;
       u.uMidOpenness.value = bloomCycle.midOpenness;
       u.uInnerOpenness.value = bloomCycle.innerOpenness;
-      u.uNectaryPulse.value = bloomCycle.nectaryPulse;
+      u.uNectaryPulse.value = nectaryPulse;
       u.uLuminescence.value = lumi;
       u.uAudioBass.value = input.audioBands.bass;
-      u.uAudioAmp.value = input.audioBands.overall;
+      u.uAudioAmp.value = Math.min(
+        1.0,
+        input.audioBands.overall + this.harmonicWaveBoost * 0.4
+      );
       u.uPointerLocal.value.set(localPtrX, localPtrZ);
       u.uColorPearlPink.value.copy(this.currentPearlPink);
       u.uColorCoralRose.value.copy(this.currentCoralRose);
@@ -574,9 +806,12 @@ export class LivingBloom3DSceneController {
     const stU = this.stamenMaterial.uniforms;
     stU.uTime.value = this.simTime;
     stU.uInnerOpenness.value = bloomCycle.innerOpenness;
-    stU.uNectaryPulse.value = bloomCycle.nectaryPulse;
+    stU.uNectaryPulse.value = nectaryPulse;
     stU.uLuminescence.value = lumi;
-    stU.uAudioTreble.value = input.audioBands.treble;
+    stU.uAudioTreble.value = Math.min(
+      1.0,
+      input.audioBands.treble + this.harmonicWaveBoost * 0.5
+    );
     stU.uPointerLocal.value.set(localPtrX, localPtrZ);
     stU.uColorCoralRose.value.copy(this.currentCoralRose);
     stU.uColorLavender.value.copy(this.currentLavender);
@@ -588,9 +823,12 @@ export class LivingBloom3DSceneController {
     const anU = this.antherMaterial.uniforms;
     anU.uTime.value = this.simTime;
     anU.uInnerOpenness.value = bloomCycle.innerOpenness;
-    anU.uNectaryPulse.value = bloomCycle.nectaryPulse;
+    anU.uNectaryPulse.value = nectaryPulse;
     anU.uLuminescence.value = lumi;
-    anU.uAudioTreble.value = input.audioBands.treble;
+    anU.uAudioTreble.value = Math.min(
+      1.0,
+      input.audioBands.treble + this.harmonicWaveBoost * 0.5
+    );
     anU.uPointerLocal.value.set(localPtrX, localPtrZ);
     anU.uColorGoldenPollen.value.copy(this.currentGoldenPollen);
     anU.uColorCoralRose.value.copy(this.currentCoralRose);
@@ -608,8 +846,11 @@ export class LivingBloom3DSceneController {
 
     const polU = this.pollenMaterial.uniforms;
     polU.uTime.value = this.simTime;
-    polU.uOuterOpenness.value = bloomCycle.outerOpenness;
-    polU.uLuminescence.value = lumi;
+    polU.uOuterOpenness.value = Math.min(
+      1.0,
+      bloomCycle.outerOpenness + this.harmonicPollenBoost * 0.35
+    );
+    polU.uLuminescence.value = Math.min(1.3, lumi + this.harmonicPollenBoost * 0.5);
     polU.uPointerLocal.value.set(localPtrX, localPtrZ);
     polU.uColorGoldenPollen.value.copy(this.currentGoldenPollen);
     polU.uColorPearlPink.value.copy(this.currentPearlPink);
@@ -625,6 +866,7 @@ export class LivingBloom3DSceneController {
     this.goldenAnthersGeometry.dispose();
     this.stemAndSepalsGeometry.dispose();
     this.pollenGeometry.dispose();
+    this.harmonicBudGeometry.dispose();
 
     this.petalBackMaterial.dispose();
     this.petalFrontMaterial.dispose();
@@ -632,5 +874,6 @@ export class LivingBloom3DSceneController {
     this.antherMaterial.dispose();
     this.calyxMaterial.dispose();
     this.pollenMaterial.dispose();
+    this.harmonicBudMeshes.forEach((b) => b.material.dispose());
   }
 }

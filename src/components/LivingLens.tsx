@@ -34,6 +34,7 @@ import {
 } from '../utils/organicOrbEngine';
 import { soundEngine } from '../utils/soundSynthesizer';
 import { AuraButton } from './AuraButton';
+import { AuraResonanceOverlay } from './AuraResonanceOverlay';
 
 interface LivingLensProps {
   scene: FocusSceneConfig;
@@ -61,6 +62,14 @@ interface LivingLensProps {
   onStartBreak: () => void;
   onOpenRestore?: () => void;
   onStartAgain: () => void;
+  isSoundPlaying?: boolean;
+  resonanceOpen?: boolean;
+  onToggleResonanceOpen?: (open: boolean) => void;
+  hoveredChamberId?: ChamberConfig['id'] | null;
+  onHoverChamber?: (id: ChamberConfig['id'] | null) => void;
+  onSelectSoundscape?: (id: ChamberConfig['id']) => void;
+  resonancePulseTimestamp?: number;
+  resonancePulseChamberId?: ChamberConfig['id'] | null;
 }
 
 interface CausticDroplet {
@@ -100,6 +109,14 @@ export const LivingLens: React.FC<LivingLensProps> = ({
   onStartBreak,
   onOpenRestore,
   onStartAgain,
+  isSoundPlaying = false,
+  resonanceOpen = false,
+  onToggleResonanceOpen,
+  hoveredChamberId = null,
+  onHoverChamber,
+  onSelectSoundscape,
+  resonancePulseTimestamp = 0,
+  resonancePulseChamberId = null,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -921,7 +938,9 @@ export const LivingLens: React.FC<LivingLensProps> = ({
   };
 
   const showRadialRing =
-    status === 'idle' && (scrubberOpen || isLensHovered || isDraggingScrubber);
+    status === 'idle' &&
+    !resonanceOpen &&
+    (scrubberOpen || isLensHovered || isDraggingScrubber);
   const radialFraction = minutesToRadialFraction(durationMinutes);
   const handleAngle = -Math.PI / 2 + radialFraction * Math.PI * 2;
   const scrubCenter = 310;
@@ -967,6 +986,27 @@ export const LivingLens: React.FC<LivingLensProps> = ({
           className="absolute inset-0 w-full h-full pointer-events-none"
           aria-hidden="true"
         />
+
+        {/* Aura Resonance 2.0 Interactive Sound Selection (ONLY for Celestial Jelly & Living Bloom) */}
+        {(orbDesign === 'celestial-jelly' || orbDesign === 'living-bloom') &&
+          onToggleResonanceOpen &&
+          onHoverChamber &&
+          onSelectSoundscape && (
+            <AuraResonanceOverlay
+              orbDesign={orbDesign}
+              scene={scene}
+              activeChamber={chamber}
+              isSoundPlaying={isSoundPlaying}
+              resonanceOpen={resonanceOpen}
+              onToggleResonanceOpen={onToggleResonanceOpen}
+              hoveredChamberId={hoveredChamberId}
+              onHoverChamber={onHoverChamber}
+              onSelectSound={onSelectSoundscape}
+              pulseTimestamp={resonancePulseTimestamp}
+              pulseChamberId={resonancePulseChamberId}
+              reducedMotion={reducedMotion}
+            />
+          )}
 
         {/* Interactive Radial Time Scrubber (Progressive Disclosure when Idle) */}
         {showRadialRing && (

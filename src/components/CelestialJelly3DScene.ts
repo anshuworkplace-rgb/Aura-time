@@ -31,6 +31,9 @@ import {
   stepCelestialJelly3DPhysics,
 } from '../utils/celestialJelly3D';
 import { computeJellyBellContraction } from '../utils/organicOrbEngine';
+import { ChamberId } from '../types/aura';
+import { AURA_SOUND_REGISTRY } from '../utils/soundSynthesizer';
+import { getResonanceVisualProfile } from '../utils/auraResonanceController';
 
 export interface CelestialJelly3DUpdateInput {
   orbDesign: OrbDesignId;
@@ -56,7 +59,98 @@ export interface CelestialJelly3DUpdateInput {
   camera: THREE.PerspectiveCamera;
   planktonDrawFraction?: number;
   jellyBiolumeNodeFraction?: number;
+  resonanceOpen?: boolean;
+  hoveredChamberId?: ChamberId | null;
+  resonancePulseTimestamp?: number;
+  resonancePulseChamberId?: ChamberId | null;
 }
+
+const RESONANCE_HALO_VERTEX_SHADER = /* glsl */ `
+  varying vec2 vUv;
+  varying vec3 vLocalPos;
+  varying vec3 vWorldNormal;
+  varying vec3 vViewDir;
+
+  void main() {
+    vUv = uv;
+    vLocalPos = position;
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vViewDir = normalize(cameraPosition - worldPos.xyz);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
+
+const RESONANCE_HALO_FRAGMENT_SHADER = /* glsl */ `
+  uniform float uTime;
+  uniform float uVisibility;
+  uniform float uPulseProgress;
+  uniform float uPulseAngle;
+  uniform float uHoverAngle;
+  uniform float uHoverStrength;
+  uniform float uSelectedAngle;
+  uniform vec3 uColorPrimary;
+  uniform vec3 uColorSecondary;
+  uniform vec3 uColorPulse;
+
+  varying vec2 vUv;
+  varying vec3 vLocalPos;
+  varying vec3 vWorldNormal;
+  varying vec3 vViewDir;
+
+  float angularDistance(float a, float b) {
+    float diff = mod(a - b + 3.14159265, 6.28318530) - 3.14159265;
+    return abs(diff);
+  }
+
+  void main() {
+    if (uVisibility <= 0.002 && uPulseProgress <= 0.002) discard;
+
+    float r = length(vLocalPos.xy);
+    float ringCenter = 1.48;
+    float ringHalfWidth = 0.016;
+    float radialDist = abs(r - ringCenter) / ringHalfWidth;
+    if (radialDist > 1.0) discard;
+
+    // Ultra-thin optical filament profile with soft Fresnel sheen
+    float filamentCore = exp(-radialDist * radialDist * 4.2);
+    float fresnel = pow(1.0 - abs(dot(vWorldNormal, vViewDir)), 1.6);
+
+    // Angle around perimeter matching screen-space atan2(y, x)
+    float theta = atan(-vLocalPos.y, vLocalPos.x);
+
+    // Subtle resting orbital shimmer
+    float orbitalWave = 0.85 + 0.15 * sin(theta * 6.0 - uTime * 0.9);
+
+    // Selected node soft localized illumination
+    float distSelected = angularDistance(theta, uSelectedAngle);
+    float selectedGlow = exp(-distSelected * distSelected * 18.0) * 0.55;
+
+    // Hovered node Fresnel highlight along the perimeter
+    float distHover = angularDistance(theta, uHoverAngle);
+    float hoverGlow = exp(-distHover * distHover * 26.0) * uHoverStrength * 0.85;
+
+    // Localized light pulse propagating symmetrically from clicked node around the orbital ring
+    float pulseWave = 0.0;
+    if (uPulseProgress > 0.001 && uPulseProgress < 1.0) {
+      float dPulse = angularDistance(theta, uPulseAngle);
+      float waveFront = uPulseProgress * 3.14159265;
+      float band = abs(dPulse - waveFront);
+      pulseWave = exp(-band * band * 28.0) * (1.0 - uPulseProgress) * 1.35;
+    }
+
+    vec3 baseCol = mix(uColorPrimary, uColorSecondary, 0.5 + 0.5 * sin(theta * 2.0 + uTime * 0.3));
+    vec3 finalCol = mix(baseCol, uColorPulse, clamp(hoverGlow + pulseWave + selectedGlow * 0.6, 0.0, 1.0));
+    finalCol += vec3(0.92, 0.96, 1.0) * (pulseWave * 0.45 + hoverGlow * 0.35 + fresnel * 0.15);
+
+    float alpha = filamentCore * (
+      uVisibility * (0.24 * orbitalWave + selectedGlow * 0.42 + hoverGlow * 0.58) +
+      pulseWave * 0.72
+    );
+
+    gl_FragColor = vec4(finalCol, clamp(alpha, 0.0, 0.88));
+  }
+`;
 
 // Pre-allocated color targets for zero-GC per-frame damping
 const _cCyan = new THREE.Color();
@@ -71,6 +165,7 @@ const _cPearl = new THREE.Color();
 const _cMidLavender = new THREE.Color();
 const _cTipCyan = new THREE.Color();
 const _cBiolumeGold = new THREE.Color();
+const _cResonancePulse = new THREE.Color();
 
 /**
  * Modular 3D Celestial Jellyfish Controller that mounts directly into the
@@ -86,6 +181,7 @@ export class CelestialJelly3DSceneController {
   private readonly bellGeometry: THREE.BufferGeometry;
   private readonly manubriumGeometry: THREE.BufferGeometry;
   private readonly planktonGeometry: THREE.BufferGeometry;
+  private readonly resonanceHaloGeometry: THREE.BufferGeometry;
 
   private readonly bellBackMaterial: THREE.ShaderMaterial;
   private readonly bellInnerTissueMaterial: THREE.ShaderMaterial;
@@ -96,8 +192,19 @@ export class CelestialJelly3DSceneController {
   private readonly pinnateMaterial: THREE.ShaderMaterial;
   private readonly biolumeNodesMaterial: THREE.ShaderMaterial;
   private readonly planktonMaterial: THREE.ShaderMaterial;
+  private readonly resonanceHaloMaterial: THREE.ShaderMaterial;
+  private readonly resonanceHaloMesh: THREE.Mesh;
 
   private simTime = 0;
+  private resonanceVisibility = 0;
+  private resonanceHoverStrength = 0;
+  private resonanceHoverAngle = 0;
+  private resonanceSelectedAngle = -Math.PI / 3;
+  private lastPulseTimestamp = 0;
+  private pulseProgress = 1.0;
+  private pulseAngle = 0;
+  private resonanceEmissiveBoost = 0;
+
   private lensElement: HTMLElement | null = null;
   private lastRectQueryMs = 0;
   private cachedLensCenterWorld = new THREE.Vector2(0, 0.04);
@@ -116,6 +223,7 @@ export class CelestialJelly3DSceneController {
   private currentMidLavender = new THREE.Color();
   private currentTipCyan = new THREE.Color();
   private currentBiolumeGold = new THREE.Color();
+  private currentResonancePulseColor = new THREE.Color(0x38d6ff);
 
   constructor(options: {
     parentScene: THREE.Scene;
@@ -345,6 +453,39 @@ export class CelestialJelly3DSceneController {
       blending: THREE.AdditiveBlending,
     });
 
+    // Resonance 2.0: Ultra-thin 3D orbital resonance filament around the jellyfish outer perimeter
+    this.resonanceHaloGeometry = new THREE.RingGeometry(2.14, 2.19, isSoftwareGl ? 72 : 128);
+    this.resonanceHaloMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uVisibility: { value: 0 },
+        uPulseProgress: { value: 1.0 },
+        uPulseAngle: { value: 0 },
+        uHoverAngle: { value: 0 },
+        uHoverStrength: { value: 0 },
+        uSelectedAngle: { value: -Math.PI / 3 },
+        uColorPrimary: { value: this.currentCyan.clone() },
+        uColorSecondary: { value: this.currentViolet.clone() },
+        uColorPulse: { value: this.currentResonancePulseColor.clone() },
+      },
+      vertexShader: RESONANCE_HALO_VERTEX_SHADER,
+      fragmentShader: RESONANCE_HALO_FRAGMENT_SHADER,
+      transparent: true,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+    });
+
+    this.resonanceHaloMesh = new THREE.Mesh(
+      this.resonanceHaloGeometry,
+      this.resonanceHaloMaterial
+    );
+    this.resonanceHaloMesh.position.set(0, -0.10, 0.06);
+    this.resonanceHaloMesh.scale.set(1.0, 0.76, 1.0);
+    this.resonanceHaloMesh.frustumCulled = false;
+    this.resonanceHaloMesh.renderOrder = 19;
+
     // 3. Assemble Depth-Sorted 3D Anatomical Hierarchy
     const planktonPoints = new THREE.Points(
       this.planktonGeometry,
@@ -423,6 +564,8 @@ export class CelestialJelly3DSceneController {
       bellFrontMesh,
       biolumeNodesPoints
     );
+
+    this.rootGroup.add(this.resonanceHaloMesh);
 
     // Set initial master reference swimming posture matching celestial-jelly-master.png
     this.swimGroup.rotation.set(0.07, 0.0, -0.21);
@@ -545,18 +688,23 @@ export class CelestialJelly3DSceneController {
       input.phase,
       input.chamber
     );
-    _cCyan.setRGB(...targetRig.domeCyan);
+    const soundProfile = getResonanceVisualProfile(
+      input.chamber?.id || 'ocean-drift'
+    );
+    _cResonancePulse.setRGB(...soundProfile.organismEmissiveRgb);
+
+    _cCyan.setRGB(...targetRig.domeCyan).lerp(_cResonancePulse, 0.28);
     _cBlue.setRGB(...targetRig.domeBlue);
     _cViolet.setRGB(...targetRig.domeViolet);
     _cMagenta.setRGB(...targetRig.domeMagenta);
     _cSubPeach.setRGB(...targetRig.subumbrellaPeach);
-    _cCoronaRose.setRGB(...targetRig.coronaRose);
+    _cCoronaRose.setRGB(...targetRig.coronaRose).lerp(_cResonancePulse, 0.22);
     _cCoronaChampagne.setRGB(...targetRig.coronaChampagne);
     _cCrownPink.setRGB(...targetRig.oralArmCrownPink);
     _cPearl.setRGB(...targetRig.oralArmPearl);
     _cMidLavender.setRGB(...targetRig.oralArmMidLavender);
-    _cTipCyan.setRGB(...targetRig.oralArmTipCyan);
-    _cBiolumeGold.setRGB(...targetRig.biolumeGold);
+    _cTipCyan.setRGB(...targetRig.oralArmTipCyan).lerp(_cResonancePulse, 0.32);
+    _cBiolumeGold.setRGB(...targetRig.biolumeGold).lerp(_cResonancePulse, 0.24);
 
     const colorLerp = 1.0 - Math.exp(-3.5 * dt);
     this.currentCyan.lerp(_cCyan, colorLerp);
@@ -688,9 +836,107 @@ export class CelestialJelly3DSceneController {
       );
     }
 
-    // Update Shader Uniforms across all anatomical layers
-    const lumi =
+    // Resonance 2.0: Update 3D Orbital Resonance Halo & Controlled Bell/Tentacle Emissive Pulse
+    const targetResVis = input.resonanceOpen ? 1.0 : 0.0;
+    this.resonanceVisibility = THREE.MathUtils.damp(
+      this.resonanceVisibility,
+      targetResVis,
+      6.5,
+      dt
+    );
+
+    const selectedEntry = AURA_SOUND_REGISTRY.find(
+      (entry) => entry.id === (input.chamber?.id || 'ocean-drift')
+    );
+    if (selectedEntry) {
+      this.resonanceSelectedAngle = THREE.MathUtils.degToRad(
+        selectedEntry.haloAngleDeg
+      );
+      _cResonancePulse.set(selectedEntry.accentHex);
+      this.currentResonancePulseColor.lerp(_cResonancePulse, colorLerp);
+    }
+
+    const hoveredEntry = input.hoveredChamberId
+      ? AURA_SOUND_REGISTRY.find((entry) => entry.id === input.hoveredChamberId)
+      : null;
+    if (hoveredEntry) {
+      this.resonanceHoverAngle = THREE.MathUtils.degToRad(
+        hoveredEntry.haloAngleDeg
+      );
+      this.resonanceHoverStrength = THREE.MathUtils.damp(
+        this.resonanceHoverStrength,
+        1.0,
+        8.0,
+        dt
+      );
+      _cResonancePulse.set(hoveredEntry.accentHex);
+      this.currentResonancePulseColor.lerp(_cResonancePulse, 0.35);
+    } else {
+      this.resonanceHoverStrength = THREE.MathUtils.damp(
+        this.resonanceHoverStrength,
+        0.0,
+        6.0,
+        dt
+      );
+    }
+
+    // Detect newly triggered sound node click pulse
+    if (
+      input.resonancePulseTimestamp &&
+      input.resonancePulseTimestamp !== this.lastPulseTimestamp
+    ) {
+      this.lastPulseTimestamp = input.resonancePulseTimestamp;
+      this.pulseProgress = 0.0;
+      this.resonanceEmissiveBoost = 0.34;
+      const pulseEntry = AURA_SOUND_REGISTRY.find(
+        (entry) =>
+          entry.id === (input.resonancePulseChamberId || input.chamber?.id)
+      );
+      if (pulseEntry) {
+        this.pulseAngle = THREE.MathUtils.degToRad(pulseEntry.haloAngleDeg);
+        this.currentResonancePulseColor.set(pulseEntry.accentHex);
+      }
+    }
+
+    if (this.pulseProgress < 1.0) {
+      this.pulseProgress = Math.min(1.0, this.pulseProgress + dt * 1.15);
+    }
+    this.resonanceEmissiveBoost = THREE.MathUtils.damp(
+      this.resonanceEmissiveBoost,
+      0.0,
+      2.6,
+      dt
+    );
+
+    this.resonanceHaloMesh.visible =
+      this.resonanceVisibility > 0.005 || this.pulseProgress < 0.995;
+    // Gentle 3D parallax alignment with the swimming posture
+    this.resonanceHaloMesh.rotation.set(
+      this.swimGroup.rotation.x * 0.25,
+      this.swimGroup.rotation.y * 0.25,
+      0
+    );
+
+    const resU = this.resonanceHaloMaterial.uniforms;
+    resU.uTime.value = this.simTime;
+    resU.uVisibility.value = this.resonanceVisibility;
+    resU.uPulseProgress.value = this.pulseProgress;
+    resU.uPulseAngle.value = this.pulseAngle;
+    resU.uHoverAngle.value = this.resonanceHoverAngle;
+    resU.uHoverStrength.value = this.resonanceHoverStrength;
+    resU.uSelectedAngle.value = this.resonanceSelectedAngle;
+    resU.uColorPrimary.value.copy(this.currentCyan);
+    resU.uColorSecondary.value.copy(this.currentViolet);
+    resU.uColorPulse.value.copy(this.currentResonancePulseColor);
+
+    // Update Shader Uniforms across all anatomical layers (including controlled emissive resonance response)
+    const baseLumi =
       stateParams.luminescence * (input.status === 'paused' ? 0.68 : 1.0);
+    const lumi = Math.min(1.32, baseLumi + this.resonanceEmissiveBoost);
+    const subsurfaceBoost = Math.min(
+      1.25,
+      bellDyn.subsurfacePulse + this.resonanceEmissiveBoost * 0.85
+    );
 
     const updateBellUniforms = (u: Record<string, THREE.IUniform>) => {
       u.uTime.value = this.simTime;
@@ -698,10 +944,13 @@ export class CelestialJelly3DSceneController {
       u.uRadialScale.value = bellDyn.radialScale;
       u.uVerticalStretch.value = bellDyn.verticalStretch;
       u.uMarginWavePhase.value = bellDyn.marginWavePhase;
-      u.uSubsurfacePulse.value = bellDyn.subsurfacePulse;
+      u.uSubsurfacePulse.value = subsurfaceBoost;
       u.uLuminescence.value = lumi;
       u.uAudioBass.value = input.audioBands.bass;
-      u.uAudioAmp.value = input.audioBands.overall;
+      u.uAudioAmp.value = Math.min(
+        1.0,
+        input.audioBands.overall + this.resonanceEmissiveBoost * 0.55
+      );
       u.uPointerWorld.value.set(
         localPtrX !== null ? localPtrX : 10.0,
         localPtrY !== null ? localPtrY : 10.0
@@ -731,7 +980,10 @@ export class CelestialJelly3DSceneController {
     const oaU = this.oralArmsMaterial.uniforms;
     oaU.uTime.value = this.simTime;
     oaU.uLuminescence.value = lumi;
-    oaU.uAudioAmp.value = input.audioBands.overall;
+    oaU.uAudioAmp.value = Math.min(
+      1.0,
+      input.audioBands.overall + this.resonanceEmissiveBoost * 0.45
+    );
     oaU.uColorCrownPink.value.copy(this.currentCrownPink);
     oaU.uColorPearl.value.copy(this.currentPearl);
     oaU.uColorCoronaChampagne.value.copy(this.currentCoronaChampagne);
@@ -756,7 +1008,10 @@ export class CelestialJelly3DSceneController {
 
     const bioU = this.biolumeNodesMaterial.uniforms;
     bioU.uTime.value = this.simTime;
-    bioU.uAudioAmp.value = input.audioBands.overall;
+    bioU.uAudioAmp.value = Math.min(
+      1.0,
+      input.audioBands.overall + this.resonanceEmissiveBoost * 0.6
+    );
     bioU.uLuminescence.value = lumi;
     bioU.uColorCyan.value.copy(this.currentCyan);
     bioU.uColorBiolumeGold.value.copy(this.currentBiolumeGold);
@@ -782,6 +1037,7 @@ export class CelestialJelly3DSceneController {
     this.rig.pinnateFrondsGeometry.dispose();
     this.rig.biolumeNodesGeometry.dispose();
     this.planktonGeometry.dispose();
+    this.resonanceHaloGeometry.dispose();
 
     this.bellBackMaterial.dispose();
     this.bellInnerTissueMaterial.dispose();
@@ -792,5 +1048,6 @@ export class CelestialJelly3DSceneController {
     this.pinnateMaterial.dispose();
     this.biolumeNodesMaterial.dispose();
     this.planktonMaterial.dispose();
+    this.resonanceHaloMaterial.dispose();
   }
 }

@@ -46,6 +46,10 @@ import {
 } from './utils/auraIntelligence';
 import { trackProductEvent } from './utils/productAnalytics';
 import { soundEngine } from './utils/soundSynthesizer';
+import {
+  AuraSessionState,
+  auraSessionController,
+} from './utils/auraResonanceController';
 import { LivingLens } from './components/LivingLens';
 import { SceneSelectorOverlay } from './components/SceneSelectorOverlay';
 import { ChambersOverlay } from './components/ChambersOverlay';
@@ -209,6 +213,21 @@ export default function App() {
   );
   const [scrubberOpen, setScrubberOpen] = useState<boolean>(false);
   const [isSoundPlaying, setIsSoundPlaying] = useState<boolean>(false);
+  const [sessionState, setSessionState] = useState<AuraSessionState>('IDLE');
+  const [audioErrorMessage, setAudioErrorMessage] = useState<string | null>(
+    null
+  );
+  // Resonance 3.0: Dedicated state for interactive sound selection visibility, active node, and pulse
+  const [resonanceOpen, setResonanceOpen] = useState<boolean>(
+    () => (settings.orbDesign ?? 'celestial-jelly') !== 'original'
+  );
+  const [hoveredChamberId, setHoveredChamberId] = useState<ChamberId | null>(
+    null
+  );
+  const [resonancePulseTimestamp, setResonancePulseTimestamp] =
+    useState<number>(0);
+  const [resonancePulseChamberId, setResonancePulseChamberId] =
+    useState<ChamberId | null>(null);
   const [activeOverlay, setActiveOverlay] = useState<ActiveOverlay>('none');
   const [immersionMode, setImmersionMode] =
     useState<FocusImmersionMode>('standard');
@@ -336,23 +355,77 @@ export default function App() {
     setSettings((prev) => ({ ...prev, ...partial }));
   }, []);
 
-  // Immediate Smart Soundscape Switcher handler (independent of timer state)
+  // AURA RESONANCE 3.0: Unified Audio & Timer Activation
+  // Selecting a sound starts the sound, confirms playback, and automatically starts the focus timer
+  // (while preserving remainingSeconds without reset if already running).
   const handleSelectSoundscape = useCallback(
     (nextChamberId: ChamberId) => {
       const normalized = normalizeChamberId(nextChamberId);
-      setChamberId(normalized);
-      if (settings.ambienceVolume <= 0) {
+      const targetVolume =
+        settings.ambienceVolume <= 0 ? 0.75 : settings.ambienceVolume;
+
+      setResonancePulseChamberId(normalized);
+      setResonancePulseTimestamp(Date.now());
+
+      const activation = auraSessionController.selectSoundAndActivateSession(
+        normalized,
+        {
+          volume: targetVolume,
+          currentStatus: status,
+          currentRemainingSeconds: remainingSeconds,
+          currentTotalSeconds: totalSeconds,
+          durationMinutes,
+        }
+      );
+
+      if (activation.success) {
+        setChamberId(normalized);
         updateSettings({
-          ambienceVolume: 0.75,
+          ambienceVolume: targetVolume,
           selectedChamberId: normalized,
           soundMuted: false,
         });
+        setIsSoundPlaying(true);
+        setSessionState('RUNNING');
+        setAudioErrorMessage(null);
+
+        if (status === 'idle' || status === 'completed') {
+          const startSecs = durationMinutes * 60;
+          setPhase('focus');
+          setTotalSeconds(startSecs);
+          setRemainingSeconds(startSecs);
+          setLastCompletedSession(null);
+          setScrubberOpen(false);
+          targetEndTimestampRef.current = Date.now() + startSecs * 1000;
+          setStatus('running');
+          trackProductEvent(
+            'first_session_started',
+            settings.productAnalyticsConsent !== false,
+            { durationMinutes, sceneId, chamberId: normalized }
+          );
+        } else if (status === 'paused') {
+          targetEndTimestampRef.current = Date.now() + remainingSeconds * 1000;
+          setStatus('running');
+        }
+        // If status === 'running', we intentionally DO NOT reset remainingSeconds or targetEndTimestampRef
       } else {
-        updateSettings({ selectedChamberId: normalized, soundMuted: false });
+        setSessionState('ERROR');
+        setAudioErrorMessage(
+          activation.errorMessage ??
+            'Audio playback could not be verified. Focus session was not started.'
+        );
       }
-      setIsSoundPlaying(true);
     },
-    [settings.ambienceVolume, updateSettings]
+    [
+      durationMinutes,
+      remainingSeconds,
+      sceneId,
+      settings.ambienceVolume,
+      settings.productAnalyticsConsent,
+      status,
+      totalSeconds,
+      updateSettings,
+    ]
   );
 
   // Honest Session Completion Handler:
@@ -410,7 +483,9 @@ export default function App() {
         });
       }
 
+      auraSessionController.completeSession();
       setStatus('completed');
+      setSessionState('COMPLETED');
       setRemainingSeconds(0);
       setIsSoundPlaying(false);
     },
@@ -455,7 +530,11 @@ export default function App() {
 
   // Strict One Primary Action Per State:
   // Idle -> Begin | Running -> Pause | Paused -> Resume | Completed -> Start again
+  // Pause and Resume synchronize BOTH audio playback and the focus timer.
   const handlePrimaryAction = useCallback(() => {
+    const targetVolume =
+      settings.ambienceVolume <= 0 ? 0.75 : settings.ambienceVolume;
+
     if (status === 'idle') {
       const startSecs = durationMinutes * 60;
       setPhase('focus');
@@ -465,29 +544,43 @@ export default function App() {
       setScrubberOpen(false);
       targetEndTimestampRef.current = Date.now() + startSecs * 1000;
       setStatus('running');
+      setSessionState('RUNNING');
+      setAudioErrorMessage(null);
       trackProductEvent(
         'first_session_started',
         settings.productAnalyticsConsent !== false,
         { durationMinutes, sceneId, chamberId }
       );
-      if (settings.ambienceVolume > 0 && !settings.soundMuted) {
+      if (!settings.soundMuted) {
+        auraSessionController.selectSoundAndActivateSession(chamberId, {
+          volume: targetVolume,
+          currentStatus: 'idle',
+          currentRemainingSeconds: startSecs,
+          currentTotalSeconds: startSecs,
+          durationMinutes,
+        });
         setIsSoundPlaying(true);
       }
     } else if (status === 'running') {
+      let rem = remainingSeconds;
       if (targetEndTimestampRef.current) {
-        const rem = Math.max(
+        rem = Math.max(
           0,
           Math.ceil((targetEndTimestampRef.current - Date.now()) / 1000)
         );
         setRemainingSeconds(rem);
       }
       targetEndTimestampRef.current = null;
+      auraSessionController.pauseSession(rem);
       setStatus('paused');
+      setSessionState('PAUSED');
       setIsSoundPlaying(false);
     } else if (status === 'paused') {
       targetEndTimestampRef.current = Date.now() + remainingSeconds * 1000;
+      auraSessionController.resumeSession(targetVolume);
       setStatus('running');
-      if (settings.ambienceVolume > 0 && !settings.soundMuted) {
+      setSessionState('RUNNING');
+      if (!settings.soundMuted) {
         setIsSoundPlaying(true);
       }
     } else if (status === 'completed') {
@@ -498,7 +591,16 @@ export default function App() {
       setLastCompletedSession(null);
       targetEndTimestampRef.current = Date.now() + startSecs * 1000;
       setStatus('running');
-      if (settings.ambienceVolume > 0 && !settings.soundMuted) {
+      setSessionState('RUNNING');
+      setAudioErrorMessage(null);
+      if (!settings.soundMuted) {
+        auraSessionController.selectSoundAndActivateSession(chamberId, {
+          volume: targetVolume,
+          currentStatus: 'completed',
+          currentRemainingSeconds: startSecs,
+          currentTotalSeconds: startSecs,
+          durationMinutes,
+        });
         setIsSoundPlaying(true);
       }
     }
@@ -521,20 +623,28 @@ export default function App() {
     setLastCompletedSession(null);
     targetEndTimestampRef.current = Date.now() + breakSecs * 1000;
     setStatus('running');
-    if (settings.ambienceVolume > 0 && !settings.soundMuted) {
+    setSessionState('RUNNING');
+    if (!isSoundPlaying && settings.ambienceVolume > 0 && !settings.soundMuted) {
       setIsSoundPlaying(true);
     }
-  }, [settings.ambienceVolume, settings.breakMinutes, settings.soundMuted]);
+  }, [
+    isSoundPlaying,
+    settings.ambienceVolume,
+    settings.breakMinutes,
+    settings.soundMuted,
+  ]);
 
   const handleReset = useCallback(() => {
     targetEndTimestampRef.current = null;
+    auraSessionController.resetSession(durationMinutes);
     setPhase('focus');
     setTotalSeconds(durationMinutes * 60);
     setRemainingSeconds(durationMinutes * 60);
     setLastCompletedSession(null);
     setStatus('idle');
-    setImmersionMode('standard');
+    setSessionState('IDLE');
     setIsSoundPlaying(false);
+    setImmersionMode('standard');
   }, [durationMinutes]);
 
   // Unified Time Extension / Adjustment (+1m, +5m, +10m) in Idle, Running, or Paused states
@@ -832,6 +942,8 @@ export default function App() {
 
   return (
     <div
+      data-session-state={sessionState}
+      data-audio-error={audioErrorMessage ?? undefined}
       style={{
         backgroundColor: isRunningOrPaused
           ? '#05060E'
@@ -860,6 +972,13 @@ export default function App() {
         }
         performanceMode={settings.performanceMode ?? 'auto'}
         backgroundMix={settings.backgroundMix ?? 0.52}
+        resonanceOpen={
+          resonanceOpen &&
+          (settings.orbDesign ?? 'celestial-jelly') !== 'original'
+        }
+        hoveredChamberId={hoveredChamberId}
+        resonancePulseTimestamp={resonancePulseTimestamp}
+        resonancePulseChamberId={resonancePulseChamberId}
       />
 
       {/* Sanctuary Top Header: [AURA TIME · Current Environment] | [Focus · Restore · Reflect · Profile] | [Today's Focus · About] */}
@@ -1015,7 +1134,15 @@ export default function App() {
               <HomeStageOrbitalFrame
                 stageLayout={stageLayout}
                 orbDesign={settings.orbDesign ?? 'celestial-jelly'}
-                onSelectOrbDesign={(orbDesign) => updateSettings({ orbDesign })}
+                onSelectOrbDesign={(orbDesign) => {
+                  if (orbDesign === 'original') {
+                    setResonanceOpen(false);
+                    setHoveredChamberId(null);
+                  } else {
+                    setResonanceOpen(true);
+                  }
+                  updateSettings({ orbDesign });
+                }}
                 activeSceneId={sceneId}
                 activeScene={activeScene}
                 onSelectScene={handleSelectScene}
@@ -1069,6 +1196,28 @@ export default function App() {
                   onStartBreak={handleStartBreak}
                   onOpenRestore={() => setActiveNavTab('restore')}
                   onStartAgain={handlePrimaryAction}
+                  isSoundPlaying={isSoundPlaying}
+                  resonanceOpen={
+                    resonanceOpen &&
+                    (settings.orbDesign ?? 'celestial-jelly') !== 'original'
+                  }
+                  onToggleResonanceOpen={(open) => {
+                    if ((settings.orbDesign ?? 'celestial-jelly') === 'original') {
+                      setResonanceOpen(false);
+                      return;
+                    }
+                    setResonanceOpen(open);
+                    if (open) {
+                      setScrubberOpen(false);
+                    } else {
+                      setHoveredChamberId(null);
+                    }
+                  }}
+                  hoveredChamberId={hoveredChamberId}
+                  onHoverChamber={setHoveredChamberId}
+                  onSelectSoundscape={handleSelectSoundscape}
+                  resonancePulseTimestamp={resonancePulseTimestamp}
+                  resonancePulseChamberId={resonancePulseChamberId}
                 />
 
                 {/* Subtle Aura Intelligence Smart Recommendation Pill when Idle */}
@@ -1248,7 +1397,15 @@ export default function App() {
         activeSceneId={sceneId}
         onSelectScene={handleSelectScene}
         orbDesign={settings.orbDesign ?? 'celestial-jelly'}
-        onChangeOrbDesign={(design) => updateSettings({ orbDesign: design })}
+        onChangeOrbDesign={(design) => {
+          if (design === 'original') {
+            setResonanceOpen(false);
+            setHoveredChamberId(null);
+          } else {
+            setResonanceOpen(true);
+          }
+          updateSettings({ orbDesign: design });
+        }}
         backgroundMix={settings.backgroundMix ?? 0.52}
         onChangeBackgroundMix={(mix) => updateSettings({ backgroundMix: mix })}
       />
